@@ -2242,6 +2242,100 @@ fn double_click_on_a_group_header_renames_the_workspace_without_changing_collaps
     ));
 }
 
+fn click_space_row(state: &mut ClientShellState, index: usize, line: u16) -> ClientShellInput {
+    let rect = state.hits.workspaces[index].rect;
+    let row = rect.y + line.min(rect.height.saturating_sub(1));
+    mouse_at(
+        state,
+        MouseEventKind::Down(MouseButton::Left),
+        rect.x + 3,
+        row,
+    );
+    mouse_at(
+        state,
+        MouseEventKind::Up(MouseButton::Left),
+        rect.x + 3,
+        row,
+    )
+}
+
+fn rename_overlay_workspace(state: &ClientShellState) -> Option<&str> {
+    match state.overlay.as_ref() {
+        Some(ClientShellOverlay::Rename(ClientRenameOverlay {
+            title: "rename workspace",
+            target: ClientRenameTarget::Workspace { workspace_id },
+            ..
+        })) => Some(workspace_id.as_str()),
+        _ => None,
+    }
+}
+
+#[test]
+fn double_click_on_a_space_label_or_secondary_line_opens_the_rename_prompt() {
+    for line in [0u16, 1] {
+        let (mut state, _) = sidebar_agent_state(&Config::default());
+        assert!(
+            state.hits.workspaces[1].rect.height > line,
+            "space row has line {line}"
+        );
+        let first = click_space_row(&mut state, 1, line);
+        assert!(
+            matches!(
+                &first.actions[..],
+                [ClientShellAction::Endpoint { request, .. }]
+                    if matches!(&request.method, crate::api::schema::Method::WorkspaceFocus(_))
+            ),
+            "single click still focuses: {:?}",
+            first.actions
+        );
+        assert!(state.overlay.is_none());
+        click_space_row(&mut state, 1, line);
+        assert_eq!(rename_overlay_workspace(&state), Some("ws_2"));
+    }
+}
+
+#[test]
+fn double_click_on_a_space_row_renames_via_workspace_rename() {
+    let (mut state, _) = sidebar_agent_state(&Config::default());
+    click_space_row(&mut state, 1, 0);
+    click_space_row(&mut state, 1, 1);
+    assert_eq!(rename_overlay_workspace(&state), Some("ws_2"));
+    state.handle_input_bytes(&[0x15]);
+    state.handle_input_bytes(b"backend");
+    let save = state.handle_input_bytes(b"\r");
+    let [ClientShellAction::Endpoint { request, .. }] = &save.actions[..] else {
+        panic!("workspace rename should use the endpoint API");
+    };
+    assert!(matches!(
+        &request.method,
+        crate::api::schema::Method::WorkspaceRename(params)
+            if params.workspace_id == "ws_2" && params.label == "backend"
+    ));
+}
+
+#[test]
+fn single_clicks_on_different_space_rows_do_not_rename() {
+    let (mut state, _) = sidebar_agent_state(&Config::default());
+    click_space_row(&mut state, 0, 0);
+    click_space_row(&mut state, 1, 0);
+    assert!(state.overlay.is_none());
+    click_space_row(&mut state, 0, 0);
+    assert!(state.overlay.is_none());
+}
+
+#[test]
+fn space_double_click_is_not_completed_by_a_slow_second_click() {
+    let (mut state, _) = sidebar_agent_state(&Config::default());
+    click_space_row(&mut state, 1, 0);
+    let last = state
+        .last_agent_list_click
+        .as_mut()
+        .expect("click recorded");
+    last.at -= ClientAgentListClick::DOUBLE_CLICK + std::time::Duration::from_millis(50);
+    click_space_row(&mut state, 1, 0);
+    assert!(state.overlay.is_none());
+}
+
 #[test]
 fn right_click_on_a_group_header_offers_rename_and_collapse_controls() {
     let (mut state, _) = sidebar_agent_state(&Config::default());

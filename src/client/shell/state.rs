@@ -865,6 +865,11 @@ pub(super) enum ClientAgentListTarget {
         endpoint_id: ClientEndpointId,
         workspace_id: String,
     },
+    /// A row in the "spaces" list (label or secondary line).
+    Space {
+        endpoint_id: ClientEndpointId,
+        workspace_id: String,
+    },
 }
 
 #[derive(Clone, Debug)]

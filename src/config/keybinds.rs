@@ -769,6 +769,13 @@ impl Config {
                     &mut registry,
                     &mut diagnostics,
                 );
+            } else {
+                append_upstream_review_binding(
+                    self,
+                    &mut keybinds,
+                    &mut registry,
+                    &mut diagnostics,
+                );
             }
         }
 
@@ -796,6 +803,50 @@ fn reserve_navigate_runtime_keys(registry: &mut BindingRegistry) {
             BindingSource::Default,
         );
     }
+}
+
+/// Command run by the built-in upstream review popup. `FLOCKR_BIN_PATH` is set
+/// for every custom command so the popup runs the same binary as the server.
+const UPSTREAM_REVIEW_COMMAND: &str = if cfg!(windows) {
+    "flockr upstream review"
+} else {
+    "\"${FLOCKR_BIN_PATH:-flockr}\" upstream review"
+};
+
+/// Registers the built-in "review upstream herdr updates" popup as a default
+/// custom command, so it gets a key (`[upstream].review_key`) and shows up in
+/// the keybinding help like any other custom command. A user binding on the
+/// same key wins silently because defaults register after user bindings.
+fn append_upstream_review_binding(
+    config: &Config,
+    keybinds: &mut Keybinds,
+    registry: &mut BindingRegistry,
+    diagnostics: &mut Vec<String>,
+) {
+    if !config.upstream.enabled || config.upstream.review_key.trim().is_empty() {
+        return;
+    }
+    let key = BindingConfig::one(config.upstream.review_key.trim());
+    let bindings = parse_action_bindings(
+        "upstream.review_key",
+        &key,
+        registry,
+        diagnostics,
+        BindingSource::Default,
+    );
+    if bindings.bindings.is_empty() {
+        return;
+    }
+    let label = bindings.label().unwrap_or_else(|| "unset".to_string());
+    keybinds.custom_commands.push(CustomCommandKeybind {
+        bindings,
+        label,
+        command: UPSTREAM_REVIEW_COMMAND.to_string(),
+        action: CustomCommandAction::Popup,
+        description: Some("Review upstream herdr updates".to_string()),
+        width: None,
+        height: None,
+    });
 }
 
 fn append_custom_command_bindings(
@@ -2223,6 +2274,9 @@ prefix = "ctrl+b"
 [[keys.command]]
 key = "prefix+ctrl+b"
 command = "echo no"
+
+[upstream]
+review_key = ""
 "#,
         )
         .unwrap();
@@ -2242,6 +2296,9 @@ command = "echo no"
 [[keys.command]]
 key = "g"
 command = "echo no"
+
+[upstream]
+review_key = ""
 "#,
         )
         .unwrap();
@@ -2262,6 +2319,9 @@ new_tab = "ctrl+alt+g"
 [[keys.command]]
 key = "ctrl+alt+g"
 command = "echo no"
+
+[upstream]
+review_key = ""
 "#,
         )
         .unwrap();
@@ -2507,6 +2567,58 @@ swap_pane_right = "prefix+shift+l"
     }
 
     #[test]
+    fn upstream_review_popup_is_a_default_custom_command() {
+        let keybinds = Config::default().keybinds();
+        let review: Vec<_> = keybinds
+            .custom_commands
+            .iter()
+            .filter(|command| command.command == UPSTREAM_REVIEW_COMMAND)
+            .collect();
+        assert_eq!(review.len(), 1);
+        assert_eq!(review[0].action, CustomCommandAction::Popup);
+        assert_eq!(review[0].label, "prefix+u");
+        assert_eq!(
+            review[0].description.as_deref(),
+            Some("Review upstream herdr updates")
+        );
+        assert!(Config::default().collect_diagnostics().is_empty());
+    }
+
+    #[test]
+    fn upstream_review_binding_can_be_rebound_or_disabled() {
+        let rebound: Config =
+            toml::from_str("[upstream]\nreview_key = \"prefix+shift+u\"\n").unwrap();
+        let commands = rebound.keybinds().custom_commands;
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0].label, "prefix+shift+u");
+
+        for toml in [
+            "[upstream]\nreview_key = \"\"\n",
+            "[upstream]\nreview_key = \"  \"\n",
+            "[upstream]\nenabled = false\n",
+        ] {
+            let config: Config = toml::from_str(toml).unwrap();
+            assert!(config.keybinds().custom_commands.is_empty(), "{toml}");
+        }
+    }
+
+    #[test]
+    fn user_binding_on_the_review_key_wins_silently() {
+        let config: Config = toml::from_str(
+            r#"
+[[keys.command]]
+key = "prefix+u"
+command = "echo mine"
+"#,
+        )
+        .unwrap();
+        let commands = config.keybinds().custom_commands;
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0].command, "echo mine");
+        assert!(config.collect_diagnostics().is_empty());
+    }
+
+    #[test]
     fn custom_command_with_description_parses() {
         let config: Config = toml::from_str(
             r#"
@@ -2514,6 +2626,9 @@ swap_pane_right = "prefix+shift+l"
 key = "prefix+y"
 command = "echo hello"
 description = "say hello"
+
+[upstream]
+review_key = ""
 "#,
         )
         .unwrap();
@@ -2535,6 +2650,9 @@ command = "lazygit"
 type = "popup"
 width = 90
 height = "80%"
+
+[upstream]
+review_key = ""
 "#,
         )
         .unwrap();

@@ -8,10 +8,16 @@
 //! - `release`: release records, version selection and release-note bucketing.
 //! - `state`: persisted watcher state (last check, notified/skipped tags).
 //! - `check`: the failure-soft, interval-gated release check.
+//! - `sync`: git preflight, worktree creation, prompt file and agent launch.
+//! - `apply`: user-triggered merge of a finished sync branch into `flockr`.
+//! - `review`: the interactive popup behind `flockr upstream review`.
 
+pub(crate) mod apply;
 pub(crate) mod check;
 pub(crate) mod release;
+pub(crate) mod review;
 pub(crate) mod state;
+pub(crate) mod sync;
 
 use crate::update::Version;
 

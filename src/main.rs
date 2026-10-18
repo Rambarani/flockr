@@ -675,6 +675,7 @@ fn main() -> io::Result<()> {
         println!("       flockr pane <subcommand> ...");
         println!("       flockr session <subcommand> ...");
         println!("       flockr integration <subcommand> ...");
+        println!("       flockr upstream <subcommand> ...");
         println!();
         println!("Common commands:");
         for (command, description) in [
@@ -741,6 +742,10 @@ fn main() -> io::Result<()> {
             (
                 "flockr integration <subcommand>",
                 "Manage built-in agent integrations",
+            ),
+            (
+                "flockr upstream <subcommand>",
+                "Watch upstream herdr releases and copy updates",
             ),
         ] {
             println!("  {command:<32} {description}");

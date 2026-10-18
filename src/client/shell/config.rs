@@ -240,6 +240,12 @@ impl ClientShellConfig {
             ClientShellKeybindingSource::Local => {
                 let mut config = crate::config::Config {
                     keys: self.local_keys.clone(),
+                    // Commands come from the endpoint manifest only; the
+                    // built-in upstream review command is part of it already.
+                    upstream: crate::config::UpstreamConfig {
+                        enabled: false,
+                        ..Default::default()
+                    },
                     ..Default::default()
                 };
                 config.keys.command = commands

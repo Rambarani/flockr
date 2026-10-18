@@ -188,8 +188,12 @@ impl Config {
 }
 
 pub(crate) fn keybindings_from_profile_toml(profile: &str) -> Result<LiveKeybindConfig, String> {
-    let config = toml::from_str::<Config>(profile)
+    let mut config = toml::from_str::<Config>(profile)
         .map_err(|err| format!("invalid keybinding profile: {err}"))?;
+    // A profile carries only `[keys]`. Endpoint commands (including the built-in
+    // upstream review popup) arrive through the command manifest, so the
+    // profile must not synthesize its own copy.
+    config.upstream.enabled = false;
     config
         .live_keybinds_with_diagnostics()
         .map(|(keybinds, _diagnostics)| keybinds)

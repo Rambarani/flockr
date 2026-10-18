@@ -15,7 +15,7 @@ fn plus_commands_survive_snapshots_and_reload_for_both_keybinding_sources() {
             (2, "prefix+ctrl+plus", KeyModifiers::CONTROL),
         ] {
             let config: Config = toml::from_str(&format!(
-                "[[keys.command]]\nkey = {key:?}\ntype = \"shell\"\ncommand = \"echo plus\"\n"
+                "[[keys.command]]\nkey = {key:?}\ntype = \"shell\"\ncommand = \"echo plus\"\n\n[upstream]\nreview_key = \"\"\n"
             ))
             .unwrap();
             assert!(config.collect_diagnostics().is_empty());
@@ -416,6 +416,9 @@ new_tab = "prefix+c"
 [[keys.command]]
 key = "prefix+c"
 command = "local-only"
+
+[upstream]
+review_key = ""
 "#,
     )
     .unwrap();
@@ -964,4 +967,49 @@ fn resize_mode_reuses_endpoint_resize_and_stays_active_until_done() {
 
     assert!(state.handle_input_bytes(b"\r").actions.is_empty());
     assert_eq!(state.mode, ClientShellMode::Terminal);
+}
+
+#[test]
+fn built_in_upstream_review_command_reaches_clients_only_through_the_manifest() {
+    let config = Config::default();
+    let (_api_tx, api_rx) = tokio::sync::mpsc::unbounded_channel();
+    let app = crate::app::App::new(
+        &config,
+        crate::app::AppPolicy::TEST,
+        None,
+        api_rx,
+        crate::api::EventHub::default(),
+    );
+    let manifest = app.client_shell_command_manifest();
+    assert_eq!(manifest.len(), 1);
+    assert_eq!(manifest[0].binding_label, "prefix+u");
+    assert_eq!(
+        manifest[0].action,
+        crate::protocol::ClientShellCommandAction::Popup
+    );
+    assert_eq!(
+        manifest[0].description.as_deref(),
+        Some("Review upstream herdr updates")
+    );
+
+    for source in [
+        ClientShellKeybindingSource::Local,
+        ClientShellKeybindingSource::Endpoint,
+    ] {
+        let mut state = ClientShellState::new(
+            ClientShellConfig::from_config(&config).with_keybinding_source(source),
+        );
+        let mut projection = snapshot();
+        projection.server_keybindings_toml = config.local_keybindings_profile_toml().ok();
+        projection.commands = manifest.clone();
+        state.set_snapshot(Box::new(projection));
+        let commands = &state.config.keybinds.keybinds.custom_commands;
+        assert_eq!(
+            commands.len(),
+            1,
+            "{source:?} must not duplicate the command"
+        );
+        assert_eq!(commands[0].command, manifest[0].command_id);
+        assert_eq!(commands[0].label, "prefix+u");
+    }
 }

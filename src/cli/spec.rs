@@ -47,6 +47,7 @@ pub(super) fn command() -> Command {
         .subcommand(terminal_command())
         .subcommand(session_command())
         .subcommand(integration_command())
+        .subcommand(upstream_command())
         .subcommand(plugin_command());
     configure_help(command, 0)
 }
@@ -141,6 +142,57 @@ fn config_command() -> Command {
         .about("Manage local configuration")
         .subcommand(Command::new("check").about("Validate config.toml and print diagnostics"))
         .subcommand(Command::new("reset-keys").about("Reset custom keybindings"))
+}
+
+fn upstream_command() -> Command {
+    Command::new("upstream")
+        .about("Watch upstream herdr releases and copy updates into flockr")
+        .subcommand(
+            Command::new("check")
+                .about("Check GitHub for new upstream herdr releases now")
+                .arg(json_flag()),
+        )
+        .subcommand(
+            Command::new("status")
+                .about("Show the synced upstream base, last check and pending releases")
+                .arg(json_flag()),
+        )
+        .subcommand(
+            Command::new("review")
+                .about("Review pending upstream releases (Copy updates, Skip, Later)"),
+        )
+        .subcommand(
+            Command::new("copy")
+                .about("Open a flockr tab that syncs an upstream release")
+                .arg(
+                    Arg::new("tag")
+                        .value_name("TAG")
+                        .help("Upstream release tag, such as v0.9.7 (default: the latest pending)"),
+                ),
+        )
+        .subcommand(
+            Command::new("skip")
+                .about("Stop notifying about an upstream release")
+                .arg(required_tag_arg()),
+        )
+        .subcommand(
+            Command::new("sync")
+                .about("Merge an upstream release in an isolated git worktree with an agent")
+                .arg(required_tag_arg()),
+        )
+        .subcommand(
+            Command::new("apply")
+                .about("Merge a verified sync branch into flockr and rebuild")
+                .arg(required_tag_arg())
+                .arg(flag("yes").help("Apply without the interactive confirmation")),
+        )
+}
+
+fn required_tag_arg() -> Arg {
+    Arg::new("tag")
+        .value_name("TAG")
+        .required(true)
+        .help("Upstream release tag, such as v0.9.7")
 }
 
 fn channel_command() -> Command {

@@ -50,6 +50,15 @@ pub(super) enum JobsRequest {
         job_id: String,
         from_palette: bool,
     },
+    /// `job.run` for the Feed overlay's `S` or a feed menu's "Sync now".
+    FeedSync {
+        job_id: String,
+        origin: super::feed_state::FeedOrigin,
+    },
+    /// `job.list` while a sync waits for its run to finish.
+    FeedSyncCheck {
+        job_id: String,
+    },
     Toggle,
     /// `decision.list`: the Decisions tab, or the palette's count.
     Decisions,
@@ -406,7 +415,7 @@ impl ClientShellState {
 
     /// Ask the server for something; a server without the method turns the
     /// overlay into an explanation instead of raising a notice.
-    fn push_jobs_request(
+    pub(super) fn push_jobs_request(
         &mut self,
         method: Method,
         request: JobsRequest,
@@ -1070,6 +1079,12 @@ impl ClientShellState {
                     );
                 }
                 (true, Vec::new())
+            }
+            (JobsRequest::FeedSync { job_id, origin }, result) => {
+                (self.complete_feed_sync_start(job_id, origin, result), Vec::new())
+            }
+            (JobsRequest::FeedSyncCheck { job_id }, result) => {
+                (self.complete_feed_sync_check(&job_id, result), Vec::new())
             }
             (JobsRequest::Toggle, Ok(ResponseResult::JobUpdated { job })) => {
                 let Some(overlay) = self.jobs_overlay_mut() else {

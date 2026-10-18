@@ -95,6 +95,7 @@ impl ClientContextMenuOverlay {
                 }
                 items.extend([
                     item("Refresh feed", Action::FeedRefresh),
+                    item("Sync now (run job)", Action::FeedSyncNow),
                     item("Open feed", Action::FeedOpenOverlay),
                     item(
                         if *collapsed { "Expand" } else { "Collapse" },

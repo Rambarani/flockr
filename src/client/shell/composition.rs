@@ -737,6 +737,9 @@ impl ClientShellState {
                             rows: rendered.rows.clone(),
                             viewport_rows: rendered.viewport_rows,
                             offset: rendered.offset,
+                            detail: rendered.detail,
+                            detail_max_scroll: rendered.detail_max_scroll,
+                            detail_viewport: rendered.detail_viewport,
                         }
                     });
                 None

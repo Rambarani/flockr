@@ -6,8 +6,9 @@ use super::agents_worktrees_notifications::two_workspace_agent_snapshot;
 use super::endpoints::state_with_remote;
 use super::*;
 use crate::api::schema::{
-    FeedActionInfo, FeedActionResult, FeedGetParams, FeedItemInfo, FeedItemState, FeedListParams,
-    FeedRunActionParams, FeedSummary, FeedTarget, Method, Request, ResponseResult,
+    FeedActionInfo, FeedActionResult, FeedField, FeedGetParams, FeedItemInfo, FeedItemState, FeedListParams,
+    FeedRunActionParams, FeedSummary, FeedTarget, JobInfo, JobRunInfo, JobRunStatus, JobRunTrigger,
+    JobScheduleKind, JobState, JobTarget, Method, Request, ResponseResult,
 };
 use crate::client::shell::feed_state::FeedItems;
 
@@ -587,6 +588,7 @@ fn right_clicking_an_item_lists_its_actions_and_runs_the_chosen_one() {
             "done (d)",
             "seen (s)",
             "Refresh feed",
+            "Sync now (run job)",
             "Open feed",
             "Collapse"
         ]
@@ -635,6 +637,16 @@ fn the_context_menu_can_open_the_link_refresh_or_open_the_overlay() {
     right_click(&mut state, row);
     let mut outcome = ClientShellInput::default();
     state.activate_context_menu_item(4, &mut outcome);
+    assert_eq!(
+        requests(&outcome)[0].method,
+        Method::JobRun(JobTarget {
+            job_id: "workbox-sync".into()
+        })
+    );
+
+    right_click(&mut state, row);
+    let mut outcome = ClientShellInput::default();
+    state.activate_context_menu_item(5, &mut outcome);
     assert!(matches!(state.overlay, Some(ClientShellOverlay::Feed(_))));
 }
 
@@ -651,7 +663,10 @@ fn right_clicking_a_header_offers_refresh_open_and_collapse() {
             .collect(),
         other => panic!("expected a context menu, got {other:?}"),
     };
-    assert_eq!(labels, ["Refresh feed", "Open feed", "Collapse"]);
+    assert_eq!(
+        labels,
+        ["Refresh feed", "Sync now (run job)", "Open feed", "Collapse"]
+    );
 }
 
 #[test]
@@ -1101,7 +1116,7 @@ fn the_overlay_shows_tabs_counts_and_the_selected_items_actions() {
         "Today (workbox) 2",
         "News 1",
         "5 items · 2 unread · updated 2m ago",
-        "NH-1 Fix login  jira · mention",
+        "NH-1 Fix login",
         "NH-5 Check flaky",
         "d done",
         "s seen",
@@ -1485,4 +1500,346 @@ fn which_key_lists_the_feed_binding() {
         .find(|entry| entry.label == "feed")
         .expect("which-key lists feed");
     assert_eq!(entry.key, "f");
+}
+
+// ----- master-detail ------------------------------------------------------
+
+fn detailed_feed() -> (FeedSummary, Vec<FeedItemInfo>) {
+    let mut first = item("nh-1", "Fix login redirect", FeedItemState::Unread);
+    first.updated_at = Some("2026-10-18T08:30:00Z".into());
+    first.fields = vec![
+        FeedField {
+            label: "Source".into(),
+            value: "jira".into(),
+        },
+        FeedField {
+            label: "Status".into(),
+            value: "In Progress".into(),
+        },
+    ];
+    first.body = Some("can you look at the redirect?".into());
+    let mut second = item("nh-2", "Review retry", FeedItemState::Read);
+    second.fields = vec![FeedField {
+        label: "Source".into(),
+        value: "github".into(),
+    }];
+    second.body = Some(
+        (1..=60)
+            .map(|n| format!("body line {n}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
+    (
+        summary("workbox-sync", "Today (workbox)", 2, 1, 3),
+        vec![first, second],
+    )
+}
+
+fn compose_at(state: &mut ClientShellState, cols: u16, rows: u16) -> String {
+    frame_rows(&state.compose(cols, rows).expect("frame").frame).join("\n")
+}
+
+fn ctrl(state: &mut ClientShellState, ch: char) -> ClientShellInput {
+    state.handle_raw_events(vec![RawInputEvent::Key(crate::input::TerminalKey::new(
+        KeyCode::Char(ch),
+        KeyModifiers::CONTROL,
+    ))])
+}
+
+#[test]
+fn a_wide_overlay_shows_the_list_left_and_the_detail_right() {
+    let mut state = overlay_state(vec![detailed_feed()]);
+    let frame = compose_at(&mut state, 200, 50);
+    let hits = &state.hits.feed_overlay;
+    let list_right = hits.rows.iter().map(|(r, _)| r.right()).max().unwrap();
+    assert!(hits.detail.x > list_right, "{:?} {list_right}", hits.detail);
+    assert!(hits.detail.y <= hits.rows[0].0.y);
+    for expected in [
+        "Fix login redirect",
+        "jira · mention",
+        "Source   jira",
+        "Status   In Progress",
+        "can you look at the redirect?",
+        "Link     https://example.com/nh-1",
+        "d done",
+    ] {
+        assert!(frame.contains(expected), "missing {expected:?}\n{frame}");
+    }
+    // The list rows are compact: the subtitle is only in the detail.
+    let list_line = frame
+        .lines()
+        .find(|line| line.contains("NH-1") && line.contains("Fix login"))
+        .unwrap();
+    assert!(!list_line.split('│').nth(1).unwrap().contains("jira · mention"));
+}
+
+#[test]
+fn moving_the_selection_changes_the_detail() {
+    let mut state = overlay_state(vec![detailed_feed()]);
+    let before = compose_at(&mut state, 200, 50);
+    assert!(before.contains("can you look") && !before.contains("body line 1"));
+    press(&mut state, 'j');
+    let after = compose_at(&mut state, 200, 50);
+    assert!(after.contains("body line 1") && !after.contains("can you look"));
+    assert!(after.contains("Source  github"));
+    // Arrow keys and the mouse follow too.
+    state.handle_raw_events(vec![key(KeyCode::Up)]);
+    assert!(compose_at(&mut state, 200, 50).contains("can you look"));
+    let second = state.hits.feed_overlay.rows[1].0;
+    left_click(&mut state, second);
+    assert!(compose_at(&mut state, 200, 50).contains("body line 1"));
+}
+
+#[test]
+fn a_narrow_overlay_stacks_the_detail_under_the_list() {
+    let mut state = overlay_state(vec![detailed_feed()]);
+    let frame = compose_at(&mut state, 90, 30);
+    let hits = &state.hits.feed_overlay;
+    let list_bottom = hits.rows.iter().map(|(r, _)| r.bottom()).max().unwrap();
+    assert!(hits.detail.y > list_bottom, "{:?} {list_bottom}", hits.detail);
+    assert_eq!(hits.detail.x, hits.rows[0].0.x);
+    assert!(frame.contains("Source   jira") && frame.contains("can you look"), "{frame}");
+    press(&mut state, 'j');
+    assert!(compose_at(&mut state, 90, 30).contains("body line 1"));
+}
+
+#[test]
+fn a_tiny_overlay_falls_back_to_the_list_alone_and_space_zooms_the_detail() {
+    let mut state = overlay_state(vec![detailed_feed()]);
+    let frame = compose_at(&mut state, 90, 16);
+    assert_eq!(state.hits.feed_overlay.detail, Rect::default());
+    assert!(!frame.contains("can you look"));
+    press(&mut state, ' ');
+    let frame = compose_at(&mut state, 90, 16);
+    assert!(frame.contains("Source   jira"), "{frame}");
+    assert!(state.hits.feed_overlay.rows.is_empty());
+    // j still moves the selection while zoomed; esc leaves the zoom first.
+    press(&mut state, 'j');
+    assert!(compose_at(&mut state, 90, 16).contains("Source  github"));
+    state.handle_raw_events(vec![key(KeyCode::Esc)]);
+    assert!(matches!(state.overlay, Some(ClientShellOverlay::Feed(_))));
+    compose_at(&mut state, 90, 16);
+    assert!(!state.hits.feed_overlay.rows.is_empty());
+}
+
+#[test]
+fn the_detail_scrolls_on_its_own_and_resets_for_a_new_selection() {
+    let mut state = overlay_state(vec![detailed_feed()]);
+    press(&mut state, 'j');
+    let top = compose_at(&mut state, 200, 50);
+    assert!(top.contains("body line 1") && state.hits.feed_overlay.detail_max_scroll > 0);
+    let selected = selected_item(&state);
+    ctrl(&mut state, 'd');
+    let scrolled = compose_at(&mut state, 200, 50);
+    assert!(!scrolled.contains("Source  github"), "title scrolled away\n{scrolled}");
+    assert_eq!(selected_item(&state), selected, "the list did not move");
+    ctrl(&mut state, 'u');
+    assert!(compose_at(&mut state, 200, 50).contains("Source  github"));
+    // The wheel over the detail scrolls it; over the list it moves the selection.
+    let detail = state.hits.feed_overlay.detail;
+    for _ in 0..3 {
+        click(&mut state, MouseEventKind::ScrollDown, detail);
+    }
+    assert!(!compose_at(&mut state, 200, 50).contains("Source  github"));
+    assert_eq!(selected_item(&state), selected);
+    // The end is clamped.
+    for _ in 0..40 {
+        ctrl(&mut state, 'd');
+    }
+    let end = compose_at(&mut state, 200, 50);
+    assert!(end.contains("body line 60"), "{end}");
+    // A new selection shows from the top.
+    state.handle_raw_events(vec![key(KeyCode::Up)]);
+    compose_at(&mut state, 200, 50);
+    press(&mut state, 'j');
+    assert!(compose_at(&mut state, 200, 50).contains("Source  github"));
+}
+
+#[test]
+fn existing_keys_still_work_beside_the_detail() {
+    let mut state = overlay_state(vec![detailed_feed()]);
+    compose_at(&mut state, 200, 50);
+    let input = press(&mut state, 'd');
+    assert!(matches!(
+        requests(&input)[0].method,
+        Method::FeedRunAction(_)
+    ));
+    let input = state.handle_raw_events(vec![key(KeyCode::Enter)]);
+    assert!(matches!(&input.actions[..], [ClientShellAction::OpenSafeWebUrl(_)]));
+    let input = press(&mut state, 'R');
+    assert!(matches!(requests(&input)[0].method, Method::FeedRefresh(_)));
+}
+
+fn sync_job(state: JobState, run_id: u64, status: JobRunStatus, has_feed: bool) -> JobInfo {
+    JobInfo {
+        job_id: "workbox-sync".into(),
+        title: "workbox-sync".into(),
+        source: "user".into(),
+        command: vec!["workbox".into(), "sync".into()],
+        schedule: "every 1h".into(),
+        schedule_kind: JobScheduleKind::Interval,
+        timeout_secs: 600,
+        enabled: true,
+        enabled_overridden: false,
+        schedule_overridden: false,
+        env: "login-shell".into(),
+        notify: "on_failure".into(),
+        state,
+        next_run_unix_ms: None,
+        running_since_unix_ms: None,
+        last_run: Some(JobRunInfo {
+            run_id,
+            trigger: JobRunTrigger::Manual,
+            status,
+            started_unix_ms: 1,
+            finished_unix_ms: 2,
+            duration_ms: 1,
+            exit_code: Some(0),
+            summary: if status == JobRunStatus::Success {
+                "exit 0".into()
+            } else {
+                "exit 3".into()
+            },
+            error: None,
+            skipped_count: 0,
+            env_note: None,
+        }),
+        has_feed,
+        diagnostics: Vec::new(),
+        dir: "/jobs".into(),
+    }
+}
+
+fn job_list(job: JobInfo) -> ResponseResult {
+    ResponseResult::JobList {
+        revision: 1,
+        unchanged: false,
+        jobs: vec![job],
+        env: crate::api::schema::JobEnvStatus {
+            source: "none".into(),
+            captured_unix_ms: None,
+            variable_count: 0,
+            refreshing: false,
+            diagnostic: None,
+        },
+    }
+}
+
+#[test]
+fn shift_s_runs_the_feeds_job_and_the_feed_refreshes_when_it_finishes() {
+    let mut state = overlay_state(vec![detailed_feed()]);
+    compose_at(&mut state, 200, 50);
+    let input = press(&mut state, 'S');
+    let sent = requests(&input);
+    assert_eq!(
+        sent[0].method,
+        Method::JobRun(JobTarget {
+            job_id: "workbox-sync".into()
+        })
+    );
+    let frame = compose_at(&mut state, 200, 50);
+    assert!(frame.contains("syncing workbox-sync…"), "{frame}");
+    assert!(frame.contains("syncing…"), "header says so too\n{frame}");
+    answer(
+        &mut state,
+        &sent[0],
+        ResponseResult::JobRunRequested {
+            job_id: "workbox-sync".into(),
+            started: true,
+            run_id: Some(7),
+            reason: None,
+        },
+    );
+    // The client asks job.list until run 7 is done.
+    let now = Instant::now() + Duration::from_secs(1);
+    let input = tick(&mut state, now);
+    let check = requests(&input)
+        .into_iter()
+        .find(|request| matches!(request.method, Method::JobList(_)))
+        .expect("a job.list check");
+    // Still running: nothing changes.
+    answer(
+        &mut state,
+        &check,
+        job_list(sync_job(JobState::Running, 6, JobRunStatus::Success, true)),
+    );
+    assert!(compose_at(&mut state, 200, 50).contains("syncing workbox-sync"));
+    // The run finished but the feed has not been refreshed yet.
+    let input = tick(&mut state, now + Duration::from_secs(2));
+    let check = requests(&input)
+        .into_iter()
+        .find(|request| matches!(request.method, Method::JobList(_)))
+        .expect("a second check");
+    answer(
+        &mut state,
+        &check,
+        job_list(sync_job(JobState::Idle, 7, JobRunStatus::Success, true)),
+    );
+    assert!(compose_at(&mut state, 200, 50).contains("refreshing the feed"));
+    // The refreshed feed lands.
+    let mut fresh = detailed_feed().0;
+    fresh.fetched_unix_ms = Some(crate::jobs::now_unix_ms());
+    state.feeds.feeds[0] = fresh;
+    let input = tick(&mut state, now + Duration::from_secs(4));
+    let check = requests(&input)
+        .into_iter()
+        .find(|request| matches!(request.method, Method::JobList(_)))
+        .expect("a third check");
+    answer(
+        &mut state,
+        &check,
+        job_list(sync_job(JobState::Idle, 7, JobRunStatus::Success, true)),
+    );
+    let frame = compose_at(&mut state, 200, 50);
+    assert!(frame.contains("synced workbox-sync: 2 items"), "{frame}");
+    assert!(!state.feeds.is_syncing("workbox-sync"));
+}
+
+#[test]
+fn a_failed_sync_run_is_reported_and_a_refused_one_too() {
+    let mut state = overlay_state(vec![detailed_feed()]);
+    compose_at(&mut state, 200, 50);
+    let sent = requests(&press(&mut state, 'S'));
+    answer(
+        &mut state,
+        &sent[0],
+        ResponseResult::JobRunRequested {
+            job_id: "workbox-sync".into(),
+            started: true,
+            run_id: Some(8),
+            reason: None,
+        },
+    );
+    let input = tick(&mut state, Instant::now() + Duration::from_secs(1));
+    let check = requests(&input)
+        .into_iter()
+        .find(|request| matches!(request.method, Method::JobList(_)))
+        .unwrap();
+    answer(
+        &mut state,
+        &check,
+        job_list(sync_job(JobState::Idle, 8, JobRunStatus::Failed, true)),
+    );
+    let frame = compose_at(&mut state, 200, 50);
+    assert!(frame.contains("sync failed: failed: exit 3"), "{frame}");
+    assert!(!state.feeds.is_syncing("workbox-sync"));
+
+    let sent = requests(&press(&mut state, 'S'));
+    answer(
+        &mut state,
+        &sent[0],
+        ResponseResult::JobRunRequested {
+            job_id: "workbox-sync".into(),
+            started: false,
+            run_id: None,
+            reason: Some("already running".into()),
+        },
+    );
+    assert!(compose_at(&mut state, 200, 50).contains("workbox-sync: already running"));
+    assert!(!state.feeds.is_syncing("workbox-sync"));
+}
+
+#[test]
+fn s_is_not_an_action_key_any_more() {
+    assert!(crate::feed::format::action_key_problem("S").is_some());
 }

@@ -21,6 +21,7 @@ mod endpoint_navigation;
 mod endpoint_notices;
 mod endpoint_sidebar;
 mod endpoints;
+mod feed_detail;
 mod feed_overlay;
 mod feed_sidebar;
 mod feed_state;

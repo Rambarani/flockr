@@ -536,6 +536,9 @@ impl ClientShellState {
             ClientContextMenuAction::FeedRefresh => {
                 self.refresh_feed(job_id, FeedOrigin::Elsewhere, outcome)
             }
+            ClientContextMenuAction::FeedSyncNow => {
+                self.sync_feed_now(job_id, FeedOrigin::Elsewhere, outcome)
+            }
             ClientContextMenuAction::FeedToggle => self.toggle_feed_section(&job_id, outcome),
             ClientContextMenuAction::FeedOpenOverlay => self.open_feed_overlay(Some(job_id)),
             _ => {}

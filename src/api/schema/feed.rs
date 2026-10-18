@@ -52,8 +52,26 @@ pub struct FeedItemInfo {
     /// Labelled values for a detail view (up to 12). Absent from older servers.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fields: Vec<FeedField>,
+    /// The id of the group (category) the item belongs to, one of the
+    /// feed's `groups`. Absent in a feed without groups and from older servers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub actions: Vec<FeedActionInfo>,
+}
+
+/// A category of a feed with its item counts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct FeedGroupInfo {
+    pub id: String,
+    pub title: String,
+    /// A shorter title for narrow places such as tabs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub short_title: Option<String>,
+    /// Items in the group.
+    pub count: u32,
+    /// Unread items in the group.
+    pub unread: u32,
 }
 
 /// The outcome of the last item action run for a feed.
@@ -93,6 +111,10 @@ pub struct FeedSummary {
     /// Problems found while reading the feed that did not stop it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<String>,
+    /// The feed's categories in display order, with counts. Empty for a flat
+    /// feed and from older servers.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<FeedGroupInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_action: Option<FeedActionResult>,
 }

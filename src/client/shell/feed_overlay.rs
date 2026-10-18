@@ -7,6 +7,13 @@
 //! pane) scroll the detail, Space zooms the detail, Tab or the arrow keys
 //! switch feeds, and Esc closes.
 //!
+//! A feed that declares groups gets a category tab bar under its info line:
+//! `All` and one tab per group, with counts. `[` and `]` step through the
+//! tabs, `0` selects All and `1`-`9` the first nine groups, and a click
+//! selects one. The filter, the list and the detail pane all follow the
+//! selected tab. The choice is remembered per feed in the client preferences
+//! under a `feedgroup:` key.
+//!
 //! The data is the client's cached copy of the server's `feed.*` answers (see
 //! `feed_state`); while the overlay is open it is polled every two seconds
 //! with the revisions the client already holds.
@@ -20,7 +27,7 @@ use super::popup_frame::{
 };
 use super::render::{display_width, put_text};
 use super::*;
-use crate::api::schema::{FeedItemInfo, FeedItemState, FeedSummary};
+use crate::api::schema::{FeedGroupInfo, FeedItemInfo, FeedItemState, FeedSummary};
 use crate::jobs::display;
 
 const MIN_PANEL_WIDTH: u16 = 30;
@@ -31,6 +38,10 @@ const HEADER_ROWS: u16 = 3;
 const FOOTER_ROWS: u16 = 2;
 const MAX_BADGE_WIDTH: usize = 14;
 const AGE_WIDTH: usize = 8;
+/// Key prefix in the shared collapsed-group sets for the remembered category.
+pub(super) const GROUP_PREF_PREFIX: &str = "feedgroup:";
+/// Most digit keys that select a category (`1`-`9`).
+const MAX_DIGIT_GROUPS: usize = 9;
 
 #[derive(Debug)]
 pub(super) struct ClientFeedOverlay {
@@ -41,6 +52,8 @@ pub(super) struct ClientFeedOverlay {
     pub(super) scroll: usize,
     pub(super) filter: String,
     pub(super) filtering: bool,
+    /// The selected category (a group id); `None` is the All tab.
+    pub(super) group: Option<String>,
     pub(super) status: Option<String>,
     /// First visible line of the detail pane; it follows the selection, so a
     /// new selection starts at the top.
@@ -53,6 +66,8 @@ pub(super) struct ClientFeedOverlay {
 pub(super) struct FeedOverlayHits {
     pub(super) popup: Rect,
     pub(super) tabs: Vec<(Rect, String)>,
+    /// The category tabs; `None` is the All tab.
+    pub(super) groups: Vec<(Rect, Option<String>)>,
     pub(super) rows: Vec<(Rect, usize)>,
     pub(super) viewport_rows: usize,
     pub(super) offset: usize,
@@ -65,6 +80,7 @@ pub(super) struct FeedOverlayHits {
 pub(super) struct FeedRender {
     pub(super) area: Rect,
     pub(super) tabs: Vec<(Rect, String)>,
+    pub(super) groups: Vec<(Rect, Option<String>)>,
     pub(super) rows: Vec<(Rect, usize)>,
     pub(super) viewport_rows: usize,
     pub(super) offset: usize,
@@ -114,12 +130,17 @@ fn dot(state: FeedItemState, palette: &Palette) -> (&'static str, ratatui::style
 
 impl ClientShellState {
     pub(super) fn open_feed_overlay(&mut self, job_id: Option<String>) {
+        let group = job_id
+            .as_deref()
+            .or_else(|| self.feeds.feeds.first().map(|feed| feed.job_id.as_str()))
+            .and_then(|job_id| self.stored_feed_group(job_id));
         self.overlay = Some(ClientShellOverlay::Feed(ClientFeedOverlay {
             job_id,
             selected: None,
             scroll: 0,
             filter: String::new(),
             filtering: false,
+            group,
             status: None,
             detail_scroll: 0,
             zoom: false,
@@ -153,15 +174,115 @@ impl ClientShellState {
             .or_else(|| self.feeds.feeds.first())
     }
 
+    /// The selected category if the current feed still has it; `None` is All.
+    fn selected_group(&self) -> Option<&str> {
+        let group = self.feed_overlay()?.group.as_deref()?;
+        self.current_feed()?
+            .groups
+            .iter()
+            .any(|candidate| candidate.id == group)
+            .then_some(group)
+    }
+
     pub(super) fn visible_feed_items(&self) -> Vec<&FeedItemInfo> {
         let (Some(overlay), Some(feed)) = (self.feed_overlay(), self.current_feed()) else {
             return Vec::new();
         };
+        let group = self.selected_group();
         self.feeds
             .items_of(&feed.job_id)
             .iter()
+            .filter(|item| group.is_none_or(|group| item.group.as_deref() == Some(group)))
             .filter(|item| matches_filter(item, &overlay.filter))
             .collect()
+    }
+
+    /// The category remembered for a feed on the active endpoint.
+    pub(super) fn stored_feed_group(&self, job_id: &str) -> Option<String> {
+        let prefix = format!("{GROUP_PREF_PREFIX}{job_id}:");
+        self.collapsed_groups_for_endpoint(&self.active_endpoint_id)?
+            .iter()
+            .find_map(|key| key.strip_prefix(&prefix).map(str::to_owned))
+    }
+
+    /// Remember (or, with `None`, forget) a feed's category and persist it.
+    pub(super) fn store_feed_group(
+        &mut self,
+        job_id: &str,
+        group: Option<&str>,
+        outcome: &mut ClientShellInput,
+    ) {
+        let prefix = format!("{GROUP_PREF_PREFIX}{job_id}:");
+        let endpoint_id = self.active_endpoint_id.clone();
+        let keys = if endpoint_id.is_local() {
+            &mut self.collapsed_groups
+        } else {
+            self.remote_collapsed_groups.entry(endpoint_id).or_default()
+        };
+        keys.retain(|key| !key.starts_with(&prefix));
+        if let Some(group) = group {
+            keys.insert(format!("{prefix}{group}"));
+        }
+        self.persist_chrome_preferences(outcome);
+    }
+
+    /// Show a category (`None` is All): the list starts at its first item and
+    /// the filter stays, so it applies within the category.
+    pub(super) fn select_feed_group(
+        &mut self,
+        group: Option<String>,
+        outcome: &mut ClientShellInput,
+    ) {
+        let Some(job_id) = self.current_feed().map(|feed| feed.job_id.clone()) else {
+            return;
+        };
+        if let Some(overlay) = self.feed_overlay_mut() {
+            overlay.group = group.clone();
+            overlay.selected = None;
+            overlay.scroll = 0;
+            overlay.detail_scroll = 0;
+            overlay.status = None;
+        }
+        self.store_feed_group(&job_id, group.as_deref(), outcome);
+    }
+
+    /// `[` and `]`: the next or previous tab, wrapping around All.
+    fn step_feed_group(&mut self, delta: isize, outcome: &mut ClientShellInput) {
+        let Some(feed) = self.current_feed() else {
+            return;
+        };
+        let ids: Vec<String> = feed.groups.iter().map(|group| group.id.clone()).collect();
+        if ids.is_empty() {
+            return;
+        }
+        let current = self
+            .selected_group()
+            .and_then(|group| ids.iter().position(|id| id == group))
+            .map_or(0, |index| index + 1);
+        let next = (current as isize + delta).rem_euclid(ids.len() as isize + 1) as usize;
+        self.select_feed_group(next.checked_sub(1).map(|index| ids[index].clone()), outcome);
+    }
+
+    /// `0` selects All and `1`-`9` the first nine categories. False when the
+    /// digit names no tab.
+    fn pick_feed_group(&mut self, digit: usize, outcome: &mut ClientShellInput) -> bool {
+        let Some(feed) = self.current_feed() else {
+            return false;
+        };
+        if digit == 0 {
+            self.select_feed_group(None, outcome);
+            return true;
+        }
+        let Some(group) = feed.groups.get(digit - 1).map(|group| group.id.clone()) else {
+            return false;
+        };
+        self.select_feed_group(Some(group), outcome);
+        true
+    }
+
+    fn current_feed_has_groups(&self) -> bool {
+        self.current_feed()
+            .is_some_and(|feed| !feed.groups.is_empty())
     }
 
     fn selected_feed_index(&self, items: &[&FeedItemInfo]) -> usize {
@@ -240,7 +361,9 @@ impl ClientShellState {
     }
 
     fn select_feed(&mut self, job_id: String, outcome: &mut ClientShellInput) {
+        let group = self.stored_feed_group(&job_id);
         if let Some(overlay) = self.feed_overlay_mut() {
+            overlay.group = group;
             overlay.job_id = Some(job_id);
             overlay.selected = None;
             overlay.scroll = 0;
@@ -434,6 +557,14 @@ impl ClientShellState {
             KeyCode::Left if plain => self.switch_feed(-1, outcome),
             _ => match typed {
                 Some('q') => self.overlay = None,
+                Some('[') if self.current_feed_has_groups() => self.step_feed_group(-1, outcome),
+                Some(']') if self.current_feed_has_groups() => self.step_feed_group(1, outcome),
+                Some(digit @ '0'..='9') if self.current_feed_has_groups() && !ctrl => {
+                    let index = digit as usize - '0' as usize;
+                    if index > MAX_DIGIT_GROUPS || !self.pick_feed_group(index, outcome) {
+                        outcome.repaint = false;
+                    }
+                }
                 Some('/') => {
                     if let Some(overlay) = self.feed_overlay_mut() {
                         overlay.filtering = true;
@@ -482,6 +613,15 @@ impl ClientShellState {
                     .map(|(_, job_id)| job_id.clone())
                 {
                     self.select_feed(job_id, outcome);
+                } else if let Some(group) = self
+                    .hits
+                    .feed_overlay
+                    .groups
+                    .iter()
+                    .find(|(rect, _)| contains(*rect, point))
+                    .map(|(_, group)| group.clone())
+                {
+                    self.select_feed_group(group, outcome);
                 } else if let Some(index) = self
                     .hits
                     .feed_overlay
@@ -614,6 +754,127 @@ fn split_body(body: Rect, zoom: bool, panel_width: u16) -> BodyLayout {
     }
 }
 
+/// One category tab: its target (`None` is All), label parts and counts.
+struct CategoryTab<'a> {
+    target: Option<&'a str>,
+    name: &'a str,
+    count: u32,
+    unread: u32,
+}
+
+/// How much of each tab label is shown, most to least.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LabelDetail {
+    /// `New House PRs 9 ●3`
+    CountsAndUnread,
+    /// `New House PRs 9`
+    Counts,
+    /// `New House… 9`: names cut to a few characters.
+    ShortNames,
+}
+
+const SHORT_NAME_CHARS: usize = 8;
+
+fn category_tabs<'a>(feed: &'a FeedSummary) -> Vec<CategoryTab<'a>> {
+    let mut tabs = vec![CategoryTab {
+        target: None,
+        name: "All",
+        count: feed.count,
+        unread: feed.unread,
+    }];
+    tabs.extend(feed.groups.iter().map(|group: &FeedGroupInfo| CategoryTab {
+        target: Some(group.id.as_str()),
+        name: group.short_title.as_deref().unwrap_or(&group.title),
+        count: group.count,
+        unread: group.unread,
+    }));
+    tabs
+}
+
+fn category_label(tab: &CategoryTab<'_>, detail: LabelDetail) -> String {
+    let name = match detail {
+        LabelDetail::ShortNames => crate::ui::truncate_end(tab.name, SHORT_NAME_CHARS),
+        _ => tab.name.to_owned(),
+    };
+    match detail {
+        LabelDetail::CountsAndUnread if tab.unread > 0 => {
+            format!(" {name} {} ●{} ", tab.count, tab.unread)
+        }
+        _ => format!(" {name} {} ", tab.count),
+    }
+}
+
+/// Where each category tab goes on one row of `width` columns, as
+/// `(tab index, offset from the row's left edge, label)`. The fullest label
+/// detail that fits every tab wins; when even the shortest does not fit, the
+/// row scrolls so the selected tab is visible, with `‹` and `›` marking the
+/// hidden sides (the text is clipped, never wrapped).
+fn layout_category_tabs(
+    tabs: &[CategoryTab<'_>],
+    selected: usize,
+    width: u16,
+) -> Vec<(usize, u16, String)> {
+    let width = usize::from(width);
+    let widths = |labels: &[String]| -> usize {
+        labels
+            .iter()
+            .map(|label| usize::from(display_width(label)))
+            .sum::<usize>()
+            + labels.len().saturating_sub(1)
+    };
+    for detail in [
+        LabelDetail::CountsAndUnread,
+        LabelDetail::Counts,
+        LabelDetail::ShortNames,
+    ] {
+        let labels: Vec<String> = tabs.iter().map(|tab| category_label(tab, detail)).collect();
+        if widths(&labels) <= width || detail == LabelDetail::ShortNames {
+            if widths(&labels) <= width {
+                let mut offset = 0u16;
+                return labels
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, label)| {
+                        let at = offset;
+                        offset += display_width(&label) + 1;
+                        (index, at, label)
+                    })
+                    .collect();
+            }
+            // Scroll: drop tabs from the left until the selected one fits
+            // beside the marker.
+            let selected = selected.min(labels.len().saturating_sub(1));
+            let mut start = 0;
+            while start < selected && widths(&labels[start..=selected]) + 2 > width {
+                start += 1;
+            }
+            let mut out = Vec::new();
+            let mut offset = if start > 0 { 2u16 } else { 0 };
+            for (index, label) in labels.iter().enumerate().skip(start) {
+                let room = width.saturating_sub(usize::from(offset));
+                // Keep a column for the right marker while more tabs follow.
+                let room = if index + 1 < labels.len() {
+                    room.saturating_sub(1)
+                } else {
+                    room
+                };
+                if room < 4 {
+                    break;
+                }
+                let label = crate::ui::truncate_end(label, room);
+                let shown = display_width(&label);
+                out.push((index, offset, label));
+                offset += shown + 1;
+                if usize::from(offset) >= width {
+                    break;
+                }
+            }
+            return out;
+        }
+    }
+    Vec::new()
+}
+
 fn render_feed(
     buffer: &mut Buffer,
     state: &ClientShellState,
@@ -630,6 +891,7 @@ fn render_feed(
     let empty = FeedRender {
         area,
         tabs: Vec::new(),
+        groups: Vec::new(),
         rows: Vec::new(),
         viewport_rows: 1,
         offset: 0,
@@ -640,6 +902,13 @@ fn render_feed(
     if inner.height < HEADER_ROWS + FOOTER_ROWS + 1 || inner.width < 20 {
         return Some(empty);
     }
+    // A feed with groups gets one more header row for the category tabs, when
+    // the panel is tall enough to keep a few list rows.
+    let category_bar = state
+        .current_feed()
+        .is_some_and(|feed| !feed.groups.is_empty())
+        && inner.height >= HEADER_ROWS + 1 + FOOTER_ROWS + 3;
+    let header_rows = HEADER_ROWS + u16::from(category_bar);
     let text_width = inner.width.saturating_sub(2);
     let x = inner.x + 1;
     let hint_y = inner.bottom() - 1;
@@ -648,6 +917,7 @@ fn render_feed(
     let feeds = &state.feeds.feeds;
     let current = state.current_feed();
     let mut tabs = Vec::new();
+    let mut group_tabs = Vec::new();
 
     // Line 1: the feed picker, or the feed's title when there is only one.
     if feeds.len() > 1 {
@@ -724,13 +994,58 @@ fn render_feed(
         );
     }
 
-    // Line 3: the filter.
+    // Line 3, with groups: the category tabs.
+    if let (true, Some(feed)) = (category_bar, current) {
+        let categories = category_tabs(feed);
+        let selected = state
+            .selected_group()
+            .and_then(|group| categories.iter().position(|tab| tab.target == Some(group)))
+            .unwrap_or(0);
+        for (index, offset, label) in layout_category_tabs(&categories, selected, text_width) {
+            let width = display_width(&label);
+            let rect = Rect::new(x + offset, inner.y + 2, width, 1);
+            put_text(
+                buffer,
+                rect.x,
+                rect.y,
+                width,
+                &label,
+                if index == selected {
+                    selected_style(palette)
+                } else {
+                    dim_style(palette)
+                },
+            );
+            group_tabs.push((rect, categories[index].target.map(str::to_owned)));
+        }
+        let first_shown = group_tabs.first().map(|(rect, _)| rect.x);
+        if first_shown.is_some_and(|first| first > x) {
+            put_text(buffer, x, inner.y + 2, 1, "‹", dim_style(palette));
+        }
+        let last_shown = group_tabs.last().and_then(|(_, target)| {
+            categories
+                .iter()
+                .position(|tab| tab.target == target.as_deref())
+        });
+        if last_shown.is_some_and(|last| last + 1 < categories.len()) {
+            put_text(
+                buffer,
+                x + text_width.saturating_sub(1),
+                inner.y + 2,
+                1,
+                "›",
+                dim_style(palette),
+            );
+        }
+    }
+
+    // The filter row, last of the header.
     if overlay.filtering || !overlay.filter.is_empty() {
         let cursor = if overlay.filtering { "▏" } else { "" };
         put_text(
             buffer,
             x,
-            inner.y + 2,
+            inner.y + header_rows - 1,
             text_width,
             &fit(&format!("/ {}{cursor}", overlay.filter), text_width),
             Style::default()
@@ -740,7 +1055,7 @@ fn render_feed(
         );
     }
 
-    let list_top = inner.y + HEADER_ROWS;
+    let list_top = inner.y + header_rows;
     let body = Rect::new(x, list_top, text_width, status_y.saturating_sub(list_top));
     let layout = split_body(body, overlay.zoom, inner.width);
     let items = state.visible_feed_items();
@@ -751,6 +1066,8 @@ fn render_feed(
         "No feeds. Add a feed table to a job's job.toml (see the Jobs docs)."
     } else if !overlay.filter.is_empty() {
         "No items match the filter."
+    } else if state.selected_group().is_some() && current.is_some_and(|feed| feed.loaded) {
+        "Nothing in this category."
     } else if current.is_some_and(|feed| feed.error.is_some() && !feed.loaded) {
         "The feed could not be read yet; see the line above."
     } else if current.is_some_and(|feed| feed.count > 0) {
@@ -987,6 +1304,15 @@ fn render_feed(
             "j/k item   ctrl-d/u scroll   space list   esc back",
             "space list   esc back",
         ]
+    } else if category_bar {
+        &[
+            "j/k move   [/] or 0-9 category   enter open   / filter   S sync   R refresh   tab feeds   esc close",
+            "j/k move   [/] 0-9 category   enter open   / filter   R refresh   esc close",
+            "[/] category   enter open   / filter   R refresh   esc close",
+            "[/] category   enter open   esc close",
+            "enter open   esc close",
+            "esc close",
+        ]
     } else {
         &[
             "j/k move   ctrl-d/u scroll   enter open   / filter   S sync   R refresh   tab feeds   space zoom   esc close",
@@ -1014,6 +1340,7 @@ fn render_feed(
     Some(FeedRender {
         area,
         tabs,
+        groups: group_tabs,
         rows,
         viewport_rows,
         offset,

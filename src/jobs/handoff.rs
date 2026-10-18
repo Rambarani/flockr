@@ -1168,6 +1168,7 @@ mod tests {
             updated_at: None,
             body: None,
             fields: Vec::new(),
+            group: None,
             actions: Vec::new(),
         };
         let few: Vec<_> = (0..3).map(item).collect();

@@ -8576,6 +8576,43 @@
           ],
           "type": "object"
         },
+        "FeedGroupInfo": {
+          "description": "A category of a feed with its item counts.",
+          "properties": {
+            "count": {
+              "description": "Items in the group.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "id": {
+              "type": "string"
+            },
+            "short_title": {
+              "description": "A shorter title for narrow places such as tabs.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "title": {
+              "type": "string"
+            },
+            "unread": {
+              "description": "Unread items in the group.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "count",
+            "unread"
+          ],
+          "type": "object"
+        },
         "FeedItemInfo": {
           "properties": {
             "actions": {
@@ -8603,6 +8640,13 @@
                 "$ref": "#/schemas/success_response/$defs/FeedField"
               },
               "type": "array"
+            },
+            "group": {
+              "description": "The id of the group (category) the item belongs to, one of the\nfeed's `groups`. Absent in a feed without groups and from older servers.",
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "id": {
               "type": "string"
@@ -8680,6 +8724,13 @@
                 "integer",
                 "null"
               ]
+            },
+            "groups": {
+              "description": "The feed's categories in display order, with counts. Empty for a flat\nfeed and from older servers.",
+              "items": {
+                "$ref": "#/schemas/success_response/$defs/FeedGroupInfo"
+              },
+              "type": "array"
             },
             "job_id": {
               "description": "The job that produces the feed.",

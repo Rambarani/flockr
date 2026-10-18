@@ -194,7 +194,9 @@ impl ClientShellState {
         let mut wanted = Vec::new();
         if self.feeds.sidebar_visible && self.config.feeds.enabled {
             for feed in super::feed_sidebar::sidebar_feeds(&self.feeds, &self.config.feeds) {
+                // A feed with groups shows group rows, which need no items.
                 if feed.count > 0
+                    && feed.groups.is_empty()
                     && !self.group_is_collapsed(
                         &self.active_endpoint_id,
                         &super::feed_sidebar::feed_key(&feed.job_id),
@@ -205,7 +207,12 @@ impl ClientShellState {
             }
         }
         if let Some(ClientShellOverlay::Feed(overlay)) = &self.overlay {
-            if let Some(job_id) = overlay.job_id.as_ref() {
+            // The chosen feed, or the first one until one is chosen.
+            let shown = overlay
+                .job_id
+                .as_ref()
+                .or_else(|| self.feeds.feeds.first().map(|feed| &feed.job_id));
+            if let Some(job_id) = shown {
                 if self
                     .feeds
                     .summary(job_id)

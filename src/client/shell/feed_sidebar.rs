@@ -8,6 +8,11 @@
 //! menu with the item's actions. This is presentation of data the client
 //! already holds: rendering does no I/O and the agent list above is laid out
 //! exactly as before, in the rows the feed section leaves it.
+//!
+//! A feed that declares groups shows one compact row per non-empty group
+//! (`New House PRs 9 ●3`) instead of item rows; clicking one opens the Feed
+//! overlay on that category. Such a section does not need its items, so the
+//! client does not fetch them for the sidebar.
 
 use std::collections::HashSet;
 
@@ -16,7 +21,7 @@ use ratatui::style::{Modifier, Style};
 use super::feed_state::{FeedClientState, FeedOrigin};
 use super::render::{display_width, put_text};
 use super::*;
-use crate::api::schema::{FeedItemInfo, FeedItemState, FeedSummary};
+use crate::api::schema::{FeedGroupInfo, FeedItemInfo, FeedItemState, FeedSummary};
 use crate::config::FeedsSidebarConfig;
 
 /// Rows the agent panel keeps (its header and a few agents) before any feed
@@ -140,6 +145,23 @@ pub(super) struct FeedSection<'a> {
     pub(super) summary: &'a FeedSummary,
     pub(super) collapsed: bool,
     pub(super) items: &'a [FeedItemInfo],
+    /// The non-empty groups of a feed with groups, which replace item rows.
+    pub(super) groups: Vec<&'a FeedGroupInfo>,
+}
+
+impl FeedSection<'_> {
+    fn is_grouped(&self) -> bool {
+        !self.summary.groups.is_empty()
+    }
+
+    /// Rows the section can show below its header.
+    fn row_count(&self) -> usize {
+        if self.is_grouped() {
+            self.groups.len()
+        } else {
+            self.summary.count as usize
+        }
+    }
 }
 
 pub(super) struct FeedPlan<'a> {
@@ -167,6 +189,11 @@ pub(super) fn plan<'a>(input: FeedSidebarInput<'a>, detail_height: u16) -> Optio
                 .collapsed
                 .is_some_and(|set| set.contains(&feed_key(&summary.job_id))),
             items: input.state.items_of(&summary.job_id),
+            groups: summary
+                .groups
+                .iter()
+                .filter(|group| group.count > 0)
+                .collect(),
         })
         .collect::<Vec<_>>();
     let limit = input.config.row_limit();
@@ -174,9 +201,14 @@ pub(super) fn plan<'a>(input: FeedSidebarInput<'a>, detail_height: u16) -> Optio
         .iter()
         .map(|section| SectionShape {
             collapsed: section.collapsed,
-            // The total, so "+N more" counts items not fetched yet too.
-            items: section.summary.count as usize,
-            row_limit: limit,
+            // The total, so "+N more" counts items not fetched yet too. A
+            // grouped feed shows every group row, never a limited few.
+            items: section.row_count(),
+            row_limit: if section.is_grouped() {
+                section.row_count()
+            } else {
+                limit
+            },
         })
         .collect::<Vec<_>>();
     let lines = layout_lines(&shapes, budget);
@@ -188,6 +220,12 @@ pub(super) struct FeedHeaderHit {
     pub(super) rect: Rect,
     pub(super) job_id: String,
     pub(super) collapsed: bool,
+}
+
+pub(super) struct FeedGroupHit {
+    pub(super) rect: Rect,
+    pub(super) job_id: String,
+    pub(super) group_id: String,
 }
 
 pub(super) struct FeedRowHit {
@@ -202,6 +240,7 @@ pub(super) struct FeedSidebarHits {
     pub(super) area: Rect,
     pub(super) headers: Vec<FeedHeaderHit>,
     pub(super) rows: Vec<FeedRowHit>,
+    pub(super) groups: Vec<FeedGroupHit>,
     pub(super) more: Vec<(Rect, String)>,
 }
 
@@ -252,6 +291,17 @@ pub(super) fn render(
             }
             FeedLine::Item { section, index } => {
                 let section = &plan.sections[section];
+                if section.is_grouped() {
+                    if let Some(group) = section.groups.get(index) {
+                        render_group(buffer, rect, group, palette);
+                        hits.groups.push(FeedGroupHit {
+                            rect,
+                            job_id: section.summary.job_id.clone(),
+                            group_id: group.id.clone(),
+                        });
+                    }
+                    continue;
+                }
                 match section.items.get(index) {
                     Some(item) => {
                         render_item(buffer, rect, item, palette);
@@ -344,6 +394,41 @@ fn render_header(buffer: &mut Buffer, rect: Rect, section: &FeedSection<'_>, pal
     put(flag, flag_style);
 }
 
+/// `   New House PRs 9 ●3`: the group's short title, its total and its unread.
+fn render_group(buffer: &mut Buffer, rect: Rect, group: &FeedGroupInfo, palette: &Palette) {
+    let title = group.short_title.as_deref().unwrap_or(&group.title);
+    let unread = (group.unread > 0).then(|| format!(" ●{}", group.unread));
+    let total = group.count.to_string();
+    let suffix_width = 1 + display_width(&total) + unread.as_deref().map_or(0, display_width);
+    let title_room = usize::from(rect.width)
+        .saturating_sub(3)
+        .saturating_sub(usize::from(suffix_width));
+    let title = crate::ui::truncate_end(title, title_room);
+    let title_style = if group.unread > 0 {
+        Style::default().fg(palette.text)
+    } else {
+        Style::default().fg(palette.subtext0)
+    };
+    let mut x = rect.x;
+    let mut put = |text: &str, style: Style| {
+        let room = rect.right().saturating_sub(x);
+        put_text(buffer, x, rect.y, room, text, style);
+        x = x.saturating_add(display_width(text).min(room));
+    };
+    put("   ", Style::default());
+    put(&title, title_style);
+    put(" ", Style::default());
+    put(&total, Style::default().fg(palette.overlay0));
+    if let Some(unread) = &unread {
+        put(
+            unread,
+            Style::default()
+                .fg(palette.accent)
+                .add_modifier(Modifier::BOLD),
+        );
+    }
+}
+
 fn render_item(buffer: &mut Buffer, rect: Rect, item: &FeedItemInfo, palette: &Palette) {
     let (dot, dot_color) = state_dot(item.state, palette);
     let title_style = if item.state == FeedItemState::Unread {
@@ -400,6 +485,15 @@ impl ClientShellState {
             .map(|hit| (hit.job_id.clone(), hit.item_id.clone()))
     }
 
+    fn feed_group_at(&self, point: (u16, u16)) -> Option<(String, String)> {
+        self.hits
+            .feed
+            .groups
+            .iter()
+            .find(|hit| contains(hit.rect, point))
+            .map(|hit| (hit.job_id.clone(), hit.group_id.clone()))
+    }
+
     fn feed_more_at(&self, point: (u16, u16)) -> Option<String> {
         self.hits
             .feed
@@ -441,6 +535,13 @@ impl ClientShellState {
             return true;
         }
         if let Some(job_id) = self.feed_more_at(point) {
+            self.open_feed_overlay(Some(job_id));
+            outcome.repaint = true;
+            return true;
+        }
+        if let Some((job_id, group_id)) = self.feed_group_at(point) {
+            // The overlay opens on the category the row names.
+            self.store_feed_group(&job_id, Some(&group_id), outcome);
             self.open_feed_overlay(Some(job_id));
             outcome.repaint = true;
             return true;
@@ -492,7 +593,10 @@ impl ClientShellState {
                 item: None,
                 collapsed,
             }
-        } else if let Some(job_id) = self.feed_more_at(point) {
+        } else if let Some(job_id) = self
+            .feed_more_at(point)
+            .or_else(|| self.feed_group_at(point).map(|(job_id, _)| job_id))
+        {
             let collapsed = self.group_is_collapsed(&self.active_endpoint_id, &feed_key(&job_id));
             ClientContextMenuTarget::Feed {
                 job_id,

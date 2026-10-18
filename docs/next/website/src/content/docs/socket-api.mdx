@@ -110,6 +110,7 @@ Raw socket method names use dot notation:
 | Events | `events.subscribe`, `events.wait` |
 | Integrations | `integration.install`, `integration.uninstall` |
 | Jobs | `job.list`, `job.get`, `job.run`, `job.set_enabled`, `job.logs`, `job.env_refresh` |
+| Feeds | `feed.list`, `feed.get`, `feed.refresh`, `feed.run_action` |
 | Plugins | `plugin.link`, `plugin.list`, `plugin.unlink`, `plugin.enable`, `plugin.disable`, `plugin.action.list`, `plugin.action.invoke`, `plugin.log.list`, `plugin.pane.open`, `plugin.pane.focus`, `plugin.pane.close` |
 
 `agent.wait` is server-owned and event-driven. It pins the resolved pane occupant so a replacement cannot satisfy the wait. `agent.prompt` accepts an optional `wait` object with `until` and `timeout_ms`; this submits the prompt and starts the wait in one request, avoiding a race between separate calls. If the resolved agent is already `blocked`, `agent.prompt` returns `agent_blocked` without sending input or starting the wait.
@@ -838,6 +839,8 @@ updated `PaneLayoutSnapshot` for one tab. Clients maintaining a cache with
 an authoritative read; a delayed payload may predate their latest snapshot.
 
 Job event subscriptions include `job.run_finished`, with the `job_id`, `title` and the run record (status, exit code, duration, summary; no output). Use `job.logs` for output. See [Jobs](/docs/jobs/).
+
+Feed event subscriptions include `feed.updated`, with the `job_id`, `title`, `revision`, `count`, `unread` and `stale`. It fires when a feed's items, title or staleness change and when an item action finishes. Use `feed.get` for the items. See [Jobs: Feeds](/docs/jobs/#feeds).
 
 Worktree event subscriptions include `worktree.created`, `worktree.opened`, and `worktree.removed`. Worktree events describe Git checkout lifecycle. `worktree.created` includes the opened `workspace` and created `worktree`. `worktree.opened` includes the target `workspace`, opened `worktree`, and `already_open`. `worktree.removed` includes the `workspace_id`, removed `worktree`, and `forced`.
 

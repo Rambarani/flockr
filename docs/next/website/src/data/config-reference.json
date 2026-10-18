@@ -758,6 +758,12 @@
           "description": "Open the Jobs overlay: scheduled jobs with their state, next run and last result. r runs a job now, l shows its output, e enables or disables it."
         },
         {
+          "key": "keys.feed",
+          "type": "keybinding",
+          "default": "\"prefix+f\"",
+          "description": "Open the Feed overlay: the items of a job feed, with their actions. Enter opens the item's link, an action key runs that action, R refreshes the feed, / filters, and tab switches feeds."
+        },
+        {
           "key": "keys.preview_agent",
           "type": "keybinding",
           "default": "\"prefix+i\"",
@@ -1155,6 +1161,24 @@
           "type": "boolean",
           "default": "true",
           "description": "Show a header with the workspace name and per-state agent counts above each workspace's agents in the expanded Agent sidebar. Click a header to collapse or expand its group. Applies only while ui.agent_panel_sort is \"spaces\" and no agent view is active. With several machines connected, groups are per machine and workspace."
+        },
+        {
+          "key": "ui.sidebar.feeds.enabled",
+          "type": "boolean",
+          "default": "true",
+          "description": "Show a collapsible section under the agent list for each job feed. Set to false to hide every feed section; the client then stops asking the server for feeds."
+        },
+        {
+          "key": "ui.sidebar.feeds.max_rows",
+          "type": "integer",
+          "default": "8",
+          "description": "Item rows shown per feed section before a \"+N more\" row that opens the Feed overlay. Values are limited to 1 through 50."
+        },
+        {
+          "key": "ui.sidebar.feeds.show",
+          "type": "string or list of strings",
+          "default": "\"all\"",
+          "description": "Which job feeds get a sidebar section: \"all\", or a list of job ids such as [\"workbox-sync\"]."
         },
         {
           "key": "ui.sidebar.agents.row_gap",

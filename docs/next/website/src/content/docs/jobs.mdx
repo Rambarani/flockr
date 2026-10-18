@@ -5,10 +5,12 @@ description: Run commands on a cron schedule or an interval, with the result rec
 
 A job is a command that Flockr runs for you on a schedule: sync a tracker every hour, check a build every morning, refresh a cache. The server schedules the job, runs it in the background with a timeout, records the result, and can tell you when it fails. Jobs are global per user, not per workspace.
 
+A job can also publish a [feed](#feeds): a list of items, such as what needs your attention today, that Flockr shows in a sidebar section and in the Feed overlay, with actions you can run on each item.
+
 ## Overview
 
 - Each job lives in `~/.config/flockr/jobs/<id>/job.toml`. Debug builds use `flockr-dev` instead of `flockr`.
-- `flockr job list` shows every job. `prefix+t` opens the Jobs overlay inside Flockr.
+- `flockr job list` shows every job. `prefix+t` opens the Jobs overlay inside Flockr. `flockr feed list` shows the jobs' feeds, and `prefix+f` opens the Feed overlay.
 - A job runs with your login-shell environment by default, so credentials you keep in `~/.zshrc` are available.
 - If Flockr was not running when a job was due, the job runs once when the server starts.
 
@@ -35,7 +37,7 @@ notify = "on_failure"              # never | on_failure | on_change | always
 | `env`, `env_file`, `[env]` | See [Environment](#environment). |
 | `cwd` | Working directory. Defaults to the job directory. `~` and relative paths (relative to the job directory) work. |
 | `notify` | See [Notifications](#notifications). Default `on_failure`. |
-| `feed` | Reserved for a later release. It is validated (`command` is required) and otherwise ignored. |
+| `feed` | Optional table that gives the job a [feed](#feeds): `command` (required argv) and `title`. |
 | `handoff` | Reserved for a later release. `when` is validated; nothing acts on it yet. |
 
 Unknown keys are errors, so a typo such as `evry` is reported instead of ignored. Problems are listed together, with the file and the key, in `flockr job list` and in the Jobs overlay:
@@ -105,6 +107,131 @@ State lives in `<state dir>/jobs/<id>/state.json`, written atomically. It holds 
 
 A stdout line that starts with `{"flockr_handoff":` is kept verbatim in the run record for a later release.
 
+Feed output does not appear in the run record: a feed refresh is not a run and does not count in the history.
+
+## Feeds
+
+A feed is a list of items a job prints, for example the unread items of a tracker. Flockr stores the latest list, shows it, and keeps it up to date.
+
+```toml
+# ~/.config/flockr/jobs/workbox-sync/job.toml
+title = "workbox sync"
+command = ["workbox", "sync"]
+every = "1h"
+
+[feed]
+command = ["sh", "-c", "workbox list --json | flockr feed adapt workbox --title 'Today (workbox)'"]
+title = "Today (workbox)"          # optional; wins over the title the command prints
+```
+
+A complete example, with a stub to try it without the real tool, is in `docs/flockr/examples/workbox-sync/` in the Flockr repository.
+
+### When the feed refreshes
+
+- After every **successful** run of the job (a failed run keeps the feed it had).
+- On demand: `flockr feed refresh <job>`, `R` in the Feed overlay, or **refresh feed** in the command palette.
+- After an item action, see [Actions](#actions).
+- Once when the server starts, for an enabled job whose feed has never been read.
+
+The feed command runs exactly like the job: same environment rules (`env`, `env_file`, `[env]`, the `FLOCKR_*` variables), same working directory, and the job's `timeout`, after which the command and everything it started are stopped. At most one feed task runs per job at a time; a second request is refused with the reason. Asking for a refresh while the job itself is running is refused too, because the feed refreshes when the run finishes.
+
+The latest feed is stored in `<state dir>/jobs/<id>/feed.json`, written atomically, and survives restarts. When a refresh fails (exit code, timeout, output that is not a valid feed), Flockr **keeps the last good items and marks the feed stale**: the sidebar header shows `!`, the overlay shows `stale:` with the reason, and `flockr feed list` says `stale, last good 5m ago`. The next good refresh clears it.
+
+### Feed format, version 1
+
+The command prints one JSON object on stdout (at most 4 MiB):
+
+```json
+{"version": 1, "title": "Today (workbox)", "items": [
+  {"id": "jira:NH-1412", "title": "Fix login redirect",
+   "subtitle": "jira · mention", "state": "unread", "badge": "NH-1412",
+   "url": "https://example.atlassian.net/browse/NH-1412",
+   "updated_at": "2026-10-18T08:30:00Z",
+   "actions": [
+     {"key": "d", "title": "done", "command": ["workbox", "mark", "jira:NH-1412", "done"]}
+   ]}
+]}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `version` | `1`. A missing version is read as 1 with a note; any other number is an error. |
+| `title` | The feed's name. The job's `feed.title` wins, then this, then the job title. |
+| `items[].id` | Required, unique within the feed. Duplicates keep the first. |
+| `items[].title` | Shown in rows. Defaults to the id. |
+| `items[].subtitle`, `badge` | Secondary text, and a short label such as a ticket key. |
+| `items[].state` | `unread`, `read` (default), `done`, `warn` or `error`. It sets the dot and the unread count. An unknown state becomes `read`. |
+| `items[].url` | An `http://` or `https://` link. Other schemes are ignored. |
+| `items[].updated_at` | RFC 3339 time, shown as an age in the overlay. |
+| `items[].actions` | Up to 8 actions, see [Actions](#actions). |
+
+Unknown fields are ignored, so newer producers keep working. Limits: 500 items (the rest are dropped), 200 characters for `id` and `title`, 300 for `subtitle`, 40 for `badge`, 2048 for `url`. Control characters are removed and line breaks become spaces. A bad item (no `id`) or a bad action is dropped with a note instead of failing the feed; the notes show in `flockr feed show` and in the `diagnostics` of the API.
+
+### Actions
+
+An action is `{"key", "title", "command"}`: a single visible character that triggers it in the overlay, a label, and an argv array.
+
+- `key` cannot be `Enter`, `esc`, the arrow keys, `tab`, `space` or any other named key, nor one of `j`, `k`, `q`, `g`, `G`, `R` and `/`, which the overlay uses. Keys must be unique within an item. An invalid action is dropped with a note.
+- Running an action starts its command with the job's environment, plus `FLOCKR_FEED_ITEM_ID` and `FLOCKR_FEED_ACTION_KEY`. It gets at most 60 seconds (or the job's timeout when that is shorter). Then the feed command runs again, so the list shows the result. The refresh also runs when the action fails.
+- Commands stay on the server: clients send only the job, the item id and the key, and the server looks the command up in the stored feed. A feed that changed since the client looked answers `feed_item_not_found` instead of running something else.
+- The outcome (`ok`, or why it failed) is recorded as `last_action` and shown in the overlay's status line, or as a notice when you started the action from the sidebar.
+
+### Adapters
+
+`flockr feed adapt workbox` reads the JSON array printed by `workbox list --json` or `workbox status --json` on stdin and prints a feed:
+
+```sh
+workbox list --json | flockr feed adapt workbox --title "Today (workbox)"
+workbox list --tab today --json | flockr feed adapt workbox     # only the today tab
+```
+
+Each workbox item becomes a feed item: `id` is the workbox item id, `badge` its key, `state` is `unread` or `read`, `url` and `updated_at` pass through, and `subtitle` is `<source> · <reason>` followed by ` · <where>` when there is one (underscores in the reason become spaces). The actions are `d` done (`workbox mark <id> done`), `s` seen (`workbox mark <id> seen`) and `t` today, which becomes `untoday` for items already on the today list. `--title` sets the title (default `workbox`) and `--bin` the program the actions run (default `workbox`, resolved on the job's `PATH`). Items without an id are skipped with a warning on stderr; input that is not an array is an error and exits non-zero, so the feed is marked stale instead of emptied.
+
+### Sidebar section
+
+Below the agent list, each feed gets a collapsible section, once the feed has been read:
+
+```text
+────────────────────────
+ ▾ Today (workbox) 3
+  ● NH-1412 Fix login redirect
+  ● NH-1388 Review upload retry
+  ○ NH-1301 Reply to Dana
+   +4 more
+```
+
+- The header shows the feed title and its unread count (a dimmed total in parentheses when nothing is unread). `!` marks a stale feed, `…` a refresh in progress.
+- Rows show a state dot, the badge and the title. **Click a row** to open its link; an item without a link opens its action menu. **Right-click a row** for **Open link**, one entry per action, **Refresh feed**, **Open feed** and **Collapse**.
+- **Click the header** to collapse or expand the section. The choice is remembered with the other sidebar state (key `feed:<job id>`).
+- **Click `+N more`** to open the Feed overlay on that feed.
+- The section takes rows from the bottom of the sidebar's lower half and never squeezes the agent list below its minimum height: on a short terminal it shrinks to headers, or disappears. The agent list keeps its position, clicks and keys either way.
+- The client asks the server for changes every 5 seconds, with the revision it already holds, and only while the expanded sidebar is on screen. A collapsed sidebar, a narrow mobile layout and `enabled = false` cost nothing.
+
+```toml
+[ui.sidebar.feeds]
+enabled = true                     # default; false hides every feed section
+show = "all"                       # default; or ["workbox-sync"] to pick feeds by job id
+max_rows = 8                       # item rows per feed before "+N more" (1 to 50)
+```
+
+The section is client presentation only: it draws data the server already stores, and a server without feed support simply shows nothing.
+
+### Feed overlay
+
+`prefix+f` (`keys.feed`) or **feed** in the command palette opens the full list. With several feeds, a row of tabs at the top lets you pick one. **feed: &lt;title&gt;** in the palette opens a specific feed.
+
+| Key | Action |
+| --- | --- |
+| `↑`/`↓`, `j`/`k`, `g`/`G` | Move |
+| `tab`, `shift+tab`, `←`/`→` | Switch feed |
+| `enter` | Open the item's link |
+| `/` | Filter by title, subtitle, badge or id (`enter` keeps it, `esc` clears it) |
+| item action keys | Run that action on the selected item (the selected item's actions are listed under the list) |
+| `R` | Refresh the feed |
+| `esc` or `q` | Clear the filter, then close |
+
+The overlay polls every 2 seconds while it is open. Clicking a row selects it, and clicking the selected row opens its link.
+
 ## Command line
 
 ```sh
@@ -116,6 +243,18 @@ flockr job enable <id>
 flockr job disable <id>
 flockr job env refresh            # capture the login-shell environment again
 ```
+
+Feeds:
+
+```sh
+flockr feed list [--json]                    # feeds with item and unread counts, staleness
+flockr feed show <job> [--json]              # items, their actions and ids, and feed notes
+flockr feed refresh <job> [--no-wait]        # run the feed command now; waits and reports by default
+flockr feed action <job> <item> <key>        # run an item's action, then refresh the feed
+flockr feed adapt workbox [--title T] [--bin PROGRAM]   # stdin: workbox JSON, stdout: a feed
+```
+
+`feed refresh` and `feed action` wait for the task and exit non-zero when it fails; `--no-wait` returns once it has started. `feed adapt` needs no server.
 
 ## Jobs overlay
 
@@ -155,10 +294,22 @@ every = "30m"
 
 Subscribe to `job.run_finished` for `job_id`, `title` and the run record (without output). `job.list`, `job.get`, `job.logs`, `job.run` and `job.set_enabled` are also available to the Flockr client on the endpoint command lane.
 
+Feed methods:
+
+| Method | Purpose |
+| --- | --- |
+| `feed.list` | A summary of every feed (`title`, `count`, `unread`, `revision`, `stale`, `loaded`, `refreshing`, `error`, `diagnostics`, `last_action`) and a list `revision`. With `since_revision` equal to the current one it answers `unchanged: true` without the feeds. |
+| `feed.get` | One feed's summary and its items (`id`, `title`, `subtitle`, `state`, `badge`, `url`, `updated_at` and each action's `key` and `title`; never the commands). With `since_revision` equal to the feed's `revision` it answers `unchanged: true` without items. `limit` trims the items, not the `count`. |
+| `feed.refresh` | Start a refresh: `started: false` with a `reason` when one is running or the job is. |
+| `feed.run_action` | Run an item's action by `job_id`, `item_id` and `key`, then refresh the feed. Unknown items and keys are errors (`feed_item_not_found`, `feed_action_not_found`). |
+
+Subscribe to `feed.updated` for `job_id`, `title`, `revision`, `count`, `unread` and `stale`; it fires when the items, the title or the staleness change, and when an action finishes. All four feed methods are also available to the Flockr client on the endpoint command lane.
+
 ## Limits
 
 - Interval jobs run at most once a minute; a run is bounded by `timeout` (at most 24 hours).
 - Jobs run on the server's machine. Remote machines run their own jobs.
-- Output is stored as the last 16 KiB per stream per run, and 20 runs per job.
+- Output is stored as the last 16 KiB per stream per run, and 20 runs per job. A feed command's output may be up to 4 MiB.
+- A feed holds at most 500 items, and a feed command's action gets at most 60 seconds.
 - Cron time zones follow the machine's local time. On Windows the current UTC offset is used for daylight-saving changes.
 - A server restart does not stop a job that is still running; its result is not recorded.

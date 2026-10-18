@@ -446,6 +446,18 @@ flockr job env refresh            # capture the login-shell environment again
 
 See [Jobs](/docs/jobs/) for the job file format.
 
+## Feeds
+
+```sh
+flockr feed list [--json]                  # feeds with item and unread counts and staleness
+flockr feed show <job> [--json]            # a feed's items, actions and ids
+flockr feed refresh <job> [--no-wait]      # run the feed command now
+flockr feed action <job> <item> <key>      # run an item's action, then refresh
+flockr feed adapt workbox [--title T] [--bin PROGRAM]   # turn `workbox list --json` on stdin into a feed
+```
+
+`refresh` and `action` wait for the result and exit non-zero on failure. See [Jobs: Feeds](/docs/jobs/#feeds).
+
 ## Integrations
 
 ```bash

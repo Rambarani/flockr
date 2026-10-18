@@ -498,6 +498,19 @@ Each header is a list item of its own, shown as `▾ workspace` with per-state c
 
 Sidebar row settings affect only the expanded desktop sidebar. Collapsed and mobile views keep their compact layouts.
 
+### Job feeds in the sidebar
+
+Jobs that publish a [feed](/docs/jobs/#feeds) get a collapsible section under the agent list, with the feed title, its unread count and up to `max_rows` items.
+
+```toml
+[ui.sidebar.feeds]
+enabled = true          # false hides every feed section
+show = "all"            # or a list of job ids, such as ["workbox-sync"]
+max_rows = 8            # item rows per feed before "+N more", 1 to 50
+```
+
+Click a row to open its link, right-click it for the item's actions, click the header to collapse the section (remembered with the other sidebar state), and click `+N more` to open the Feed overlay (`keys.feed`, default `prefix+f`).
+
 ## Upstream herdr watcher
 
 Flockr is a fork of [herdr](https://github.com/herdrdev/herdr). The watcher checks the upstream releases once a day and tells you inside Flockr when there is something newer than the herdr version Flockr is synced to:

@@ -140,9 +140,6 @@ pub struct App {
     pub(crate) next_api_worktree_operation_id: u64,
     pub(crate) next_auto_update_check: Option<Instant>,
     pub(crate) next_agent_manifest_update_check: Option<Instant>,
-    /// Next poll of the upstream herdr watcher. The watcher itself only hits
-    /// the network once per `[upstream] check_interval_hours`.
-    pub(crate) next_upstream_check: Option<Instant>,
     /// Next scheduler pass over the jobs: the earliest due job, a hot-reload
     /// check at most every 30 seconds, or a queued toast waiting its turn.
     pub(crate) next_jobs_tick: Option<Instant>,
@@ -154,6 +151,13 @@ pub struct App {
     /// the server.
     pub(crate) job_client_notices: Vec<crate::jobs::manager::Notice>,
     pub(crate) upstream_config: crate::config::UpstreamConfig,
+    /// `[jobs]`: overrides for the built-in system jobs.
+    pub(crate) jobs_config: crate::config::JobsConfig,
+    /// Questions jobs asked (their `[handoff]`), kept until answered.
+    pub(crate) decisions: crate::jobs::decisions::DecisionStore,
+    /// Finished runs whose handoff waits for the job's feed refresh.
+    pub(crate) pending_handoffs:
+        std::collections::BTreeMap<String, crate::jobs::handoff::PendingHandoff>,
     pub(crate) update_version_check_enabled: bool,
     pub(crate) update_manifest_check_enabled: bool,
     pub(crate) loaded_host_cursor: crate::config::HostCursorModeConfig,
@@ -615,17 +619,6 @@ impl App {
                 tracing::warn!(err = %err, "failed to spawn update check thread");
             }
         }
-        let upstream_check_enabled =
-            background_update_check_enabled(policy.background_updates, config.upstream.enabled);
-        if upstream_check_enabled {
-            let upstream_tx = event_tx.clone();
-            let upstream_config = config.upstream.clone();
-            if let Err(err) = crate::thread_spawn::spawn_named("flockr-upstream-check", move || {
-                crate::upstream::check::background_check(&upstream_config, upstream_tx)
-            }) {
-                tracing::warn!(err = %err, "failed to spawn upstream check thread");
-            }
-        }
         if manifest_check_enabled {
             let manifest_update_tx = event_tx.clone();
             if let Err(err) = crate::thread_spawn::spawn_named("flockr-manifest-check", move || {
@@ -676,8 +669,6 @@ impl App {
                 .then_some(Instant::now() + AUTO_UPDATE_CHECK_INTERVAL),
             next_agent_manifest_update_check: manifest_check_enabled
                 .then_some(Instant::now() + AUTO_UPDATE_CHECK_INTERVAL),
-            next_upstream_check: upstream_check_enabled
-                .then_some(Instant::now() + AUTO_UPDATE_CHECK_INTERVAL),
             next_jobs_tick: policy.jobs.then(Instant::now),
             jobs: crate::jobs::JobsManager::new(
                 crate::jobs::JobsPaths::system(),
@@ -688,6 +679,13 @@ impl App {
             pending_job_notices: std::collections::VecDeque::new(),
             job_client_notices: Vec::new(),
             upstream_config: config.upstream.clone(),
+            jobs_config: config.jobs.clone(),
+            decisions: if policy.jobs {
+                crate::jobs::decisions::DecisionStore::open(crate::jobs::decisions::store_path())
+            } else {
+                crate::jobs::decisions::DecisionStore::in_memory()
+            },
+            pending_handoffs: std::collections::BTreeMap::new(),
             update_version_check_enabled: config.update.version_check,
             update_manifest_check_enabled: config.update.manifest_check,
             loaded_host_cursor: config.ui.host_cursor,
@@ -725,6 +723,9 @@ impl App {
         app.configure_tab_bar_status(&config.ui.tab_bar_right, &config.ui.tab_bar_right_separator);
         app.configure_window_title(&config.ui.window_title);
         app.refresh_restored_workspace_git_metadata();
+        for diagnostic in app.apply_system_jobs() {
+            tracing::warn!(%diagnostic, "system job configuration");
+        }
         Ok(app)
     }
 
@@ -1042,18 +1043,18 @@ impl App {
             }
         }
 
-        if !invalid_section("upstream") {
-            let was_enabled = self.upstream_config.enabled;
+        // The upstream watcher is the system job `system.upstream-herdr`:
+        // `[upstream]` (deprecated for timing) and `[jobs.system.*]` both feed it.
+        let upstream_valid = !invalid_section("upstream");
+        let jobs_valid = !invalid_section("jobs");
+        if upstream_valid {
             self.upstream_config = config.upstream.clone();
-            let enabled = background_update_check_enabled(
-                self.policy.background_updates,
-                self.upstream_config.enabled,
-            );
-            if !enabled {
-                self.next_upstream_check = None;
-            } else if !was_enabled || self.next_upstream_check.is_none() {
-                self.next_upstream_check = Some(Instant::now());
-            }
+        }
+        if jobs_valid {
+            self.jobs_config = config.jobs.clone();
+        }
+        if upstream_valid || jobs_valid {
+            diagnostics.extend(self.apply_system_jobs());
         }
 
         if !invalid_section("terminal") {

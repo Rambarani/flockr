@@ -3,7 +3,10 @@ use std::path::Path;
 
 use serde_json::json;
 
-use crate::api::schema::{Method, PaneSendInputParams, Request, TabCreateParams};
+use crate::api::schema::{
+    DecisionInfo, DecisionListParams, DecisionTarget, Method, PaneSendInputParams, Request,
+    TabCreateParams,
+};
 use crate::upstream::apply::{describe_plan, execute_apply, plan_apply};
 use crate::upstream::check::{check_params, fetch_releases_curl, run_check, unix_now};
 use crate::upstream::release::{
@@ -18,7 +21,7 @@ use crate::upstream::sync::{
     SyncOptions,
 };
 
-const USAGE: &str = "usage: flockr upstream <check [--json]|status [--json]|review|copy [TAG]|skip TAG|sync TAG|apply TAG [--yes]>";
+const USAGE: &str = "usage: flockr upstream <check [--json|--job]|status [--json]|review|copy [TAG]|skip TAG|sync TAG|apply TAG [--yes]>";
 
 pub(super) fn run_upstream_command(args: &[String]) -> std::io::Result<i32> {
     let Some(subcommand) = args.first().map(|arg| arg.as_str()) else {
@@ -106,8 +109,65 @@ fn print_pending_text(base: &str, pending: &[UpstreamRelease]) {
     println!("Review and copy updates with `flockr upstream review`.");
 }
 
+/// The flockr executable, as jobs and the sync tab launch it.
+fn flockr_exe() -> Result<std::path::PathBuf, String> {
+    std::env::var("FLOCKR_BIN_PATH")
+        .ok()
+        .filter(|path| !path.is_empty())
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::current_exe().ok())
+        .ok_or_else(|| "cannot determine the flockr executable path".to_string())
+}
+
+/// `flockr upstream check --job`: the body of the `system.upstream-herdr`
+/// job. It always asks GitHub (the job's schedule is the interval), records
+/// the result in the watcher's state file, and for a release the user has not
+/// been told about prints one `{"flockr_handoff": ...}` line. The server turns
+/// that line into a decision, so a release announces itself once.
+fn upstream_check_job() -> std::io::Result<i32> {
+    let config = upstream_config();
+    let outcome = run_check(
+        &state_path(),
+        &check_params(&config, true, true),
+        &fetch_releases_curl,
+    );
+    let base = tag_label(&outcome.base);
+    if let Some(error) = &outcome.error {
+        eprintln!("upstream check failed: {error}");
+        return Ok(1);
+    }
+    println!(
+        "synced to herdr {base}; {} new upstream release{}",
+        outcome.pending.len(),
+        if outcome.pending.len() == 1 { "" } else { "s" }
+    );
+    if let Some(notification) = &outcome.notification {
+        let exe = match flockr_exe() {
+            Ok(exe) => shell_quote_path(&exe),
+            Err(err) => {
+                eprintln!("{err}");
+                return Ok(1);
+            }
+        };
+        let repo = resolve_repo_path(config.repo_path.as_deref())
+            .ok()
+            .map(|path| path.display().to_string());
+        let value = crate::upstream::check::handoff_value(
+            &outcome.pending,
+            notification,
+            &exe,
+            repo.as_deref(),
+        );
+        println!("{}", crate::upstream::check::handoff_line(&value));
+    }
+    Ok(0)
+}
+
 fn upstream_check(args: &[String]) -> std::io::Result<i32> {
-    let json_output = match parse_json_flag(args, "usage: flockr upstream check [--json]") {
+    if args == ["--job"] {
+        return upstream_check_job();
+    }
+    let json_output = match parse_json_flag(args, "usage: flockr upstream check [--json|--job]") {
         Ok(json_output) => json_output,
         Err(code) => return Ok(code),
     };
@@ -279,23 +339,102 @@ fn upstream_skip(args: &[String]) -> std::io::Result<i32> {
     let mut state = UpstreamState::load();
     state.skip(tag);
     state.save()?;
+    dismiss_upstream_decisions(std::slice::from_ref(tag));
     println!("skipped upstream release {tag}");
     Ok(0)
 }
 
+/// The id of the system job that announces upstream releases.
+const UPSTREAM_JOB_ID: &str = "system.upstream-herdr";
+
+/// Start the pending decision the watcher raised for `tag`, if there is one.
+/// `None` means there is none (or the server has no decisions), so the caller
+/// opens the tab itself; `Some` is the outcome of starting it, which is the
+/// same tab `copy` always opened.
+fn start_upstream_decision(tag: &str) -> Option<Result<String, String>> {
+    let listed = super::send_request(&Request {
+        id: "cli:upstream:decisions".into(),
+        method: Method::DecisionList(DecisionListParams::default()),
+    })
+    .ok()?;
+    if listed.get("error").is_some() {
+        return None;
+    }
+    let decisions: Vec<DecisionInfo> =
+        serde_json::from_value(listed["result"]["decisions"].clone()).ok()?;
+    let decision = decisions.into_iter().find(|decision| {
+        decision.job_id == UPSTREAM_JOB_ID
+            && decision
+                .context
+                .as_ref()
+                .and_then(|context| context["tag"].as_str())
+                == Some(tag)
+    })?;
+    let started = match super::send_request(&Request {
+        id: "cli:upstream:decision:start".into(),
+        method: Method::DecisionStart(DecisionTarget {
+            decision_id: decision.decision_id,
+        }),
+    }) {
+        Ok(started) => started,
+        Err(err) => return Some(Err(format!("could not start the decision: {err}"))),
+    };
+    if started.get("error").is_some() {
+        let message = started["error"]["message"]
+            .as_str()
+            .map_or_else(|| started.to_string(), str::to_owned);
+        return Some(Err(message));
+    }
+    Some(Ok(started["result"]["decision"]["agent_command"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned()))
+}
+
+/// Dismiss the watcher's pending decisions for `tags` after the user skipped
+/// them, so the Decisions list does not keep asking. Best effort.
+fn dismiss_upstream_decisions(tags: &[String]) {
+    let Ok(listed) = super::send_request(&Request {
+        id: "cli:upstream:decisions".into(),
+        method: Method::DecisionList(DecisionListParams::default()),
+    }) else {
+        return;
+    };
+    let Ok(decisions) =
+        serde_json::from_value::<Vec<DecisionInfo>>(listed["result"]["decisions"].clone())
+    else {
+        return;
+    };
+    for decision in decisions {
+        let tag = decision
+            .context
+            .as_ref()
+            .and_then(|context| context["tag"].as_str())
+            .map(str::to_owned);
+        if decision.job_id == UPSTREAM_JOB_ID && tag.is_some_and(|tag| tags.contains(&tag)) {
+            let _ = super::send_request(&Request {
+                id: "cli:upstream:decision:dismiss".into(),
+                method: Method::DecisionDismiss(DecisionTarget {
+                    decision_id: decision.decision_id,
+                }),
+            });
+        }
+    }
+}
+
 /// Opens a new flockr tab in the source checkout that runs
-/// `flockr upstream sync <tag>`. Used by the review popup and `copy`.
+/// `flockr upstream sync <tag>`. Used by the review popup and `copy`. When the
+/// watcher already raised a decision for the tag, that decision is started
+/// (so it leaves the Decisions list); otherwise the tab is opened directly.
 fn open_sync_tab(config: &crate::config::UpstreamConfig, tag: &str) -> Result<String, String> {
     validate_tag(tag)?;
     let repo = resolve_repo_path(config.repo_path.as_deref())?;
     preflight_repo(&repo)?;
+    if let Some(outcome) = start_upstream_decision(tag) {
+        return outcome;
+    }
 
-    let exe = std::env::var("FLOCKR_BIN_PATH")
-        .ok()
-        .filter(|path| !path.is_empty())
-        .map(std::path::PathBuf::from)
-        .or_else(|| std::env::current_exe().ok())
-        .ok_or("cannot determine the flockr executable path")?;
+    let exe = flockr_exe()?;
     let command = format!("{} upstream sync {tag}", shell_quote_path(&exe));
 
     let created = super::send_request(&Request {
@@ -433,6 +572,9 @@ fn upstream_review(args: &[String]) -> std::io::Result<i32> {
                     state.skip(&release.tag);
                 }
                 state.save()?;
+                let skipped: Vec<String> =
+                    pending.iter().map(|release| release.tag.clone()).collect();
+                dismiss_upstream_decisions(&skipped);
                 println!("Skipped {}.", latest);
                 pause_before_close();
                 return Ok(0);

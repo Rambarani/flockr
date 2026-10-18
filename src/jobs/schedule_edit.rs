@@ -50,7 +50,9 @@ impl ScheduleInput {
 pub(crate) fn parse_schedule_input(text: &str) -> Result<ScheduleInput, String> {
     let text = text.trim();
     if text.is_empty() {
-        return Err("type an interval such as `every 2h` or a cron expression such as `0 9 * * 1-5`".into());
+        return Err(
+            "type an interval such as `every 2h` or a cron expression such as `0 9 * * 1-5`".into(),
+        );
     }
     let lower = text.to_ascii_lowercase();
     let duration_text = lower
@@ -229,7 +231,10 @@ mod tests {
             parse_schedule_input("24h").unwrap(),
             ScheduleInput::Every("1d".into())
         );
-        assert_eq!(parse_schedule_input("every 2h").unwrap().describe(), "every 2h");
+        assert_eq!(
+            parse_schedule_input("every 2h").unwrap().describe(),
+            "every 2h"
+        );
     }
 
     #[test]
@@ -243,10 +248,18 @@ mod tests {
 
     #[test]
     fn bad_input_explains_itself() {
-        assert!(parse_schedule_input("").unwrap_err().contains("type an interval"));
-        assert!(parse_schedule_input("every 30s").unwrap_err().contains("1m minimum"));
-        assert!(parse_schedule_input("every soon").unwrap_err().contains("interval"));
-        assert!(parse_schedule_input("0 9 * *").unwrap_err().contains("cron"));
+        assert!(parse_schedule_input("")
+            .unwrap_err()
+            .contains("type an interval"));
+        assert!(parse_schedule_input("every 30s")
+            .unwrap_err()
+            .contains("1m minimum"));
+        assert!(parse_schedule_input("every soon")
+            .unwrap_err()
+            .contains("interval"));
+        assert!(parse_schedule_input("0 9 * *")
+            .unwrap_err()
+            .contains("cron"));
         assert!(parse_schedule_input("every").is_err());
         assert!(parse_schedule_input("h").is_err());
     }
@@ -277,9 +290,11 @@ mod tests {
     #[test]
     fn switching_between_interval_and_cron_changes_the_key() {
         let original = "command = [\"echo\"]\nevery = \"1h\"\n";
-        let to_cron =
-            edit_job_toml(original, &ScheduleInput::Cron("0 9 * * 1-5".into())).unwrap();
-        assert_eq!(to_cron, "command = [\"echo\"]\nschedule = \"0 9 * * 1-5\"\n");
+        let to_cron = edit_job_toml(original, &ScheduleInput::Cron("0 9 * * 1-5".into())).unwrap();
+        assert_eq!(
+            to_cron,
+            "command = [\"echo\"]\nschedule = \"0 9 * * 1-5\"\n"
+        );
         let back = edit_job_toml(&to_cron, &ScheduleInput::Every("30m".into())).unwrap();
         assert_eq!(back, "command = [\"echo\"]\nevery = \"30m\"\n");
         // Literal strings and indentation are handled too.
@@ -293,11 +308,20 @@ mod tests {
         let every = ScheduleInput::Every("2h".into());
         for (content, expect) in [
             ("command = [\"x\"]\n", "no schedule or every key"),
-            ("command = [\"x\"]\nevery = \"1h\"\nschedule = \"* * * * *\"\n", "both"),
+            (
+                "command = [\"x\"]\nevery = \"1h\"\nschedule = \"* * * * *\"\n",
+                "both",
+            ),
             ("command = [\"x\"\nevery = ", "does not parse"),
             // Dotted or inline forms the line editor does not understand.
-            ("command = [\"x\"]\nevery = \"\"\"1h\"\"\"\n", "form the editor does not handle"),
-            ("command = [\"x\"]\n[handoff]\nwhen = \"always\"\n", "no schedule or every key"),
+            (
+                "command = [\"x\"]\nevery = \"\"\"1h\"\"\"\n",
+                "form the editor does not handle",
+            ),
+            (
+                "command = [\"x\"]\n[handoff]\nwhen = \"always\"\n",
+                "no schedule or every key",
+            ),
         ] {
             let err = edit_job_toml(content, &every).unwrap_err();
             assert!(err.contains(expect), "{content:?}: {err}");
@@ -317,6 +341,9 @@ mod tests {
     fn a_trailing_comment_with_quotes_survives() {
         let content = "command = [\"x\"]\nevery = \"1h\" # \"quoted\" comment\n";
         let edited = edit_job_toml(content, &ScheduleInput::Every("3h".into())).unwrap();
-        assert_eq!(edited, "command = [\"x\"]\nevery = \"3h\" # \"quoted\" comment\n");
+        assert_eq!(
+            edited,
+            "command = [\"x\"]\nevery = \"3h\" # \"quoted\" comment\n"
+        );
     }
 }

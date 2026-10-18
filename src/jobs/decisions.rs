@@ -259,7 +259,10 @@ impl DecisionStore {
                 .position(|d| !d.unresolved())
                 .unwrap_or(0);
             let removed = self.file.decisions.remove(victim);
-            tracing::debug!(decision = removed.id, "decision list is full; dropped the oldest");
+            tracing::debug!(
+                decision = removed.id,
+                "decision list is full; dropped the oldest"
+            );
         }
         self.changed();
         AddOutcome::Created(id)
@@ -291,16 +294,6 @@ impl DecisionStore {
             .decisions
             .iter()
             .filter(|d| d.status == DecisionStatus::Pending)
-            .count()
-            .try_into()
-            .unwrap_or(u32::MAX)
-    }
-
-    pub(crate) fn pending_count_for(&self, job_id: &str) -> u32 {
-        self.file
-            .decisions
-            .iter()
-            .filter(|d| d.status == DecisionStatus::Pending && d.job_id == job_id)
             .count()
             .try_into()
             .unwrap_or(u32::MAX)
@@ -437,7 +430,10 @@ mod tests {
             .map(|d| d.as_nanos())
             .unwrap_or(0);
         std::env::temp_dir()
-            .join(format!("flockr-decisions-{name}-{}-{nanos}", std::process::id()))
+            .join(format!(
+                "flockr-decisions-{name}-{}-{nanos}",
+                std::process::id()
+            ))
             .join("decisions.json")
     }
 
@@ -449,7 +445,6 @@ mod tests {
         let ids: Vec<_> = store.list(false).iter().map(|d| d.public_id()).collect();
         assert_eq!(ids, ["d2", "d1"]);
         assert_eq!(store.pending_count(), 2);
-        assert_eq!(store.pending_count_for("a"), 1);
         assert_eq!(store.get(1).unwrap().status, DecisionStatus::Pending);
     }
 
@@ -535,7 +530,9 @@ mod tests {
     fn resolved_decisions_cannot_be_changed_again() {
         let mut store = DecisionStore::in_memory();
         store.add(new("a", "h"), 0);
-        let started = store.mark_started(1, "started in tab x".into(), 10).unwrap();
+        let started = store
+            .mark_started(1, "started in tab x".into(), 10)
+            .unwrap();
         assert_eq!(started.status, DecisionStatus::Started);
         assert_eq!(started.outcome.as_deref(), Some("started in tab x"));
         assert_eq!(

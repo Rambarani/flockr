@@ -711,6 +711,7 @@ fn main() -> io::Result<()> {
         println!("       flockr upstream <subcommand> ...");
         println!("       flockr job <subcommand> ...");
         println!("       flockr feed <subcommand> ...");
+        println!("       flockr decision <subcommand> ...");
         println!();
         println!("Common commands:");
         for (command, description) in [
@@ -789,6 +790,10 @@ fn main() -> io::Result<()> {
             (
                 "flockr feed <subcommand>",
                 "Show job feeds, refresh them and run item actions",
+            ),
+            (
+                "flockr decision <subcommand>",
+                "List and answer the questions jobs ask (start, snooze, dismiss)",
             ),
         ] {
             println!("  {command:<32} {description}");

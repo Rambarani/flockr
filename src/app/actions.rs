@@ -1418,25 +1418,6 @@ impl AppState {
                 }
                 Vec::new()
             }
-            AppEvent::UpstreamUpdatesAvailable { title, context } => {
-                // Terminal and system delivery forward this as a client
-                // notification instead (see the headless server). `Off` still
-                // shows the in-frame notice: it is not an agent toast, and the
-                // watcher has its own `[upstream] enabled` switch.
-                if matches!(
-                    self.toast_config.delivery,
-                    crate::config::ToastDelivery::Flockr | crate::config::ToastDelivery::Off
-                ) {
-                    self.toast = Some(ToastNotification {
-                        kind: ToastKind::UpdateInstalled,
-                        title,
-                        context,
-                        position: None,
-                        target: None,
-                    });
-                }
-                Vec::new()
-            }
             AppEvent::AgentDetectionManifestsUpdated {
                 updated, status, ..
             } => {
@@ -4352,47 +4333,6 @@ mod tests {
             toast.context,
             "detach, run `brew update && brew upgrade flockr`, then run Flockr again to reconnect"
         );
-    }
-
-    #[test]
-    fn upstream_updates_event_sets_a_toast_without_touching_update_state() {
-        let mut state = AppState::test_new();
-        state.toast_config.delivery = crate::config::ToastDelivery::Flockr;
-
-        let updates = state.handle_app_event(AppEvent::UpstreamUpdatesAvailable {
-            title: "herdr v0.9.7 available upstream — 3 features, 5 fixes".into(),
-            context: "press prefix+u to review and copy updates".into(),
-        });
-
-        assert!(updates.is_empty());
-        let toast = state.toast.as_ref().expect("upstream toast");
-        assert_eq!(toast.kind, ToastKind::UpdateInstalled);
-        assert_eq!(
-            toast.title,
-            "herdr v0.9.7 available upstream — 3 features, 5 fixes"
-        );
-        assert_eq!(toast.context, "press prefix+u to review and copy updates");
-        // The flockr self-update flow is a separate concern.
-        assert!(state.update_available.is_none());
-        assert!(!state.latest_release_notes_available);
-    }
-
-    #[test]
-    fn upstream_updates_event_shows_in_frame_unless_delivery_is_client_local() {
-        for (delivery, expect_toast) in [
-            (crate::config::ToastDelivery::Off, true),
-            (crate::config::ToastDelivery::Flockr, true),
-            (crate::config::ToastDelivery::Terminal, false),
-            (crate::config::ToastDelivery::System, false),
-        ] {
-            let mut state = AppState::test_new();
-            state.toast_config.delivery = delivery;
-            state.handle_app_event(AppEvent::UpstreamUpdatesAvailable {
-                title: "t".into(),
-                context: "c".into(),
-            });
-            assert_eq!(state.toast.is_some(), expect_toast, "{delivery:?}");
-        }
     }
 
     #[test]

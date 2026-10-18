@@ -111,6 +111,9 @@ pub(crate) struct Notice {
     pub(crate) body: String,
     /// The run did not succeed; the toast uses the attention style.
     pub(crate) failed: bool,
+    /// The toast asks the user something (a decision): it stays up longer and
+    /// shows even when `[ui.toast] delivery` is off.
+    pub(crate) actionable: bool,
 }
 
 /// A job that has a feed, for the feed API.
@@ -128,6 +131,12 @@ pub(crate) struct FinishedRun {
     pub(crate) title: String,
     pub(crate) info: JobRunInfo,
     pub(crate) notice: Option<Notice>,
+    /// The full record with output tails, for the handoff evaluation.
+    pub(crate) record: RunRecord,
+    /// The job definition at the time the run finished.
+    pub(crate) def: Option<JobDef>,
+    /// The handoff fingerprint stored after the previous run.
+    pub(crate) previous_fingerprint: Option<String>,
 }
 
 pub(crate) struct JobsManager {
@@ -214,14 +223,20 @@ impl JobsManager {
         }
     }
 
-    /// Register a built-in job (id must start with `system.`). It takes effect
-    /// at the next `reload`.
-    #[allow(dead_code)] // first caller arrives with the system jobs phase
-    pub(crate) fn register_system_job(&mut self, job: JobDef) {
-        debug_assert!(job.id.starts_with("system.") && job.source == JobSource::System);
-        self.system_jobs.retain(|existing| existing.id != job.id);
-        self.system_jobs.push(job);
+    /// Replace the built-in jobs (ids start with `system.`, see
+    /// `super::system`). They take effect at the next `reload`, which a changed
+    /// list forces by clearing the file signature.
+    /// Returns whether the list changed.
+    pub(crate) fn set_system_jobs(&mut self, jobs: Vec<JobDef>) -> bool {
+        debug_assert!(jobs
+            .iter()
+            .all(|job| job.id.starts_with("system.") && job.source == JobSource::System));
+        if self.system_jobs == jobs {
+            return false;
+        }
+        self.system_jobs = jobs;
         self.signature = None;
+        true
     }
 
     #[cfg(test)]
@@ -390,6 +405,15 @@ impl JobsManager {
                     None,
                 ),
             };
+            let mut definition = definition;
+            if let (Definition::Valid(def), Some(text)) =
+                (&mut definition, state.schedule_override.as_deref())
+            {
+                match super::schedule_edit::schedule_from_text(text) {
+                    Some(schedule) => def.schedule = schedule,
+                    None => tracing::warn!(job = %id, "ignoring an invalid schedule override"),
+                }
+            }
             let mut entry = Entry {
                 definition,
                 state,
@@ -419,10 +443,17 @@ impl JobsManager {
             entry.next_due_ms = None;
             return;
         }
+        // A built-in job that never ran is due at once: the user did not
+        // write a file whose age could anchor it.
+        let never_ran_anchor = if def.source == JobSource::System {
+            0
+        } else {
+            entry.file_modified_ms.min(now_ms)
+        };
         let anchor = entry
             .state
             .last_started_unix_ms()
-            .unwrap_or(entry.file_modified_ms.min(now_ms));
+            .unwrap_or(never_ran_anchor);
         let due = self.next_after_ms(&def.schedule, anchor);
         entry.next_due_ms = due;
         entry.catch_up = first_load && due.is_some_and(|due| due <= now_ms);
@@ -541,6 +572,9 @@ impl JobsManager {
         let previous = entry.state.last_executed().cloned();
         let info = result.record.info.clone();
         let notice = notice_for(policy, &title, &result.record, previous.as_ref());
+        let def = entry.def().cloned();
+        let previous_fingerprint = entry.state.handoff_fingerprint.clone();
+        let record = result.record.clone();
         entry.state.push(result.record);
         self.persist(&result.job_id);
         self.revision += 1;
@@ -549,7 +583,56 @@ impl JobsManager {
             title,
             info,
             notice,
+            record,
+            def,
+            previous_fingerprint,
         })
+    }
+
+    /// Remember the fingerprint of the run just handed to the handoff
+    /// evaluation, for the next run's `on_change`.
+    pub(crate) fn set_handoff_fingerprint(&mut self, job_id: &str, fingerprint: String) {
+        let Some(entry) = self.entries.get_mut(job_id) else {
+            return;
+        };
+        if entry.state.handoff_fingerprint.as_deref() == Some(fingerprint.as_str()) {
+            return;
+        }
+        entry.state.handoff_fingerprint = Some(fingerprint);
+        self.persist(job_id);
+    }
+
+    /// Store (or clear) a schedule override in the job's state. The caller
+    /// reloads the jobs afterwards so the new schedule takes effect.
+    pub(crate) fn set_schedule_override(
+        &mut self,
+        job_id: &str,
+        text: Option<String>,
+    ) -> Result<(), BeginError> {
+        let Some(entry) = self.entries.get_mut(job_id) else {
+            return Err(BeginError::NotFound);
+        };
+        entry.state.schedule_override = text;
+        self.persist(job_id);
+        self.signature = None;
+        Ok(())
+    }
+
+    /// Start the job's schedule again from `now_ms`, after its schedule was
+    /// changed on purpose, so a shorter interval does not fire at once for
+    /// the time the old one had already waited.
+    pub(crate) fn restart_schedule(&mut self, job_id: &str, now_ms: u64) {
+        let next = match self.entries.get(job_id) {
+            Some(entry) if entry.enabled() => entry
+                .def()
+                .and_then(|def| self.next_after_ms(&def.schedule, now_ms)),
+            _ => None,
+        };
+        if let Some(entry) = self.entries.get_mut(job_id) {
+            entry.next_due_ms = next;
+            entry.catch_up = false;
+            self.revision += 1;
+        }
     }
 
     fn persist(&self, job_id: &str) {
@@ -622,6 +705,7 @@ impl JobsManager {
                 timeout_secs: 0,
                 enabled: false,
                 enabled_overridden: false,
+                schedule_overridden: false,
                 env: String::new(),
                 notify: String::new(),
                 state: JobState::Invalid,
@@ -658,6 +742,7 @@ impl JobsManager {
                     timeout_secs: def.timeout.as_secs(),
                     enabled,
                     enabled_overridden: entry.state.enabled_override.is_some(),
+                    schedule_overridden: entry.state.schedule_override.is_some(),
                     env: def.env.as_str().to_owned(),
                     notify: def.notify.as_str().to_owned(),
                     state,
@@ -837,6 +922,7 @@ pub(crate) fn notice_for(
         title: title.to_owned(),
         body,
         failed: !success,
+        actionable: false,
     })
 }
 
@@ -1330,7 +1416,7 @@ mod tests {
         let mut job = parse_job_toml(EVERY_HOUR, "x", Path::new("/tmp")).unwrap();
         job.id = "system.demo".into();
         job.source = JobSource::System;
-        fx.manager.register_system_job(job);
+        fx.manager.set_system_jobs(vec![job]);
         fx.manager.reload(0, &[], false);
         assert_eq!(fx.manager.info("system.demo", 0).unwrap().source, "system");
         assert!(fx.manager.has_job("mine"));

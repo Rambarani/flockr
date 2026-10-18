@@ -3,12 +3,13 @@
 use std::time::{Duration, Instant};
 
 use crate::api::schema::{
-    EmptyParams, JobInfo, JobListParams, JobLogsParams, JobRunInfo, JobRunStatus,
-    JobSetEnabledParams, JobState, JobTarget, Method, Request, ResponseResult, SuccessResponse,
+    EmptyParams, JobInfo, JobListParams, JobLogsParams, JobRunInfo, JobRunStatus, JobScheduleStore,
+    JobSetEnabledParams, JobSetScheduleParams, JobState, JobTarget, Method, Request,
+    ResponseResult, SuccessResponse,
 };
 use crate::jobs::display;
 
-const USAGE: &str = "usage: flockr job <list [--json]|status <id>|run <id> [--wait]|logs <id> [-n LINES]|enable <id>|disable <id>|env refresh>";
+const USAGE: &str = "usage: flockr job <list [--json]|status <id>|run <id> [--wait]|logs <id> [-n LINES]|enable <id>|disable <id>|schedule <id> <every 2h|CRON>|env refresh>";
 const WAIT_POLL: Duration = Duration::from_millis(250);
 const ENV_REFRESH_WAIT: Duration = Duration::from_secs(20);
 
@@ -25,6 +26,7 @@ pub(super) fn run_job_command(args: &[String]) -> std::io::Result<i32> {
         "logs" => job_logs(rest),
         "enable" => job_set_enabled(rest, true),
         "disable" => job_set_enabled(rest, false),
+        "schedule" => job_schedule(rest),
         "env" => job_env(rest),
         "help" | "--help" | "-h" => {
             eprintln!("{USAGE}");
@@ -101,16 +103,17 @@ fn job_list(args: &[String]) -> std::io::Result<i32> {
         .unwrap_or(2)
         .max(2);
     println!(
-        "{:<id_width$}  {:<8}  {:<14}  {:<9}  LAST RESULT",
-        "ID", "STATE", "SCHEDULE", "NEXT"
+        "{:<id_width$}  {:<7}  {:<8}  {:<14}  {:<9}  LAST RESULT",
+        "ID", "SOURCE", "STATE", "SCHEDULE", "NEXT"
     );
     for job in &jobs {
         let next = job
             .next_run_unix_ms
             .map_or_else(|| "-".to_owned(), |at| display::until(now, at));
         println!(
-            "{:<id_width$}  {:<8}  {:<14}  {:<9}  {}",
+            "{:<id_width$}  {:<7}  {:<8}  {:<14}  {:<9}  {}",
             job.job_id,
+            display::source_word(&job.source),
             display::state_word(job.state),
             job.schedule,
             next,
@@ -141,7 +144,14 @@ fn print_job_detail(job: &JobInfo, history: &[JobRunInfo]) {
     println!("  state     {}", display::state_word(job.state));
     println!("  source    {}", job.source);
     println!("  command   {}", job.command.join(" "));
-    println!("  schedule  {}", job.schedule);
+    if job.schedule_overridden {
+        println!(
+            "  schedule  {} (override stored by flockr job schedule)",
+            job.schedule
+        );
+    } else {
+        println!("  schedule  {}", job.schedule);
+    }
     println!("  timeout   {}s", job.timeout_secs);
     println!("  env       {}", job.env);
     println!("  notify    {}", job.notify);
@@ -355,6 +365,57 @@ fn job_set_enabled(args: &[String], enabled: bool) -> std::io::Result<i32> {
         job.job_id,
         if job.enabled { "enabled" } else { "disabled" }
     );
+    Ok(0)
+}
+
+/// `flockr job schedule <id> every 2h` or `flockr job schedule <id> "0 9 * * *"`.
+fn job_schedule(args: &[String]) -> std::io::Result<i32> {
+    let usage = "usage: flockr job schedule <id> <every 2h|CRON>   (for example `every 2h` or `0 9 * * 1-5`)";
+    let [id, rest @ ..] = args else {
+        eprintln!("{usage}");
+        return Ok(2);
+    };
+    if id.starts_with('-') || rest.is_empty() {
+        eprintln!("{usage}");
+        return Ok(2);
+    }
+    let text = rest.join(" ");
+    if let Err(err) = crate::jobs::schedule_edit::parse_schedule_input(&text) {
+        eprintln!("{err}");
+        return Ok(2);
+    }
+    let result = match call(
+        "cli:job:set_schedule",
+        Method::JobSetSchedule(JobSetScheduleParams {
+            job_id: id.clone(),
+            schedule: text,
+        }),
+    )? {
+        Ok(result) => result,
+        Err(code) => return Ok(code),
+    };
+    let ResponseResult::JobScheduleUpdated {
+        job,
+        stored_in,
+        note,
+    } = result
+    else {
+        eprintln!("unexpected response from the server");
+        return Ok(1);
+    };
+    println!(
+        "{} now runs {} (stored in {})",
+        job.job_id,
+        job.schedule,
+        match stored_in {
+            JobScheduleStore::Config => "config.toml",
+            JobScheduleStore::JobFile => "its job.toml",
+            JobScheduleStore::State => "the job's state as an override",
+        }
+    );
+    if let Some(note) = note {
+        println!("{note}");
+    }
     Ok(0)
 }
 

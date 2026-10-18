@@ -41,6 +41,15 @@ pub(crate) const DEFAULT_AGENT_COMMAND: &str = "claude";
 const DEFAULT_ASK: &str = "{{job.title}} has something for you. Start an agent?";
 const DEFAULT_TAB_TITLE: &str = "{{job.title}} · {{date}}";
 
+/// A finished run waiting for its feed refresh before the handoff is
+/// evaluated, so `{{feed_json}}` and `on_change` see the new items.
+#[derive(Debug)]
+pub(crate) struct PendingHandoff {
+    pub(crate) record: RunRecord,
+    pub(crate) def: JobDef,
+    pub(crate) previous_fingerprint: Option<String>,
+}
+
 /// The feed as the handoff sees it, taken after the run's feed refresh.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct FeedSnapshot {
@@ -213,7 +222,8 @@ fn value_text(value: &Value) -> String {
 fn shell_safe(value: &str) -> bool {
     !value.is_empty()
         && value.chars().all(|ch| {
-            ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-' | '/' | ':' | '@' | '+' | ',')
+            ch.is_ascii_alphanumeric()
+                || matches!(ch, '.' | '_' | '-' | '/' | ':' | '@' | '+' | ',')
         })
 }
 
@@ -294,7 +304,10 @@ struct Merged {
     context: Option<Value>,
 }
 
-fn string_field(object: &serde_json::Map<String, Value>, key: &str) -> Result<Option<String>, String> {
+fn string_field(
+    object: &serde_json::Map<String, Value>,
+    key: &str,
+) -> Result<Option<String>, String> {
     match object.get(key) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(text)) => Ok(Some(text.clone())),
@@ -475,7 +488,10 @@ pub(crate) fn evaluate(input: &EvalInput<'_>) -> Result<EvalResult, String> {
         MAX_TAB_TITLE_CHARS,
     );
     let agent_command = take(render(
-        merged.agent_command.as_deref().unwrap_or(DEFAULT_AGENT_COMMAND),
+        merged
+            .agent_command
+            .as_deref()
+            .unwrap_or(DEFAULT_AGENT_COMMAND),
         &vars,
         RenderMode::Shell,
     ))
@@ -568,7 +584,11 @@ pub(crate) fn prompt_path(state_dir: &Path, run_id: u64) -> PathBuf {
 pub(crate) const PROMPT_FILES_KEPT: usize = 50;
 
 /// Write `prompt` for `run_id` and drop the oldest files beyond the limit.
-pub(crate) fn write_prompt(state_dir: &Path, run_id: u64, prompt: &str) -> std::io::Result<PathBuf> {
+pub(crate) fn write_prompt(
+    state_dir: &Path,
+    run_id: u64,
+    prompt: &str,
+) -> std::io::Result<PathBuf> {
     let path = prompt_path(state_dir, run_id);
     let Some(dir) = path.parent() else {
         return Err(std::io::Error::other("prompt path has no parent"));
@@ -720,7 +740,13 @@ mod tests {
     #[test]
     fn on_change_compares_stdout_with_the_previous_run() {
         let job = job("[handoff]\nwhen = \"on_change\"\nask = \"changed\"\n");
-        let first = eval(&job, &record(JobRunStatus::Success, Some(0), "a\n"), None, None).unwrap();
+        let first = eval(
+            &job,
+            &record(JobRunStatus::Success, Some(0), "a\n"),
+            None,
+            None,
+        )
+        .unwrap();
         assert!(first.offer.is_some(), "the first run counts as a change");
         let same = eval(
             &job,
@@ -759,13 +785,22 @@ mod tests {
         let unchanged = eval(&job, &record, Some(&feed_a), Some(&first.fingerprint)).unwrap();
         assert!(unchanged.offer.is_none());
         let changed = eval(&job, &record, Some(&feed_b), Some(&first.fingerprint)).unwrap();
-        assert!(changed.offer.is_some(), "stdout is the same but the feed moved");
+        assert!(
+            changed.offer.is_some(),
+            "stdout is the same but the feed moved"
+        );
     }
 
     #[test]
     fn a_job_without_handoff_or_dynamic_line_offers_nothing() {
         let plain = job("");
-        let result = eval(&plain, &record(JobRunStatus::Success, Some(0), "x"), None, None).unwrap();
+        let result = eval(
+            &plain,
+            &record(JobRunStatus::Success, Some(0), "x"),
+            None,
+            None,
+        )
+        .unwrap();
         assert!(result.offer.is_none());
     }
 
@@ -773,13 +808,21 @@ mod tests {
     fn the_dynamic_line_offers_and_overrides_table_fields() {
         let job = job("[handoff]\nwhen = \"on_failure\"\nask = \"table ask\"\ncwd = \"/tmp\"\ntab_title = \"table tab\"\nagent_command = \"claude\"\n");
         let stdout = "noise\n{\"flockr_handoff\":{\"ask\":\"{{context.tag}} is out\",\"agent_command\":\"flockr upstream sync {{context.tag}}\",\"context\":{\"tag\":\"v0.9.7\",\"count\":3}}}\n";
-        let result = eval(&job, &record(JobRunStatus::Success, Some(0), stdout), None, None)
-            .unwrap()
-            .offer
-            .expect("a dynamic line always offers");
+        let result = eval(
+            &job,
+            &record(JobRunStatus::Success, Some(0), stdout),
+            None,
+            None,
+        )
+        .unwrap()
+        .offer
+        .expect("a dynamic line always offers");
         assert_eq!(result.ask, "v0.9.7 is out");
         assert_eq!(result.agent_command, "flockr upstream sync v0.9.7");
-        assert_eq!(result.tab_title, "table tab", "unset dynamic fields keep the table's");
+        assert_eq!(
+            result.tab_title, "table tab",
+            "unset dynamic fields keep the table's"
+        );
         assert_eq!(result.cwd, "/tmp");
         assert_eq!(result.context.unwrap()["count"], 3);
         assert!(result.prompt.is_empty());
@@ -789,10 +832,15 @@ mod tests {
     fn a_dynamic_line_without_a_table_uses_defaults() {
         let job = job("");
         let stdout = "{\"flockr_handoff\":{\"context\":{\"x\":1}}}\n";
-        let offer = eval(&job, &record(JobRunStatus::Success, Some(0), stdout), None, None)
-            .unwrap()
-            .offer
-            .unwrap();
+        let offer = eval(
+            &job,
+            &record(JobRunStatus::Success, Some(0), stdout),
+            None,
+            None,
+        )
+        .unwrap()
+        .offer
+        .unwrap();
         assert_eq!(offer.agent_command, "claude");
         assert_eq!(offer.ask, "Sync has something for you. Start an agent?");
         assert_eq!(offer.tab_title, "Sync · 2026-10-18");
@@ -803,10 +851,15 @@ mod tests {
     fn bad_dynamic_fields_are_ignored_with_warnings() {
         let job = job("");
         let stdout = "{\"flockr_handoff\":{\"ask\":5,\"context\":[1]}}\n";
-        let offer = eval(&job, &record(JobRunStatus::Success, Some(0), stdout), None, None)
-            .unwrap()
-            .offer
-            .unwrap();
+        let offer = eval(
+            &job,
+            &record(JobRunStatus::Success, Some(0), stdout),
+            None,
+            None,
+        )
+        .unwrap()
+        .offer
+        .unwrap();
         assert_eq!(offer.warnings.len(), 2, "{:?}", offer.warnings);
         assert!(offer.warnings[0].contains("ask must be a string"));
         assert!(offer.warnings[1].contains("context must be an object"));
@@ -821,16 +874,27 @@ mod tests {
             fingerprint: "f".into(),
         };
         let stdout = "hello\n{\"flockr_handoff\":{\"context\":{\"a\":{\"b\":\"deep\"}}}}\n";
-        let offer = eval(&job, &record(JobRunStatus::Failed, Some(2), stdout), Some(&feed), None)
-            .unwrap()
-            .offer
-            .unwrap();
-        assert_eq!(offer.ask, "7 for Sync", "count falls back to the unread count");
+        let offer = eval(
+            &job,
+            &record(JobRunStatus::Failed, Some(2), stdout),
+            Some(&feed),
+            None,
+        )
+        .unwrap()
+        .offer
+        .unwrap();
+        assert_eq!(
+            offer.ask, "7 for Sync",
+            "count falls back to the unread count"
+        );
         assert_eq!(
             offer.prompt,
             "id=sync run=4 exit=2 date=2026-10-18\nout=hello\n\nerr=boom\nfeed={\"items\":[1]}\nctx=deep"
         );
-        assert!(!offer.prompt.contains("flockr_handoff"), "the plumbing line is not output");
+        assert!(
+            !offer.prompt.contains("flockr_handoff"),
+            "the plumbing line is not output"
+        );
         assert!(offer.warnings.is_empty(), "{:?}", offer.warnings);
     }
 
@@ -842,22 +906,37 @@ mod tests {
             ..FeedSnapshot::default()
         };
         let stdout = "{\"flockr_handoff\":{\"context\":{\"count\":3}}}\n";
-        let offer = eval(&job, &record(JobRunStatus::Success, Some(0), stdout), Some(&feed), None)
-            .unwrap()
-            .offer
-            .unwrap();
+        let offer = eval(
+            &job,
+            &record(JobRunStatus::Success, Some(0), stdout),
+            Some(&feed),
+            None,
+        )
+        .unwrap()
+        .offer
+        .unwrap();
         assert_eq!(offer.ask, "3");
     }
 
     #[test]
     fn missing_variables_render_empty_and_are_reported() {
         let job = job("[handoff]\nwhen = \"always\"\nprompt = \"a={{context.nope}} b={{bogus}} c={{context.nope}}\"\n");
-        let offer = eval(&job, &record(JobRunStatus::Success, Some(0), ""), None, None)
-            .unwrap()
-            .offer
-            .unwrap();
+        let offer = eval(
+            &job,
+            &record(JobRunStatus::Success, Some(0), ""),
+            None,
+            None,
+        )
+        .unwrap()
+        .offer
+        .unwrap();
         assert_eq!(offer.prompt, "a= b= c=");
-        assert_eq!(offer.warnings.len(), 2, "each name is reported once: {:?}", offer.warnings);
+        assert_eq!(
+            offer.warnings.len(),
+            2,
+            "each name is reported once: {:?}",
+            offer.warnings
+        );
     }
 
     #[test]
@@ -866,7 +945,11 @@ mod tests {
             scalars: BTreeMap::from([("stdout", "{{job.id}}".to_owned())]),
             context: None,
         };
-        let out = render("{{stdout}} {{ not valid }} {{unclosed", &vars, RenderMode::Text);
+        let out = render(
+            "{{stdout}} {{ not valid }} {{unclosed",
+            &vars,
+            RenderMode::Text,
+        );
         assert_eq!(out.text, "{{job.id}} {{ not valid }} {{unclosed");
         assert!(out.missing.is_empty());
     }
@@ -877,11 +960,16 @@ mod tests {
         let job = job("[handoff]\nwhen = \"always\"\nprompt = \"{{stdout}}|{{stderr_tail}}|{{context.big}}\"\n");
         let mut rec = record(JobRunStatus::Success, Some(0), &big);
         rec.stderr_tail = "e".repeat(MAX_STDERR_CHARS + 100);
-        rec.handoff = Some(serde_json::json!({"context": {"big": "y".repeat(MAX_CONTEXT_VALUE_CHARS + 10)}}));
+        rec.handoff =
+            Some(serde_json::json!({"context": {"big": "y".repeat(MAX_CONTEXT_VALUE_CHARS + 10)}}));
         let prompt = eval(&job, &rec, None, None).unwrap().offer.unwrap().prompt;
         let parts: Vec<&str> = prompt.split('|').collect();
         assert!(parts[0].ends_with("(truncated)"));
-        assert!(parts[0].chars().count() <= MAX_STDOUT_CHARS + 20, "{}", parts[0].len());
+        assert!(
+            parts[0].chars().count() <= MAX_STDOUT_CHARS + 20,
+            "{}",
+            parts[0].len()
+        );
         assert!(parts[1].starts_with("(truncated) …"));
         assert!(parts[1].matches('e').count() <= MAX_STDERR_CHARS + 20);
         assert!(parts[2].ends_with("(truncated)"));
@@ -890,12 +978,18 @@ mod tests {
 
     #[test]
     fn ask_and_title_are_flattened_to_one_short_line() {
-        let job = job("[handoff]\nwhen = \"always\"\nask = \"{{stdout}}\"\ntab_title = \"{{stdout}}\"\n");
+        let job =
+            job("[handoff]\nwhen = \"always\"\nask = \"{{stdout}}\"\ntab_title = \"{{stdout}}\"\n");
         let stdout = format!("line one\n\u{1b}[31mline two\n{}", "z".repeat(500));
-        let offer = eval(&job, &record(JobRunStatus::Success, Some(0), &stdout), None, None)
-            .unwrap()
-            .offer
-            .unwrap();
+        let offer = eval(
+            &job,
+            &record(JobRunStatus::Success, Some(0), &stdout),
+            None,
+            None,
+        )
+        .unwrap()
+        .offer
+        .unwrap();
         assert!(!offer.ask.contains('\n') && !offer.ask.contains('\u{1b}'));
         assert!(offer.ask.chars().count() <= MAX_ASK_CHARS);
         assert!(offer.tab_title.chars().count() <= MAX_TAB_TITLE_CHARS);
@@ -905,10 +999,15 @@ mod tests {
     fn command_values_are_shell_quoted() {
         let job = job("[handoff]\nwhen = \"always\"\nagent_command = \"run {{context.tag}} {{context.evil}} {{context.empty}}\"\n");
         let mut rec = record(JobRunStatus::Success, Some(0), "");
-        rec.handoff = Some(serde_json::json!({"context": {"tag": "v0.9.7", "evil": "x; rm -rf ~ 'q'", "empty": ""}}));
+        rec.handoff = Some(
+            serde_json::json!({"context": {"tag": "v0.9.7", "evil": "x; rm -rf ~ 'q'", "empty": ""}}),
+        );
         let offer = eval(&job, &rec, None, None).unwrap().offer.unwrap();
         #[cfg(unix)]
-        assert_eq!(offer.agent_command, "run v0.9.7 'x; rm -rf ~ '\\''q'\\''' ''");
+        assert_eq!(
+            offer.agent_command,
+            "run v0.9.7 'x; rm -rf ~ '\\''q'\\''' ''"
+        );
         assert!(!offer.agent_command.contains("\n"));
     }
 
@@ -916,21 +1015,36 @@ mod tests {
     fn prompt_file_is_read_from_the_job_directory() {
         let dir = std::env::temp_dir().join(format!("flockr-handoff-pf-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("prompt.md"), "Triage {{count}} items for {{job.id}}").unwrap();
+        std::fs::write(
+            dir.join("prompt.md"),
+            "Triage {{count}} items for {{job.id}}",
+        )
+        .unwrap();
         let job = parse_job_toml(
             "command = [\"x\"]\nevery = \"1h\"\n[handoff]\nwhen = \"always\"\nprompt_file = \"prompt.md\"\n",
             "sync",
             &dir,
         )
         .unwrap();
-        let offer = eval(&job, &record(JobRunStatus::Success, Some(0), ""), None, None)
-            .unwrap()
-            .offer
-            .unwrap();
+        let offer = eval(
+            &job,
+            &record(JobRunStatus::Success, Some(0), ""),
+            None,
+            None,
+        )
+        .unwrap()
+        .offer
+        .unwrap();
         assert_eq!(offer.prompt, "Triage 0 items for sync");
 
         std::fs::remove_file(dir.join("prompt.md")).unwrap();
-        let err = eval(&job, &record(JobRunStatus::Success, Some(0), ""), None, None).unwrap_err();
+        let err = eval(
+            &job,
+            &record(JobRunStatus::Success, Some(0), ""),
+            None,
+            None,
+        )
+        .unwrap_err();
         assert!(err.contains("could not read the prompt file"), "{err}");
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -938,7 +1052,13 @@ mod tests {
     #[test]
     fn a_prompt_placeholder_without_a_prompt_is_refused() {
         let job = job("[handoff]\nwhen = \"always\"\nagent_command = \"cat {prompt_file}\"\n");
-        let err = eval(&job, &record(JobRunStatus::Success, Some(0), ""), None, None).unwrap_err();
+        let err = eval(
+            &job,
+            &record(JobRunStatus::Success, Some(0), ""),
+            None,
+            None,
+        )
+        .unwrap_err();
         assert!(err.contains("has no prompt"), "{err}");
     }
 
@@ -946,11 +1066,16 @@ mod tests {
     fn same_content_hashes_the_same_and_different_content_does_not() {
         let job = job("[handoff]\nwhen = \"always\"\nprompt = \"{{stdout}}\"\n");
         let hash = |out: &str| {
-            eval(&job, &record(JobRunStatus::Success, Some(0), out), None, None)
-                .unwrap()
-                .offer
-                .unwrap()
-                .content_hash
+            eval(
+                &job,
+                &record(JobRunStatus::Success, Some(0), out),
+                None,
+                None,
+            )
+            .unwrap()
+            .offer
+            .unwrap()
+            .content_hash
         };
         assert_eq!(hash("a"), hash("a"));
         assert_ne!(hash("a"), hash("b"));

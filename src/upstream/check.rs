@@ -175,39 +175,55 @@ pub(crate) fn check_params(
     }
 }
 
-/// Background entry point: runs a due check and, when a release is new to the
-/// user, tells the app so it can show a toast. Safe to call often; it only
-/// touches the network once per `check_interval_hours`.
-pub(crate) fn background_check(
-    config: &crate::config::UpstreamConfig,
-    events: tokio::sync::mpsc::Sender<crate::events::AppEvent>,
-) {
-    if !config.enabled {
-        return;
+/// Release notes carried in the handoff context, so the decision line stays
+/// well inside the job's output tail.
+const HANDOFF_NOTES_CHARS: usize = 3_000;
+
+/// The object of the `{"flockr_handoff": ...}` line the watcher prints for a
+/// release the user has not been told about. The agent command is the sync
+/// launcher (`flockr upstream sync <tag>`), so Start behaves like the review
+/// popup's "Copy updates"; `exe` is the quoted flockr path.
+pub(crate) fn handoff_value(
+    pending: &[UpstreamRelease],
+    notification: &UpstreamNotification,
+    exe: &str,
+    repo: Option<&str>,
+) -> serde_json::Value {
+    let buckets = super::release::bucket_releases(pending);
+    let summary = super::release::bucket_counts_label(&buckets)
+        .unwrap_or_else(|| "see the release notes".to_string());
+    let mut notes = String::new();
+    for release in pending {
+        notes.push_str(&format!("## {}\n", release.tag));
+        notes.push_str(release.body.trim());
+        notes.push_str("\n\n");
     }
-    let outcome = run_check(
-        &super::state::state_path(),
-        &check_params(config, false, true),
-        &fetch_releases_curl,
-    );
-    if let Some(error) = &outcome.error {
-        tracing::warn!(err = %error, "upstream release check failed");
+    let notes: String = notes.chars().take(HANDOFF_NOTES_CHARS).collect();
+    let mut value = serde_json::json!({
+        "ask": "herdr {{context.tag}} is out ({{context.summary}}). Copy updates?",
+        "agent_command": format!("{exe} upstream sync {{{{context.tag}}}}"),
+        "tab_title": "upstream-sync {{context.tag}}",
+        "context": {
+            "tag": notification.tag,
+            "title": notification.title,
+            "summary": summary,
+            "count": pending.len(),
+            "features": buckets.features.len(),
+            "fixes": buckets.fixes.len(),
+            "other": buckets.other.len(),
+            "url": pending.last().map(|release| release.url.clone()).unwrap_or_default(),
+            "notes": notes,
+        },
+    });
+    if let Some(repo) = repo {
+        value["cwd"] = serde_json::Value::String(repo.to_owned());
     }
-    if let Some(notification) = outcome.notification {
-        tracing::info!(tag = %notification.tag, "new upstream herdr release");
-        let review_hint = if config.review_key.trim().is_empty() {
-            "run `flockr upstream review`".to_string()
-        } else {
-            format!(
-                "press {} to review and copy updates",
-                config.review_key.trim()
-            )
-        };
-        let _ = events.blocking_send(crate::events::AppEvent::UpstreamUpdatesAvailable {
-            title: notification.title,
-            context: review_hint,
-        });
-    }
+    value
+}
+
+/// The whole stdout line for `handoff_value`.
+pub(crate) fn handoff_line(value: &serde_json::Value) -> String {
+    serde_json::json!({ "flockr_handoff": value }).to_string()
 }
 
 #[cfg(test)]
@@ -409,5 +425,56 @@ mod tests {
         assert!(outcome.pending.is_empty());
         assert!(outcome.notification.is_none());
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn the_handoff_line_carries_the_tag_counts_notes_and_the_sync_command() {
+        let pending = vec![
+            release("v0.9.6", "### Added\n- a"),
+            release("v0.9.7", "### Added\n- b\n### Fixed\n- c"),
+        ];
+        let notification = UpstreamNotification {
+            tag: "v0.9.7".into(),
+            title: "herdr v0.9.7 available upstream".into(),
+        };
+        let value = handoff_value(
+            &pending,
+            &notification,
+            "'/opt/flockr bin/flockr'",
+            Some("/src/flockr"),
+        );
+        assert_eq!(
+            value["agent_command"],
+            "'/opt/flockr bin/flockr' upstream sync {{context.tag}}"
+        );
+        assert_eq!(value["cwd"], "/src/flockr");
+        assert_eq!(value["context"]["tag"], "v0.9.7");
+        assert_eq!(value["context"]["count"], 2);
+        assert_eq!(value["context"]["features"], 2);
+        assert_eq!(value["context"]["fixes"], 1);
+        assert_eq!(value["context"]["summary"], "2 features, 1 fix");
+        let notes = value["context"]["notes"].as_str().unwrap();
+        assert!(notes.contains("## v0.9.6") && notes.contains("- c"));
+        // The line is one JSON line the job runner recognises.
+        let line = handoff_line(&value);
+        assert!(!line.contains('\n'));
+        assert!(line.starts_with(crate::jobs::state::HANDOFF_MARKER));
+        let found = crate::jobs::state::find_handoff_line(&line).unwrap();
+        assert_eq!(found["context"]["tag"], "v0.9.7");
+        assert!(handoff_value(&pending, &notification, "x", None)
+            .get("cwd")
+            .is_none());
+    }
+
+    #[test]
+    fn long_release_notes_are_cut_for_the_handoff() {
+        let body = "x".repeat(10_000);
+        let pending = vec![release("v0.9.7", &body)];
+        let notification = UpstreamNotification {
+            tag: "v0.9.7".into(),
+            title: String::new(),
+        };
+        let value = handoff_value(&pending, &notification, "flockr", None);
+        assert!(value["context"]["notes"].as_str().unwrap().chars().count() <= HANDOFF_NOTES_CHARS);
     }
 }

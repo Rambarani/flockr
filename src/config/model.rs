@@ -1,5 +1,6 @@
 use std::{collections::BTreeSet, num::NonZeroUsize};
 
+use super::jobs::JobsConfig;
 use crossterm::event::KeyModifiers;
 use serde::{de, Deserialize, Deserializer, Serialize};
 
@@ -371,6 +372,7 @@ pub struct Config {
     pub server: ServerConfig,
     pub update: UpdateConfig,
     pub upstream: UpstreamConfig,
+    pub jobs: JobsConfig,
     pub keys: KeysConfig,
     pub ui: UiConfig,
     pub worktrees: WorktreesConfig,

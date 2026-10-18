@@ -2,6 +2,15 @@
 
 use crate::api::schema::{JobInfo, JobRunStatus, JobState};
 
+/// `user`, `system` or `plugin` for a job's `source`.
+pub(crate) fn source_word(source: &str) -> &str {
+    if source.starts_with("plugin:") {
+        "plugin"
+    } else {
+        source
+    }
+}
+
 /// `5s`, `3m`, `2h`, `4d`.
 pub(crate) fn short_span(ms: u64) -> String {
     let secs = ms / 1000;

@@ -1,6 +1,7 @@
 use crossterm::event::{KeyCode, KeyModifiers};
 
 mod io;
+mod jobs;
 mod keybinds;
 mod model;
 mod sidebar;
@@ -17,6 +18,7 @@ pub use self::{
         remove_keybinding_config_sections, remove_section_key, state_dir, upsert_section_bool,
         upsert_section_value,
     },
+    jobs::{JobsConfig, SystemJobConfig},
     keybinds::{
         format_prefix_combos, normalize_key_combo, terminal_key_matches_combo, ActionKeybinds,
         BindingConfig, CommandKeybindConfig, CustomCommandAction, CustomCommandKeybind,
@@ -41,7 +43,7 @@ pub use self::{
 };
 
 pub(crate) use self::keybinds::parse_key_combo;
-pub(crate) use self::write::{update_file_at, write_edit, ConfigEdit};
+pub(crate) use self::write::{update_file_at, write_edit, write_system_job_schedule, ConfigEdit};
 pub(crate) use self::{
     io::upsert_top_level_bool,
     tab_bar::{

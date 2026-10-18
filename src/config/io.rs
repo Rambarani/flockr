@@ -7,6 +7,7 @@ use super::{model::LoadedConfig, Config, CONFIG_PATH_ENV_VAR};
 const KNOWN_TOP_LEVEL_CONFIG_KEYS: &[&str] = &[
     "advanced",
     "experimental",
+    "jobs",
     "keys",
     "onboarding",
     "remote",
@@ -343,6 +344,23 @@ fn load_live_config_from_str(content: &str) -> Result<LoadedConfig, Vec<String>>
         &mut diagnostics,
         &mut invalid_sections,
         |section| config.upstream = section,
+    );
+    if let Some(hours) = table
+        .get("upstream")
+        .and_then(toml::Value::as_table)
+        .and_then(|upstream| upstream.get("check_interval_hours"))
+    {
+        diagnostics.push(format!(
+            "[upstream] check_interval_hours = {hours} is deprecated; the watcher is the system job system.upstream-herdr now. Use [jobs.system.upstream-herdr] every = \"<hours>h\" (the old key still works until then)"
+        ));
+    }
+    load_live_section(
+        table,
+        "jobs",
+        "jobs config",
+        &mut diagnostics,
+        &mut invalid_sections,
+        |section| config.jobs = section,
     );
     load_live_section(
         table,

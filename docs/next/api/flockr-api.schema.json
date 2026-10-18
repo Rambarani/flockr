@@ -79,6 +79,136 @@
           ],
           "type": "string"
         },
+        "DecisionInfo": {
+          "properties": {
+            "agent_command": {
+              "description": "The agent command, variables filled in.",
+              "type": "string"
+            },
+            "ask": {
+              "description": "The question shown to the user.",
+              "type": "string"
+            },
+            "context": {
+              "description": "The dynamic handoff's `context` object."
+            },
+            "created_unix_ms": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "cwd": {
+              "description": "Working directory of the tab that Start opens.",
+              "type": "string"
+            },
+            "decision_id": {
+              "description": "`d1`, `d2`, ...",
+              "type": "string"
+            },
+            "job_id": {
+              "type": "string"
+            },
+            "job_title": {
+              "type": "string"
+            },
+            "last_error": {
+              "description": "Why the last Start failed; the decision stays pending.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "outcome": {
+              "description": "What happened when it was started or dismissed.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "prompt": {
+              "description": "The rendered prompt, only when `decision.list` asked for it\n(`include_prompt`), cut to 64 KiB.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "prompt_file": {
+              "description": "The rendered prompt file, when the handoff has a prompt.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "resolved_unix_ms": {
+              "description": "When it was started or dismissed.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "run_id": {
+              "description": "The run whose output produced the offer.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "snoozed_until_unix_ms": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "status": {
+              "$ref": "#/schemas/event/$defs/DecisionStatus"
+            },
+            "tab_title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "decision_id",
+            "job_id",
+            "job_title",
+            "run_id",
+            "ask",
+            "tab_title",
+            "cwd",
+            "agent_command",
+            "status",
+            "created_unix_ms"
+          ],
+          "type": "object"
+        },
+        "DecisionStatus": {
+          "description": "Pending decisions: a job asked whether to start an agent tab (its\n`[handoff]`), and nothing starts until the user answers. Decisions are\nglobal per user and persist across restarts.",
+          "oneOf": [
+            {
+              "enum": [
+                "dismissed"
+              ],
+              "type": "string"
+            },
+            {
+              "const": "pending",
+              "description": "Waiting for an answer.",
+              "type": "string"
+            },
+            {
+              "const": "snoozed",
+              "description": "Hidden until `snoozed_until_unix_ms`, then pending again.",
+              "type": "string"
+            },
+            {
+              "const": "started",
+              "description": "The agent tab was started.",
+              "type": "string"
+            }
+          ]
+        },
         "EventData": {
           "oneOf": [
             {
@@ -788,6 +918,22 @@
                 "unread"
               ],
               "type": "object"
+            },
+            {
+              "properties": {
+                "decision": {
+                  "$ref": "#/schemas/event/$defs/DecisionInfo"
+                },
+                "type": {
+                  "const": "decision_created",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "decision"
+              ],
+              "type": "object"
             }
           ]
         },
@@ -820,7 +966,8 @@
             "pane_agent_status_changed",
             "layout_updated",
             "job_run_finished",
-            "feed_updated"
+            "feed_updated",
+            "decision_created"
           ],
           "type": "string"
         },
@@ -1931,6 +2078,66 @@
           ],
           "type": "object"
         },
+        "DecisionListParams": {
+          "properties": {
+            "decision_id": {
+              "description": "Return only this decision.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "include_prompt": {
+              "description": "Fill in `prompt` (for a preview).",
+              "type": "boolean"
+            },
+            "include_resolved": {
+              "description": "Also list started and dismissed decisions.",
+              "type": "boolean"
+            },
+            "since_revision": {
+              "description": "When it equals the server's current revision the response sets\n`unchanged` and omits the list.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "DecisionSnoozeParams": {
+          "properties": {
+            "decision_id": {
+              "type": "string"
+            },
+            "for_secs": {
+              "description": "Seconds to hide the decision for; 3600 by default.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "decision_id"
+          ],
+          "type": "object"
+        },
+        "DecisionTarget": {
+          "properties": {
+            "decision_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "decision_id"
+          ],
+          "type": "object"
+        },
         "EmptyParams": {
           "type": "object"
         },
@@ -2496,6 +2703,22 @@
           "required": [
             "job_id",
             "enabled"
+          ],
+          "type": "object"
+        },
+        "JobSetScheduleParams": {
+          "properties": {
+            "job_id": {
+              "type": "string"
+            },
+            "schedule": {
+              "description": "`every 2h` (or a bare `2h`), or a 5-field cron expression such as\n`0 9 * * 1-5`. Intervals are at least one minute.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "job_id",
+            "schedule"
           ],
           "type": "object"
         },
@@ -4599,6 +4822,18 @@
               "properties": {
                 "type": {
                   "const": "feed.updated",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "type": {
+                  "const": "decision.created",
                   "type": "string"
                 }
               },
@@ -6811,6 +7046,86 @@
             "params"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "job.set_schedule",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/JobSetScheduleParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "decision.list",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/DecisionListParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "decision.start",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/DecisionTarget"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "decision.snooze",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/DecisionSnoozeParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "decision.dismiss",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/DecisionTarget"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
         }
       ],
       "properties": {
@@ -7290,6 +7605,136 @@
             "failed"
           ],
           "type": "string"
+        },
+        "DecisionInfo": {
+          "properties": {
+            "agent_command": {
+              "description": "The agent command, variables filled in.",
+              "type": "string"
+            },
+            "ask": {
+              "description": "The question shown to the user.",
+              "type": "string"
+            },
+            "context": {
+              "description": "The dynamic handoff's `context` object."
+            },
+            "created_unix_ms": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "cwd": {
+              "description": "Working directory of the tab that Start opens.",
+              "type": "string"
+            },
+            "decision_id": {
+              "description": "`d1`, `d2`, ...",
+              "type": "string"
+            },
+            "job_id": {
+              "type": "string"
+            },
+            "job_title": {
+              "type": "string"
+            },
+            "last_error": {
+              "description": "Why the last Start failed; the decision stays pending.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "outcome": {
+              "description": "What happened when it was started or dismissed.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "prompt": {
+              "description": "The rendered prompt, only when `decision.list` asked for it\n(`include_prompt`), cut to 64 KiB.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "prompt_file": {
+              "description": "The rendered prompt file, when the handoff has a prompt.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "resolved_unix_ms": {
+              "description": "When it was started or dismissed.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "run_id": {
+              "description": "The run whose output produced the offer.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "snoozed_until_unix_ms": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "status": {
+              "$ref": "#/schemas/success_response/$defs/DecisionStatus"
+            },
+            "tab_title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "decision_id",
+            "job_id",
+            "job_title",
+            "run_id",
+            "ask",
+            "tab_title",
+            "cwd",
+            "agent_command",
+            "status",
+            "created_unix_ms"
+          ],
+          "type": "object"
+        },
+        "DecisionStatus": {
+          "description": "Pending decisions: a job asked whether to start an agent tab (its\n`[handoff]`), and nothing starts until the user answers. Decisions are\nglobal per user and persist across restarts.",
+          "oneOf": [
+            {
+              "enum": [
+                "dismissed"
+              ],
+              "type": "string"
+            },
+            {
+              "const": "pending",
+              "description": "Waiting for an answer.",
+              "type": "string"
+            },
+            {
+              "const": "snoozed",
+              "description": "Hidden until `snoozed_until_unix_ms`, then pending again.",
+              "type": "string"
+            },
+            {
+              "const": "started",
+              "description": "The agent tab was started.",
+              "type": "string"
+            }
+          ]
         },
         "EventData": {
           "oneOf": [
@@ -8000,6 +8445,22 @@
                 "unread"
               ],
               "type": "object"
+            },
+            {
+              "properties": {
+                "decision": {
+                  "$ref": "#/schemas/success_response/$defs/DecisionInfo"
+                },
+                "type": {
+                  "const": "decision_created",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "decision"
+              ],
+              "type": "object"
             }
           ]
         },
@@ -8047,7 +8508,8 @@
             "pane_agent_status_changed",
             "layout_updated",
             "job_run_finished",
-            "feed_updated"
+            "feed_updated",
+            "decision_created"
           ],
           "type": "string"
         },
@@ -8535,8 +8997,12 @@
             "schedule_kind": {
               "$ref": "#/schemas/success_response/$defs/JobScheduleKind"
             },
+            "schedule_overridden": {
+              "description": "The schedule comes from an override in the job's state, not its file\n(`flockr job schedule` could not edit the file safely).",
+              "type": "boolean"
+            },
             "source": {
-              "description": "`user`, or `plugin:<plugin id>`.",
+              "description": "`user`, `system` (built into flockr) or `plugin:<plugin id>`.",
               "type": "string"
             },
             "state": {
@@ -8678,6 +9144,26 @@
             "interval"
           ],
           "type": "string"
+        },
+        "JobScheduleStore": {
+          "description": "Where a changed schedule was stored.",
+          "oneOf": [
+            {
+              "const": "config",
+              "description": "`[jobs.system.<name>]` in config.toml (system jobs).",
+              "type": "string"
+            },
+            {
+              "const": "job_file",
+              "description": "The `schedule` or `every` key of the job's `job.toml`.",
+              "type": "string"
+            },
+            {
+              "const": "state",
+              "description": "An override in the job's state file, because the job's own file could\nnot be edited safely (plugin jobs always use this).",
+              "type": "string"
+            }
+          ]
         },
         "JobState": {
           "oneOf": [
@@ -11660,6 +12146,112 @@
                 "item_id",
                 "key",
                 "started"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "job": {
+                  "$ref": "#/schemas/success_response/$defs/JobInfo"
+                },
+                "note": {
+                  "description": "Says why the schedule went somewhere unusual.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "stored_in": {
+                  "$ref": "#/schemas/success_response/$defs/JobScheduleStore",
+                  "description": "Where the new schedule was written."
+                },
+                "type": {
+                  "const": "job_schedule_updated",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "job",
+                "stored_in"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "decisions": {
+                  "default": [],
+                  "items": {
+                    "$ref": "#/schemas/success_response/$defs/DecisionInfo"
+                  },
+                  "type": "array"
+                },
+                "pending": {
+                  "description": "Decisions waiting for an answer (snoozed ones not counted).",
+                  "format": "uint32",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "revision": {
+                  "description": "Advances whenever any decision changes.",
+                  "format": "uint64",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "type": {
+                  "const": "decision_list",
+                  "type": "string"
+                },
+                "unchanged": {
+                  "description": "The request's `since_revision` is current; `decisions` is empty.",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "type",
+                "revision",
+                "pending"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "decision": {
+                  "$ref": "#/schemas/success_response/$defs/DecisionInfo"
+                },
+                "type": {
+                  "const": "decision_updated",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "decision"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "decision": {
+                  "$ref": "#/schemas/success_response/$defs/DecisionInfo"
+                },
+                "pane_id": {
+                  "type": "string"
+                },
+                "tab_id": {
+                  "description": "The tab the agent was started in.",
+                  "type": "string"
+                },
+                "type": {
+                  "const": "decision_started",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "decision",
+                "tab_id",
+                "pane_id"
               ],
               "type": "object"
             },

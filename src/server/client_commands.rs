@@ -363,6 +363,32 @@ mod tests {
             assert_eq!(actual.remove(method).as_deref(), Some(digest), "{method}");
         }
 
+        // Decision methods and the schedule editor: frozen from their first release.
+        for (method, digest) in [
+            (
+                "decision.dismiss",
+                "daf324d6ad0ad92501725f86c3ae40e36e5bd36d0f7a5be9f960bcdccc3aab09",
+            ),
+            (
+                "decision.list",
+                "f9a245b536a0213feedbfc2cf56de4432b4a9dd7ab3d8e55d0772fdae333b9da",
+            ),
+            (
+                "decision.snooze",
+                "81fb981171ec1ffb0a4ed4d0c32c6e516a303eb27691f129fc33d9bf8c76f9d2",
+            ),
+            (
+                "decision.start",
+                "e60e5df4524f269973930e90641ad9e7b0e2d191d8e01f7ac98fb6281e6bfa73",
+            ),
+            (
+                "job.set_schedule",
+                "2b96a597ddff5cde12a4dd07f4dfddec6c2f8586318a9eb1df90e9ac8dc7f68e",
+            ),
+        ] {
+            assert_eq!(actual.remove(method).as_deref(), Some(digest), "{method}");
+        }
+
         assert_eq!(
             actual, expected,
             "an existing endpoint method changed shape; add load-bearing behavior as a new advertised method or explicitly gate new fields"

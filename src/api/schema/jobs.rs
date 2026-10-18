@@ -72,7 +72,7 @@ fn is_zero(value: &u32) -> bool {
 pub struct JobInfo {
     pub job_id: String,
     pub title: String,
-    /// `user`, or `plugin:<plugin id>`.
+    /// `user`, `system` (built into flockr) or `plugin:<plugin id>`.
     pub source: String,
     pub command: Vec<String>,
     /// The cron expression, or `every 1h`.
@@ -84,6 +84,10 @@ pub struct JobInfo {
     /// An `enable`/`disable` command overrides the job file's `enabled`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub enabled_overridden: bool,
+    /// The schedule comes from an override in the job's state, not its file
+    /// (`flockr job schedule` could not edit the file safely).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub schedule_overridden: bool,
     /// `login-shell` or `server`.
     pub env: String,
     pub notify: String,

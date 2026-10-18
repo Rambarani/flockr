@@ -690,8 +690,15 @@ mod tests {
         ));
         let body = feed.items[0].body.as_deref().unwrap();
         assert!(body.len() <= MAX_BODY_BYTES);
-        assert_eq!(body.len(), MAX_BODY_BYTES, "é is two bytes, so it fits exactly");
-        assert!(feed.diagnostics.iter().any(|d| d.contains("body is longer")));
+        assert_eq!(
+            body.len(),
+            MAX_BODY_BYTES,
+            "é is two bytes, so it fits exactly"
+        );
+        assert!(feed
+            .diagnostics
+            .iter()
+            .any(|d| d.contains("body is longer")));
     }
 
     #[test]
@@ -710,7 +717,10 @@ mod tests {
             many.join(",")
         ));
         assert_eq!(feed.items[0].fields.len(), MAX_FIELDS);
-        assert!(feed.diagnostics.iter().any(|d| d.contains("more than 12 fields")));
+        assert!(feed
+            .diagnostics
+            .iter()
+            .any(|d| d.contains("more than 12 fields")));
         let b = &feed.items[1].fields;
         assert_eq!(b.len(), 1);
         assert_eq!(b[0].label.chars().count(), MAX_FIELD_LABEL_CHARS);
@@ -722,8 +732,14 @@ mod tests {
             .count();
         assert_eq!(dropped, 4, "{:?}", feed.diagnostics);
         assert!(feed.items[2].fields.is_empty() && feed.items[2].body.is_none());
-        assert!(feed.diagnostics.iter().any(|d| d.contains("fields must be an array")));
-        assert!(feed.diagnostics.iter().any(|d| d.contains("body must be a string")));
+        assert!(feed
+            .diagnostics
+            .iter()
+            .any(|d| d.contains("fields must be an array")));
+        assert!(feed
+            .diagnostics
+            .iter()
+            .any(|d| d.contains("body must be a string")));
     }
 
     #[test]

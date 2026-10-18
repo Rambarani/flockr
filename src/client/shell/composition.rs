@@ -720,6 +720,7 @@ impl ClientShellState {
                     occlusion.cover(rendered.area);
                     super::jobs_overlay::JobsHits {
                         popup: rendered.area,
+                        runs: rendered.runs.clone(),
                         rows: rendered.rows.clone(),
                         viewport_rows: rendered.viewport_rows,
                         offset: rendered.offset,

@@ -910,18 +910,22 @@ fn render_feed(
     let mut detail_rect = Rect::default();
     let mut detail_max_scroll = 0;
     let mut detail_viewport = 1;
-    if let Some(detail) = layout.detail.filter(|rect| rect.width > 0 && rect.height > 0) {
+    if let Some(detail) = layout
+        .detail
+        .filter(|rect| rect.width > 0 && rect.height > 0)
+    {
         detail_rect = detail;
         let pinned_y = detail.bottom() - 1;
-        let content = Rect::new(detail.x, detail.y, detail.width, detail.height.saturating_sub(1));
+        let content = Rect::new(
+            detail.x,
+            detail.y,
+            detail.width,
+            detail.height.saturating_sub(1),
+        );
         detail_viewport = usize::from(content.height).max(1);
         if let Some(item) = items.get(selected_index) {
-            let lines = super::feed_detail::build_detail(
-                item,
-                usize::from(content.width),
-                now_ms,
-                palette,
-            );
+            let lines =
+                super::feed_detail::build_detail(item, usize::from(content.width), now_ms, palette);
             detail_max_scroll = lines.len().saturating_sub(detail_viewport);
             let scroll = overlay.detail_scroll.min(detail_max_scroll);
             super::feed_detail::draw_lines(buffer, content, &lines, scroll);
@@ -940,11 +944,7 @@ fn render_feed(
                 put(&format!(" {}   ", action.title), dim_style(palette));
             }
             if detail_max_scroll > 0 {
-                let more = format!(
-                    "{}/{}",
-                    scroll + 1,
-                    detail_max_scroll + 1
-                );
+                let more = format!("{}/{}", scroll + 1, detail_max_scroll + 1);
                 let width = display_width(&more);
                 let more_x = detail.right().saturating_sub(width);
                 if more_x > cursor_x {
@@ -998,12 +998,13 @@ fn render_feed(
         ]
     };
     // Leave room for the "a-b / n" position at the right when it is drawn.
-    let hint_room = usize::from(text_width)
-        .saturating_sub(if layout.list.is_some() && items.len() > viewport_rows {
+    let hint_room = usize::from(text_width).saturating_sub(
+        if layout.list.is_some() && items.len() > viewport_rows {
             16
         } else {
             0
-        });
+        },
+    );
     let hint = hint
         .iter()
         .find(|hint| hint.chars().count() <= hint_room)

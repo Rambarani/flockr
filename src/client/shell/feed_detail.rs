@@ -197,7 +197,12 @@ pub(super) fn build_detail(
 
 /// Draw the window of `lines` that starts at `scroll` into `area`.
 pub(super) fn draw_lines(buffer: &mut Buffer, area: Rect, lines: &[DetailLine], scroll: usize) {
-    for (row, line) in lines.iter().skip(scroll).take(usize::from(area.height)).enumerate() {
+    for (row, line) in lines
+        .iter()
+        .skip(scroll)
+        .take(usize::from(area.height))
+        .enumerate()
+    {
         let y = area.y + row as u16;
         let mut x = area.x;
         for (text, style) in line {
@@ -270,7 +275,9 @@ mod tests {
         assert_eq!(lines[4], "");
         assert!(lines[5].starts_with("Updated  2020-01-0"), "{:?}", lines[5]);
         assert!(lines[6].contains("ago)"), "{:?}", lines[6]);
-        assert!(lines.iter().any(|line| line.starts_with("Link     https://")));
+        assert!(lines
+            .iter()
+            .any(|line| line.starts_with("Link     https://")));
         assert!(lines.iter().any(|line| line == "Source   bitbucket"));
         assert!(lines.iter().any(|line| line == "Today    no"));
         assert_eq!(&lines[lines.len() - 2..], ["first line", "second line"]);
@@ -314,6 +321,9 @@ mod tests {
             actions: Vec::new(),
         };
         let lines = plain(&build_detail(&item, 17, 0, &palette()));
-        assert_eq!(&lines[3..], ["Where  alpha beta", "       gamma", "       delta"]);
+        assert_eq!(
+            &lines[3..],
+            ["Where  alpha beta", "       gamma", "       delta"]
+        );
     }
 }

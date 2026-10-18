@@ -78,7 +78,10 @@ fn fields(item: &WorkboxItem) -> Vec<serde_json::Value> {
         ("From", optional(&item.actor)),
         ("Key", non_empty(&item.key).map(str::to_owned)),
         ("Snoozed until", optional(&item.snoozed_until)),
-        ("Today", Some(if item.today { "yes" } else { "no" }.to_owned())),
+        (
+            "Today",
+            Some(if item.today { "yes" } else { "no" }.to_owned()),
+        ),
     ];
     rows.into_iter()
         .filter_map(|(label, value)| {

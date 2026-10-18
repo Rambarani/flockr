@@ -12,8 +12,8 @@
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
-use super::*;
 use super::jobs_overlay::JobsRequest;
+use super::*;
 use crate::api::schema::{
     FeedGetParams, FeedItemInfo, FeedListParams, FeedRunActionParams, FeedSummary, FeedTarget,
     JobListParams, JobRunStatus, JobState, JobTarget, Method, ResponseResult,
@@ -387,7 +387,12 @@ impl ClientShellState {
                 run_id,
                 ..
             }) => {
-                if let Some(sync) = self.feeds.sync.as_mut().filter(|sync| sync.job_id == job_id) {
+                if let Some(sync) = self
+                    .feeds
+                    .sync
+                    .as_mut()
+                    .filter(|sync| sync.job_id == job_id)
+                {
                     sync.accepted = true;
                     sync.run_id = run_id;
                 }
@@ -417,12 +422,7 @@ impl ClientShellState {
         job_id: &str,
         result: Result<ResponseResult, ClientShellEndpointError>,
     ) -> bool {
-        let Some(sync) = self
-            .feeds
-            .sync
-            .clone()
-            .filter(|sync| sync.job_id == job_id)
-        else {
+        let Some(sync) = self.feeds.sync.clone().filter(|sync| sync.job_id == job_id) else {
             return false;
         };
         let Ok(ResponseResult::JobList { jobs, .. }) = result else {
@@ -435,8 +435,7 @@ impl ClientShellState {
         let run = job.last_run.as_ref().filter(|run| match sync.run_id {
             Some(id) => run.run_id >= id && job.state != JobState::Running,
             None => {
-                job.state != JobState::Running
-                    && sync.started_at.elapsed() > Duration::from_secs(2)
+                job.state != JobState::Running && sync.started_at.elapsed() > Duration::from_secs(2)
             }
         });
         let Some(run) = run else {
@@ -471,7 +470,11 @@ impl ClientShellState {
             sync.run_finished_at = Some(finished_at);
         }
         if finished_at.elapsed() > SYNC_REFRESH_GRACE {
-            self.finish_feed_sync(&sync, false, format!("{job_id}: ran, but the feed did not refresh"));
+            self.finish_feed_sync(
+                &sync,
+                false,
+                format!("{job_id}: ran, but the feed did not refresh"),
+            );
             return true;
         }
         if let Some(ClientShellOverlay::Feed(overlay)) = self.overlay.as_mut() {
@@ -694,7 +697,13 @@ impl ClientShellState {
 
     /// Show a message where the user asked: in the overlay's status line, or
     /// as one notice when no overlay is open.
-    pub(super) fn show_feed_message(&mut self, origin: FeedOrigin, code: &str, title: &str, text: String) {
+    pub(super) fn show_feed_message(
+        &mut self,
+        origin: FeedOrigin,
+        code: &str,
+        title: &str,
+        text: String,
+    ) {
         if let Some(ClientShellOverlay::Feed(overlay)) = self.overlay.as_mut() {
             overlay.status = Some(text);
         } else if origin == FeedOrigin::Elsewhere || self.overlay.is_none() {

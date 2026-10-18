@@ -8560,6 +8560,22 @@
           ],
           "type": "object"
         },
+        "FeedField": {
+          "description": "A labelled value shown in an item's detail view.",
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "label",
+            "value"
+          ],
+          "type": "object"
+        },
         "FeedItemInfo": {
           "properties": {
             "actions": {
@@ -8573,6 +8589,20 @@
                 "string",
                 "null"
               ]
+            },
+            "body": {
+              "description": "Plain text for a detail view (up to 8 KiB, line breaks kept). Added\nafter the first release of `feed.get`; absent from older servers.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "fields": {
+              "description": "Labelled values for a detail view (up to 12). Absent from older servers.",
+              "items": {
+                "$ref": "#/schemas/success_response/$defs/FeedField"
+              },
+              "type": "array"
             },
             "id": {
               "type": "string"

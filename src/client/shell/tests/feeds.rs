@@ -6,9 +6,10 @@ use super::agents_worktrees_notifications::two_workspace_agent_snapshot;
 use super::endpoints::state_with_remote;
 use super::*;
 use crate::api::schema::{
-    FeedActionInfo, FeedActionResult, FeedField, FeedGetParams, FeedItemInfo, FeedItemState, FeedListParams,
-    FeedRunActionParams, FeedSummary, FeedTarget, JobInfo, JobRunInfo, JobRunStatus, JobRunTrigger,
-    JobScheduleKind, JobState, JobTarget, Method, Request, ResponseResult,
+    FeedActionInfo, FeedActionResult, FeedField, FeedGetParams, FeedItemInfo, FeedItemState,
+    FeedListParams, FeedRunActionParams, FeedSummary, FeedTarget, JobInfo, JobRunInfo,
+    JobRunStatus, JobRunTrigger, JobScheduleKind, JobState, JobTarget, Method, Request,
+    ResponseResult,
 };
 use crate::client::shell::feed_state::FeedItems;
 
@@ -665,7 +666,12 @@ fn right_clicking_a_header_offers_refresh_open_and_collapse() {
     };
     assert_eq!(
         labels,
-        ["Refresh feed", "Sync now (run job)", "Open feed", "Collapse"]
+        [
+            "Refresh feed",
+            "Sync now (run job)",
+            "Open feed",
+            "Collapse"
+        ]
     );
 }
 
@@ -1570,7 +1576,11 @@ fn a_wide_overlay_shows_the_list_left_and_the_detail_right() {
         .lines()
         .find(|line| line.contains("NH-1") && line.contains("Fix login"))
         .unwrap();
-    assert!(!list_line.split('│').nth(1).unwrap().contains("jira · mention"));
+    assert!(!list_line
+        .split('│')
+        .nth(1)
+        .unwrap()
+        .contains("jira · mention"));
 }
 
 #[test]
@@ -1596,9 +1606,16 @@ fn a_narrow_overlay_stacks_the_detail_under_the_list() {
     let frame = compose_at(&mut state, 90, 30);
     let hits = &state.hits.feed_overlay;
     let list_bottom = hits.rows.iter().map(|(r, _)| r.bottom()).max().unwrap();
-    assert!(hits.detail.y > list_bottom, "{:?} {list_bottom}", hits.detail);
+    assert!(
+        hits.detail.y > list_bottom,
+        "{:?} {list_bottom}",
+        hits.detail
+    );
     assert_eq!(hits.detail.x, hits.rows[0].0.x);
-    assert!(frame.contains("Source   jira") && frame.contains("can you look"), "{frame}");
+    assert!(
+        frame.contains("Source   jira") && frame.contains("can you look"),
+        "{frame}"
+    );
     press(&mut state, 'j');
     assert!(compose_at(&mut state, 90, 30).contains("body line 1"));
 }
@@ -1631,7 +1648,10 @@ fn the_detail_scrolls_on_its_own_and_resets_for_a_new_selection() {
     let selected = selected_item(&state);
     ctrl(&mut state, 'd');
     let scrolled = compose_at(&mut state, 200, 50);
-    assert!(!scrolled.contains("Source  github"), "title scrolled away\n{scrolled}");
+    assert!(
+        !scrolled.contains("Source  github"),
+        "title scrolled away\n{scrolled}"
+    );
     assert_eq!(selected_item(&state), selected, "the list did not move");
     ctrl(&mut state, 'u');
     assert!(compose_at(&mut state, 200, 50).contains("Source  github"));
@@ -1665,7 +1685,10 @@ fn existing_keys_still_work_beside_the_detail() {
         Method::FeedRunAction(_)
     ));
     let input = state.handle_raw_events(vec![key(KeyCode::Enter)]);
-    assert!(matches!(&input.actions[..], [ClientShellAction::OpenSafeWebUrl(_)]));
+    assert!(matches!(
+        &input.actions[..],
+        [ClientShellAction::OpenSafeWebUrl(_)]
+    ));
     let input = press(&mut state, 'R');
     assert!(matches!(requests(&input)[0].method, Method::FeedRefresh(_)));
 }

@@ -13,7 +13,7 @@ const socketPath = process.env.FLOCKR_SOCKET_PATH;
 const socketEndpoint =
   process.platform === "win32" && socketPath ? `\\\\.\\pipe\\${socketPath}` : socketPath;
 const paneId = process.env.FLOCKR_PANE_ID;
-const source = "herdr:omp";
+const source = "flockr:omp";
 // OMP marks every shell it spawns with OMPCODE=1. A nested `omp` launched from
 // a parent session's shell inherits it, so that process is not the pane's root
 // agent and must not report its short-lived session over the parent's.
@@ -360,7 +360,7 @@ export default function (pi) {
     publishState();
   }
 
-  pi.events.on("herdr:blocked", (data) => {
+  pi.events.on("flockr:blocked", (data) => {
     if (!rootSession) {
       return;
     }

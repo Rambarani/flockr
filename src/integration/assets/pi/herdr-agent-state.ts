@@ -13,7 +13,7 @@ const socketPath = process.env.FLOCKR_SOCKET_PATH;
 const socketEndpoint =
   process.platform === "win32" && socketPath ? `\\\\.\\pipe\\${socketPath}` : socketPath;
 const paneId = process.env.FLOCKR_PANE_ID;
-const source = "herdr:pi";
+const source = "flockr:pi";
 
 function enabled() {
   return FLOCKR_ENV === "1" && !!socketPath && !!paneId;
@@ -208,7 +208,7 @@ export default function (pi) {
     queueState(next.state, next.message);
   }
 
-  pi.events.on("herdr:blocked", (data) => {
+  pi.events.on("flockr:blocked", (data) => {
     if (!rootSession) {
       return;
     }

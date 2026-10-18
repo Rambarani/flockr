@@ -575,7 +575,7 @@ fn server_crash_after_attach_causes_lost_connection_error() {
                         seen = true;
                         break;
                     }
-                    if output.to_lowercase().contains("herdr:") {
+                    if output.to_lowercase().contains("flockr:") {
                         break;
                     }
                 }
@@ -889,7 +889,7 @@ fn attach_thin_client_with_config(
             attached = true;
             break;
         }
-        if out.to_lowercase().contains("herdr:") {
+        if out.to_lowercase().contains("flockr:") {
             break;
         }
         thread::sleep(Duration::from_millis(30));

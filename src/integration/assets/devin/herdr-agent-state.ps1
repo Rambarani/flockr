@@ -49,6 +49,6 @@ if ([string]::IsNullOrWhiteSpace($sessionId)) { exit 0 }
 $seq = [DateTime]::UtcNow.Ticks
 $herdr = if ([string]::IsNullOrWhiteSpace($env:FLOCKR_BIN_PATH)) { "herdr" } else { $env:FLOCKR_BIN_PATH }
 try {
-    & $herdr pane report-agent-session $env:FLOCKR_PANE_ID --source herdr:devin --agent devin --seq $seq --agent-session-id $sessionId 2>$null | Out-Null
+    & $herdr pane report-agent-session $env:FLOCKR_PANE_ID --source flockr:devin --agent devin --seq $seq --agent-session-id $sessionId 2>$null | Out-Null
 } catch {
 }

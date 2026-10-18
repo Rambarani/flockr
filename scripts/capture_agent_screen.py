@@ -174,7 +174,7 @@ def non_negative_float(value: str) -> float:
     return parsed
 
 
-def resolve_pane(herdr: str, pane_ref: str) -> PaneMatch | None:
+def resolve_pane(flockr: str, pane_ref: str) -> PaneMatch | None:
     result = run_command([herdr, "pane", "list"])
     if result.code != 0:
         pane = fallback_pane_id(pane_ref)
@@ -218,7 +218,7 @@ def resolve_pane(herdr: str, pane_ref: str) -> PaneMatch | None:
     return enrich_pane_with_agent(herdr, pane) if pane else None
 
 
-def resolve_target(herdr: str, pane_ref: str, agent_ref: str | None) -> PaneMatch | None:
+def resolve_target(flockr: str, pane_ref: str, agent_ref: str | None) -> PaneMatch | None:
     if agent_ref:
         agent = get_agent(herdr, agent_ref)
         if agent is None:
@@ -228,7 +228,7 @@ def resolve_target(herdr: str, pane_ref: str, agent_ref: str | None) -> PaneMatc
     return resolve_pane(herdr, pane_ref)
 
 
-def get_agent(herdr: str, agent_ref: str) -> dict[str, Any] | None:
+def get_agent(flockr: str, agent_ref: str) -> dict[str, Any] | None:
     result = run_command([herdr, "agent", "get", agent_ref])
     if result.code != 0:
         return None
@@ -240,7 +240,7 @@ def get_agent(herdr: str, agent_ref: str) -> dict[str, Any] | None:
     return agent if isinstance(agent, dict) else None
 
 
-def enrich_pane_with_agent(herdr: str, pane: PaneMatch) -> PaneMatch:
+def enrich_pane_with_agent(flockr: str, pane: PaneMatch) -> PaneMatch:
     result = run_command([herdr, "agent", "list"])
     if result.code != 0:
         return pane
@@ -257,7 +257,7 @@ def enrich_pane_with_agent(herdr: str, pane: PaneMatch) -> PaneMatch:
     return pane
 
 
-def enrich_pane_with_pane_list(herdr: str, pane: PaneMatch) -> PaneMatch:
+def enrich_pane_with_pane_list(flockr: str, pane: PaneMatch) -> PaneMatch:
     result = run_command([herdr, "pane", "list"])
     if result.code != 0:
         return pane

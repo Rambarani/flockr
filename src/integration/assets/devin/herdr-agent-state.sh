@@ -32,7 +32,7 @@ import socket
 import subprocess
 import time
 
-SOURCE = "herdr:devin"
+SOURCE = "flockr:devin"
 AGENT = "devin"
 
 

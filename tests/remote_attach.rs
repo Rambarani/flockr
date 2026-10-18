@@ -56,7 +56,7 @@ fn check_authentication_output(framed_shell: bool) {
         .expect("system clock after Unix epoch")
         .as_nanos();
     let temp_dir = std::env::temp_dir().join(format!(
-        "herdr-remote-auth-test-{}-{nonce}",
+        "flockr-remote-auth-test-{}-{nonce}",
         std::process::id()
     ));
     let mut cleanup = TestCleanup {
@@ -86,7 +86,7 @@ if [ ! -e "$FAKE_SSH_FIRST_DONE" ]; then
     : > "$FAKE_SSH_FIRST_DONE"
     if [ "$FAKE_SSH_FRAMED" = 0 ]; then authenticate; fi
     /bin/cat >/dev/null
-    printf 'login banner\nherdr-remote-output-ready:1\nLinux\nx86_64\n'
+    printf 'login banner\nflockr-remote-output-ready:1\nLinux\nx86_64\n'
     exit 0
 fi
 if [ "$FAKE_SSH_FRAMED" = 1 ] && [ ! -e "$FAKE_SSH_STARTED" ]; then

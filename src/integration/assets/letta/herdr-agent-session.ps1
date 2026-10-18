@@ -30,7 +30,7 @@ $herdr = if ([string]::IsNullOrWhiteSpace($env:FLOCKR_BIN_PATH)) { "herdr" } els
 $source = if ($payload.is_new_session -eq $true) { "new" } else { "resume" }
 $commandArgs = @(
     "pane", "report-agent-session", $env:FLOCKR_PANE_ID,
-    "--source", "herdr:letta", "--agent", "letta",
+    "--source", "flockr:letta", "--agent", "letta",
     "--agent-session-id", $sessionId,
     "--seq", [string][DateTime]::UtcNow.Ticks,
     "--session-start-source", $source

@@ -330,22 +330,22 @@ pub fn detect_agent_with_osc(
 pub(crate) fn full_lifecycle_hook_authority(source: &str, agent_label: &str) -> bool {
     matches!(
         (source, agent_label),
-        ("herdr:pi", "pi")
-            | ("herdr:omp", "omp")
-            | ("herdr:mastracode", "mastracode")
-            | ("herdr:opencode", "opencode")
-            | ("herdr:kilo", "kilo")
-            | ("herdr:kimi", "kimi")
+        ("flockr:pi", "pi")
+            | ("flockr:omp", "omp")
+            | ("flockr:mastracode", "mastracode")
+            | ("flockr:opencode", "opencode")
+            | ("flockr:kilo", "kilo")
+            | ("flockr:kimi", "kimi")
     )
 }
 
 pub(crate) fn session_identity_only_integration(source: &str, agent_label: &str) -> bool {
     matches!(
         (source, agent_label),
-        ("herdr:hermes", "hermes")
-            | ("herdr:qwen", "qwen")
-            | ("herdr:letta", "letta")
-            | ("herdr:antigravity_cli", "agy")
+        ("flockr:hermes", "hermes")
+            | ("flockr:qwen", "qwen")
+            | ("flockr:letta", "letta")
+            | ("flockr:antigravity_cli", "agy")
     )
 }
 
@@ -1110,7 +1110,7 @@ mod tests {
     #[test]
     fn mastracode_is_hook_authority_without_screen_manifest() {
         assert!(full_lifecycle_hook_authority(
-            "herdr:mastracode",
+            "flockr:mastracode",
             "mastracode"
         ));
         assert!(!Agent::SCREEN_MANIFEST_AGENTS.contains(&Agent::Mastracode));
@@ -1119,10 +1119,10 @@ mod tests {
     #[test]
     fn session_identity_integrations_leave_state_to_screen_detection() {
         for (source, label, agent) in [
-            ("herdr:hermes", "hermes", Agent::Hermes),
-            ("herdr:qwen", "qwen", Agent::Qwen),
-            ("herdr:letta", "letta", Agent::Letta),
-            ("herdr:antigravity_cli", "agy", Agent::Antigravity),
+            ("flockr:hermes", "hermes", Agent::Hermes),
+            ("flockr:qwen", "qwen", Agent::Qwen),
+            ("flockr:letta", "letta", Agent::Letta),
+            ("flockr:antigravity_cli", "agy", Agent::Antigravity),
         ] {
             assert!(!full_lifecycle_hook_authority(source, label));
             assert!(session_identity_only_integration(source, label));

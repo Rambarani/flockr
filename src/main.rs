@@ -817,7 +817,7 @@ fn main() -> io::Result<()> {
     let saved_federation =
         client::endpoint::EndpointCatalog::load().is_ok_and(|catalog| catalog.has_enabled_ssh());
     if let Err(err) = server::autodetect::auto_detect_launch(saved_federation) {
-        eprintln!("herdr: {err}");
+        eprintln!("flockr: {err}");
         std::process::exit(1);
     }
     Ok(())
@@ -867,7 +867,7 @@ mod tests {
     fn nested_message_strings_no_longer_repeat_herdr_prefix() {
         assert!(NESTED_FLOCKR_MESSAGES
             .iter()
-            .all(|message| !message.starts_with("herdr:")));
+            .all(|message| !message.starts_with("flockr:")));
     }
 
     #[cfg(unix)]

@@ -36,7 +36,7 @@ try {
         "report-agent-session",
         $env:FLOCKR_PANE_ID,
         "--source",
-        "herdr:claude",
+        "flockr:claude",
         "--agent",
         "claude",
         "--seq",

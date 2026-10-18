@@ -2020,7 +2020,7 @@ mod windows_records {
     }
 
     fn deliver_record(
-        herdr: &mut HerdrPath,
+        flockr: &mut HerdrPath,
         input: &mut crate::client::input::windows_vti::TestWindowsInput,
         record: crate::input::WindowsKeyRecord,
         layout: HKL,

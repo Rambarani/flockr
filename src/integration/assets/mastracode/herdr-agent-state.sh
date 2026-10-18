@@ -29,7 +29,7 @@ import random
 import socket
 import time
 
-source = "herdr:mastracode"
+source = "flockr:mastracode"
 action = os.environ.get("FLOCKR_ACTION", "")
 pane_id = os.environ.get("FLOCKR_PANE_ID")
 socket_path = os.environ.get("FLOCKR_SOCKET_PATH")

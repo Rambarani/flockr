@@ -199,7 +199,7 @@ fn parse_right_click_passthrough_modifier(value: &str) -> Option<Option<KeyModif
 pub struct ToastConfig {
     pub delivery: ToastDelivery,
     pub delay_seconds: u64,
-    pub herdr: HerdrToastConfig,
+    pub flockr: HerdrToastConfig,
     pub clipboard: ClipboardToastConfig,
 }
 
@@ -1251,7 +1251,7 @@ impl Default for ToastConfig {
         Self {
             delivery: ToastDelivery::Off,
             delay_seconds: 1,
-            herdr: HerdrToastConfig::default(),
+            flockr: HerdrToastConfig::default(),
             clipboard: ClipboardToastConfig::default(),
         }
     }
@@ -1285,7 +1285,7 @@ impl<'de> Deserialize<'de> for ToastConfig {
             delivery: Option<ToastDelivery>,
             enabled: Option<bool>,
             delay_seconds: Option<u64>,
-            herdr: HerdrToastConfig,
+            flockr: HerdrToastConfig,
             clipboard: ClipboardToastConfig,
         }
 
@@ -1305,7 +1305,7 @@ impl<'de> Deserialize<'de> for ToastConfig {
         Ok(Self {
             delivery,
             delay_seconds,
-            herdr: raw.herdr,
+            flockr: raw.herdr,
             clipboard: raw.clipboard,
         })
     }

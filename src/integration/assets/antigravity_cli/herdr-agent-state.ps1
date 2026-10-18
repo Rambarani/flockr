@@ -43,7 +43,7 @@ try {
         "report-agent-session",
         $env:FLOCKR_PANE_ID,
         "--source",
-        "herdr:antigravity_cli",
+        "flockr:antigravity_cli",
         "--agent",
         "agy",
         "--seq",

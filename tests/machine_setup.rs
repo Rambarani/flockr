@@ -28,10 +28,10 @@ case "$last" in
     'tee '*) cat >/dev/null; exit 0 ;;
 esac
 case "$last" in
-    *'herdr-remote-output-ready:1'*) script=$last ;;
+    *'flockr-remote-output-ready:1'*) script=$last ;;
     *) script=$(cat) ;;
 esac
-printf '\n%s\n' 'herdr-remote-output-ready:1'
+printf '\n%s\n' 'flockr-remote-output-ready:1'
 case "$script" in
     *'uname -s'*) echo platform >>"$FAKE_ROOT/probes"; uname -s; uname -m ;;
     *'version='*)

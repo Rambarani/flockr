@@ -3037,7 +3037,7 @@ mod tests {
         assert_eq!(
             retry["result"]["agent"]["agent_session"],
             serde_json::json!({
-                "source": "herdr:codex",
+                "source": "flockr:codex",
                 "agent": "codex",
                 "kind": "id",
                 "value": "codex-session",

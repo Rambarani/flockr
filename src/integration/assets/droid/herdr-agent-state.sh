@@ -29,7 +29,7 @@ import random
 import socket
 import time
 
-source = "herdr:droid"
+source = "flockr:droid"
 pane_id = os.environ.get("FLOCKR_PANE_ID")
 socket_path = os.environ.get("FLOCKR_SOCKET_PATH")
 hook_input_file = os.environ.get("FLOCKR_HOOK_INPUT_FILE")

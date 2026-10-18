@@ -25,6 +25,6 @@ if ($null -eq $payload -or [string]::IsNullOrWhiteSpace($payload.session_id)) { 
 $seq = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
 $herdr = if ([string]::IsNullOrWhiteSpace($env:FLOCKR_BIN_PATH)) { "herdr" } else { $env:FLOCKR_BIN_PATH }
 try {
-    & $herdr pane report-agent-session $env:FLOCKR_PANE_ID --source herdr:droid --agent droid --agent-session-id $payload.session_id --seq $seq 2>$null | Out-Null
+    & $herdr pane report-agent-session $env:FLOCKR_PANE_ID --source flockr:droid --agent droid --agent-session-id $payload.session_id --seq $seq 2>$null | Out-Null
 } catch {
 }

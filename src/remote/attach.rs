@@ -33,10 +33,10 @@ const CURRENT_PROTOCOL: u32 = crate::protocol::PROTOCOL_VERSION;
 const STABLE_UPDATE_MANIFEST_URL: &str = "https://herdr.dev/latest.json";
 const PREVIEW_UPDATE_MANIFEST_URL: &str = "https://herdr.dev/preview.json";
 const REMOTE_BINARY_ENV_VAR: &str = "FLOCKR_REMOTE_BINARY";
-const REMOTE_OUTPUT_READY_MARKER: &str = "herdr-remote-output-ready:1";
-const WINDOWS_REMOTE_PATH_MARKER: &str = "herdr-remote-path:1:";
-const WINDOWS_REMOTE_INSTALL_DIR_MARKER: &str = "herdr-remote-install-dir:1:";
-const WINDOWS_REMOTE_INSTALL_RESULT_MARKER: &str = "herdr-remote-install-result:1:";
+const REMOTE_OUTPUT_READY_MARKER: &str = "flockr-remote-output-ready:1";
+const WINDOWS_REMOTE_PATH_MARKER: &str = "flockr-remote-path:1:";
+const WINDOWS_REMOTE_INSTALL_DIR_MARKER: &str = "flockr-remote-install-dir:1:";
+const WINDOWS_REMOTE_INSTALL_RESULT_MARKER: &str = "flockr-remote-install-result:1:";
 const SSH_CONTROL_SOCKET_NAME: &str = "ctl";
 pub(crate) fn run_remote(remote: RemoteLaunch) -> io::Result<()> {
     let session_name = crate::session::active_name()
@@ -127,7 +127,7 @@ pub(crate) fn check_saved_ssh(target: &str, session: &str) -> io::Result<()> {
 
 pub(crate) struct SavedSshSetup {
     ssh: RemoteSsh,
-    remote_herdr: RemoteHerdr,
+    remote_flockr: RemoteHerdr,
     candidates: Vec<RemoteHerdr>,
 }
 
@@ -678,7 +678,7 @@ struct RemoteReleaseAsset {
 }
 
 pub(super) struct PreparedRemoteHerdr {
-    pub(super) remote_herdr: RemoteHerdr,
+    pub(super) remote_flockr: RemoteHerdr,
     stop_after_install_approved: bool,
 }
 
@@ -905,7 +905,7 @@ impl RemoteSsh {
         }
     }
 
-    fn install_herdr(&self, remote_herdr: &RemoteHerdr, source_path: &Path) -> io::Result<()> {
+    fn install_herdr(&self, remote_flockr: &RemoteHerdr, source_path: &Path) -> io::Result<()> {
         let output = self.sh_output(&remote_install_prepare_script(remote_herdr))?;
         if !output.status.success() {
             return Err(command_failed("remote install preparation failed", &output));
@@ -965,7 +965,7 @@ impl RemoteSsh {
 
     fn install_windows_herdr(
         &self,
-        remote_herdr: &RemoteHerdr,
+        remote_flockr: &RemoteHerdr,
         source_path: &Path,
         identity: &str,
         sha256: &str,
@@ -1097,7 +1097,7 @@ fn normalize_remote_stdout(stdout: &mut Vec<u8>, command_succeeded: bool) -> io:
     Ok(())
 }
 
-fn remote_install_prepare_script(remote_herdr: &RemoteHerdr) -> String {
+fn remote_install_prepare_script(remote_flockr: &RemoteHerdr) -> String {
     format!(
         r#"set -eu
 dest="$HOME/{install_suffix}"
@@ -1146,7 +1146,7 @@ fn remote_install_commit_script(tmp_path: &str, dest_path: &str) -> String {
 
 fn windows_remote_install_prepare_command() -> String {
     windows_powershell_script_command(&format!(
-        "$remoteInstallDir = Join-Path ([System.IO.Path]::GetTempPath()) ('herdr-remote-' + [System.Guid]::NewGuid().ToString('N')); [System.IO.Directory]::CreateDirectory($remoteInstallDir) | Out-Null; $encodedInstallDir = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($remoteInstallDir)); [Console]::Out.WriteLine('{WINDOWS_REMOTE_INSTALL_DIR_MARKER}' + $encodedInstallDir); exit 0"
+        "$remoteInstallDir = Join-Path ([System.IO.Path]::GetTempPath()) ('flockr-remote-' + [System.Guid]::NewGuid().ToString('N')); [System.IO.Directory]::CreateDirectory($remoteInstallDir) | Out-Null; $encodedInstallDir = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($remoteInstallDir)); [Console]::Out.WriteLine('{WINDOWS_REMOTE_INSTALL_DIR_MARKER}' + $encodedInstallDir); exit 0"
     ))
 }
 
@@ -1312,7 +1312,7 @@ pub(super) fn prepare_remote_herdr(
 
 fn prepare_discovered_remote_herdr(
     ssh: &RemoteSsh,
-    remote_herdr: RemoteHerdr,
+    remote_flockr: RemoteHerdr,
     candidates: &[RemoteHerdr],
     live_handoff_enabled: bool,
     require_surface_interest: bool,
@@ -1334,7 +1334,7 @@ fn prepare_discovered_remote_herdr(
                 .unwrap_or(false)
             {
                 return Ok(PreparedRemoteHerdr {
-                    remote_herdr: candidate.clone(),
+                    remote_flockr: candidate.clone(),
                     stop_after_install_approved: false,
                 });
             }
@@ -1414,7 +1414,7 @@ pub(super) fn find_installed_remote_herdr(ssh: &RemoteSsh) -> io::Result<RemoteH
 
 fn prepare_windows_remote_herdr(
     ssh: &RemoteSsh,
-    remote_herdr: RemoteHerdr,
+    remote_flockr: RemoteHerdr,
     candidates: &[RemoteHerdr],
     live_handoff_enabled: bool,
     require_surface_interest: bool,
@@ -1429,7 +1429,7 @@ fn prepare_windows_remote_herdr(
                 require_surface_interest,
             )? {
                 return Ok(PreparedRemoteHerdr {
-                    remote_herdr: candidate.clone(),
+                    remote_flockr: candidate.clone(),
                     stop_after_install_approved: false,
                 });
             }
@@ -1513,7 +1513,7 @@ pub(super) fn discover_remote_api_metadata(
             return Err(command_failed("remote SSH connection failed", &probe));
         }
         if probe.status.success()
-            && String::from_utf8_lossy(&probe.stdout).trim() == "herdr-api-bridge-v1"
+            && String::from_utf8_lossy(&probe.stdout).trim() == "flockr-api-bridge-v1"
         {
             return Ok(crate::client::endpoint::SshMachineMetadata {
                 os: "windows".into(),
@@ -1586,14 +1586,14 @@ fn looks_like_windows_uname(os: &str) -> bool {
 
 fn windows_platform_probe_command() -> String {
     windows_powershell_script_command(
-        "$arch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }; [Console]::Out.WriteLine('herdr-windows:' + $arch); exit 0",
+        "$arch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }; [Console]::Out.WriteLine('flockr-windows:' + $arch); exit 0",
     )
 }
 
 fn parse_windows_platform_probe(stdout: &str) -> Result<Option<DetectedRemotePlatform>, String> {
     let Some(arch) = stdout
         .lines()
-        .find_map(|line| line.trim().strip_prefix("herdr-windows:"))
+        .find_map(|line| line.trim().strip_prefix("flockr-windows:"))
     else {
         return Ok(None);
     };
@@ -1615,7 +1615,7 @@ fn parse_windows_platform_probe(stdout: &str) -> Result<Option<DetectedRemotePla
 
 fn remote_binary_candidates(
     ssh: &RemoteSsh,
-    remote_herdr: &RemoteHerdr,
+    remote_flockr: &RemoteHerdr,
 ) -> io::Result<Vec<RemoteHerdr>> {
     if remote_herdr.platform.is_windows() {
         let output = ssh.framed_user_shell_output(&windows_remote_binary_candidate_command())?;
@@ -1654,7 +1654,7 @@ fn windows_remote_binary_candidate_command() -> String {
     ))
 }
 
-fn windows_remote_binary_candidates(remote_herdr: &RemoteHerdr, stdout: &str) -> Vec<RemoteHerdr> {
+fn windows_remote_binary_candidates(remote_flockr: &RemoteHerdr, stdout: &str) -> Vec<RemoteHerdr> {
     let mut candidates = Vec::new();
     for path in stdout.lines().filter_map(|line| {
         line.trim()
@@ -1730,7 +1730,7 @@ emit "/run/current-system/sw/bin/herdr"
 
 fn remote_binary_on_path_any(
     ssh: &RemoteSsh,
-    remote_herdr: &RemoteHerdr,
+    remote_flockr: &RemoteHerdr,
 ) -> io::Result<Option<RemoteHerdr>> {
     let output = ssh.posix_user_shell_output("command -v herdr")?;
     if output.status.success() {
@@ -1751,7 +1751,7 @@ fn remote_binary_on_path_any(
     Ok(remote_herdr_from_path_discovery(remote_herdr, &stdout))
 }
 
-fn remote_herdrs_from_path_discovery(remote_herdr: &RemoteHerdr, stdout: &str) -> Vec<RemoteHerdr> {
+fn remote_herdrs_from_path_discovery(remote_flockr: &RemoteHerdr, stdout: &str) -> Vec<RemoteHerdr> {
     stdout
         .lines()
         .filter_map(|path| remote_herdr_from_path(remote_herdr, path))
@@ -1759,7 +1759,7 @@ fn remote_herdrs_from_path_discovery(remote_herdr: &RemoteHerdr, stdout: &str) -
 }
 
 fn remote_herdr_from_path_discovery(
-    remote_herdr: &RemoteHerdr,
+    remote_flockr: &RemoteHerdr,
     stdout: &str,
 ) -> Option<RemoteHerdr> {
     stdout
@@ -1767,7 +1767,7 @@ fn remote_herdr_from_path_discovery(
         .find_map(|path| remote_herdr_from_path(remote_herdr, path))
 }
 
-fn remote_herdr_from_path(remote_herdr: &RemoteHerdr, path: &str) -> Option<RemoteHerdr> {
+fn remote_herdr_from_path(remote_flockr: &RemoteHerdr, path: &str) -> Option<RemoteHerdr> {
     let path = path.trim();
     if !path.starts_with('/') {
         return None;
@@ -1784,7 +1784,7 @@ fn is_mise_shim_path(path: &str) -> bool {
 
 fn remote_client_status(
     ssh: &RemoteSsh,
-    remote_herdr: &RemoteHerdr,
+    remote_flockr: &RemoteHerdr,
 ) -> io::Result<Option<RemoteClientStatusJson>> {
     let command = remote_herdr.executable.status_client_command();
     let output = ssh.shell_output(&remote_herdr.platform, &command)?;
@@ -1801,7 +1801,7 @@ fn remote_client_status(
 
 fn remote_binary_supports_endpoint_requirement(
     ssh: &RemoteSsh,
-    remote_herdr: &RemoteHerdr,
+    remote_flockr: &RemoteHerdr,
     require_surface_interest: bool,
 ) -> io::Result<bool> {
     Ok(
@@ -1811,7 +1811,7 @@ fn remote_binary_supports_endpoint_requirement(
     )
 }
 
-fn remote_binary_exists(ssh: &RemoteSsh, remote_herdr: &RemoteHerdr) -> io::Result<bool> {
+fn remote_binary_exists(ssh: &RemoteSsh, remote_flockr: &RemoteHerdr) -> io::Result<bool> {
     let command = remote_herdr.executable.exists_command();
     Ok(ssh
         .shell_output(&remote_herdr.platform, &command)?
@@ -1951,7 +1951,7 @@ impl RemoteServerStatus {
 
 fn ensure_remote_server_ready(
     ssh: &RemoteSsh,
-    remote_herdr: &RemoteHerdr,
+    remote_flockr: &RemoteHerdr,
     stop_after_install_approved: bool,
     live_handoff_enabled: bool,
     require_surface_interest: bool,
@@ -2002,7 +2002,7 @@ fn ensure_remote_server_ready(
 
 fn confirm_remote_install_with_running_server(
     ssh: &RemoteSsh,
-    remote_herdr: &RemoteHerdr,
+    remote_flockr: &RemoteHerdr,
     live_handoff_enabled: bool,
     require_surface_interest: bool,
 ) -> io::Result<bool> {
@@ -2117,7 +2117,7 @@ fn confirm_remote_install_with_running_server(
 
 fn remote_server_status(
     ssh: &RemoteSsh,
-    remote_herdr: &RemoteHerdr,
+    remote_flockr: &RemoteHerdr,
     require_surface_interest: bool,
 ) -> io::Result<RemoteServerStatus> {
     let command = remote_herdr
@@ -2153,7 +2153,7 @@ fn remote_server_status(
 
 fn probe_remote_endpoint(
     ssh: &RemoteSsh,
-    remote_herdr: &RemoteHerdr,
+    remote_flockr: &RemoteHerdr,
 ) -> io::Result<crate::client::endpoint::EndpointNegotiation> {
     let path = local_forward_socket_path(ssh.target(), &ssh.session_name);
     let bridge = SshStdioBridge::start(
@@ -2353,7 +2353,7 @@ fn confirm_remote_server_stop(
     Ok(false)
 }
 
-fn live_handoff_remote_server(ssh: &RemoteSsh, remote_herdr: &RemoteHerdr) -> io::Result<()> {
+fn live_handoff_remote_server(ssh: &RemoteSsh, remote_flockr: &RemoteHerdr) -> io::Result<()> {
     let status = remote_client_status(ssh, remote_herdr)?.ok_or_else(|| {
         io::Error::other("could not inspect the prepared remote herdr binary before live handoff")
     })?;
@@ -2380,7 +2380,7 @@ fn live_handoff_remote_server(ssh: &RemoteSsh, remote_herdr: &RemoteHerdr) -> io
     Ok(())
 }
 
-fn stop_remote_server(ssh: &RemoteSsh, remote_herdr: &RemoteHerdr) -> io::Result<()> {
+fn stop_remote_server(ssh: &RemoteSsh, remote_flockr: &RemoteHerdr) -> io::Result<()> {
     let command = remote_herdr
         .executable
         .session_command(&ssh.session_name, &["server", "stop"]);
@@ -2397,7 +2397,7 @@ fn stop_remote_server(ssh: &RemoteSsh, remote_herdr: &RemoteHerdr) -> io::Result
     Ok(())
 }
 
-fn wait_for_remote_server_shutdown(ssh: &RemoteSsh, remote_herdr: &RemoteHerdr) -> io::Result<()> {
+fn wait_for_remote_server_shutdown(ssh: &RemoteSsh, remote_flockr: &RemoteHerdr) -> io::Result<()> {
     let deadline = Instant::now() + REMOTE_SERVER_SHUTDOWN_CONFIRM_TIMEOUT;
     loop {
         if remote_server_status(ssh, remote_herdr, false)? == RemoteServerStatus::NotRunning {
@@ -2430,7 +2430,7 @@ fn warn_if_remote_bin_not_on_path(ssh: &RemoteSsh) -> io::Result<()> {
     }
 
     eprintln!(
-        "herdr: installed remote binary to ~/.local/bin/herdr, but the remote shell does not resolve `herdr` to that path"
+        "flockr: installed remote binary to ~/.local/bin/herdr, but the remote shell does not resolve `herdr` to that path"
     );
     Ok(())
 }
@@ -2576,7 +2576,7 @@ fn private_download_dir(asset_key: &str) -> io::Result<PathBuf> {
     fs::create_dir_all(&base)?;
     for attempt in 0..100 {
         let dir = base.join(format!(
-            "herdr-remote-{}-{}-{attempt}",
+            "flockr-remote-{}-{}-{attempt}",
             std::process::id(),
             asset_key
         ));
@@ -2614,7 +2614,7 @@ fn read_remote_confirmation(reader: &mut impl io::BufRead, default: bool) -> io:
 
 fn confirm_remote_install(
     target: &str,
-    remote_herdr: &RemoteHerdr,
+    remote_flockr: &RemoteHerdr,
     source_description: &str,
 ) -> io::Result<()> {
     if !io::stdin().is_terminal() {
@@ -2663,7 +2663,7 @@ for candidate in $candidates; do
         *) continue ;;
     esac
     [ -x "$candidate" ] || continue
-    if capability=$("$candidate" --session {session} remote-api-bridge --check </dev/null 2>/dev/null) && [ "$capability" = herdr-api-bridge-v1 ]; then
+    if capability=$("$candidate" --session {session} remote-api-bridge --check </dev/null 2>/dev/null) && [ "$capability" = flockr-api-bridge-v1 ]; then
         printf '%s\n' "$candidate"
         exit 0
     fi
@@ -2679,7 +2679,7 @@ exit 2"#,
     )
 }
 
-pub(super) const STALE_API_METADATA: &str = "herdr-machine-metadata-stale-v1";
+pub(super) const STALE_API_METADATA: &str = "flockr-machine-metadata-stale-v1";
 
 pub(super) fn cached_remote_api_command(
     metadata: &crate::client::endpoint::SshMachineMetadata,
@@ -2689,7 +2689,7 @@ pub(super) fn cached_remote_api_command(
         let path = crate::platform::quote_powershell_arg(&metadata.executable);
         let session_arg = crate::platform::quote_powershell_arg(session);
         let probe = format!(
-            "$capability = & {path} --session {session_arg} remote-api-bridge --check 2>$null; if ($LASTEXITCODE -ne 0 -or $capability -ne 'herdr-api-bridge-v1') {{ [Console]::Error.WriteLine('{STALE_API_METADATA}'); exit 78 }}; "
+            "$capability = & {path} --session {session_arg} remote-api-bridge --check 2>$null; if ($LASTEXITCODE -ne 0 -or $capability -ne 'flockr-api-bridge-v1') {{ [Console]::Error.WriteLine('{STALE_API_METADATA}'); exit 78 }}; "
         );
         return windows_powershell_script_command(&format!(
             "{probe}{}",
@@ -2702,14 +2702,14 @@ pub(super) fn cached_remote_api_command(
     let path = shell_quote(&metadata.executable);
     let session = shell_quote(session);
     let script = format!(
-        "if capability=$({path} --session {session} remote-api-bridge --check </dev/null 2>/dev/null) && [ \"$capability\" = herdr-api-bridge-v1 ]; then\n{}\nelse\n    printf '%s\\n' '{STALE_API_METADATA}' >&2\n    exit 78\nfi",
+        "if capability=$({path} --session {session} remote-api-bridge --check </dev/null 2>/dev/null) && [ \"$capability\" = flockr-api-bridge-v1 ]; then\n{}\nelse\n    printf '%s\\n' '{STALE_API_METADATA}' >&2\n    exit 78\nfi",
         posix_remote_output_command(&format!("exec {path} --session {session} remote-api-bridge")),
     );
     format!("/bin/sh -c {}", shell_quote(&script))
 }
 
 pub(super) fn remote_api_bridge_command(
-    remote_herdr: &RemoteHerdr,
+    remote_flockr: &RemoteHerdr,
     session_name: &str,
     check: bool,
 ) -> String {
@@ -2771,7 +2771,7 @@ pub(super) struct SshStdioBridge {
 impl SshStdioBridge {
     pub(super) fn start(
         target: String,
-        remote_herdr: RemoteHerdr,
+        remote_flockr: RemoteHerdr,
         local_socket: PathBuf,
         session_name: String,
         ssh_options: Option<&ManagedSshOptions>,
@@ -2846,7 +2846,7 @@ impl SshStdioBridge {
                             if noninteractive {
                                 tracing::warn!(error = %err, "saved SSH endpoint bridge failed");
                             } else {
-                                eprintln!("herdr: remote bridge failed: {err}");
+                                eprintln!("flockr: remote bridge failed: {err}");
                             }
                         }
                     }
@@ -2857,7 +2857,7 @@ impl SshStdioBridge {
                         if noninteractive {
                             tracing::warn!(error = %err, "saved SSH endpoint listener failed");
                         } else {
-                            eprintln!("herdr: remote bridge listener failed: {err}");
+                            eprintln!("flockr: remote bridge listener failed: {err}");
                         }
                         break;
                     }
@@ -3417,7 +3417,7 @@ fn local_forward_socket_path(target: &str, session_name: &str) -> PathBuf {
     let pid = std::process::id();
     let target_clean = sanitize_path_component(target);
     let session_clean = sanitize_path_component(session_name);
-    let readable_name = format!("herdr-remote-{pid}-{target_clean}-{session_clean}.sock");
+    let readable_name = format!("flockr-remote-{pid}-{target_clean}-{session_clean}.sock");
     let target_prefix: String = target_clean.chars().take(8).collect();
     let hash = short_socket_hash(target, session_name);
     let short_name = format!("herdr-r-{pid}-{target_prefix}-{hash}.sock");
@@ -4497,7 +4497,7 @@ mod tests {
     fn windows_platform_probe_preserves_native_and_unsupported_architectures() {
         for arch in ["AMD64", "x86_64"] {
             assert_eq!(
-                parse_windows_platform_probe(&format!("profile noise\r\nherdr-windows:{arch}\r\n"))
+                parse_windows_platform_probe(&format!("profile noise\r\nflockr-windows:{arch}\r\n"))
                     .unwrap(),
                 Some(DetectedRemotePlatform {
                     platform: RemotePlatform {
@@ -4510,14 +4510,14 @@ mod tests {
         }
         assert_eq!(parse_windows_platform_probe("other output").unwrap(), None);
         assert_eq!(
-            parse_windows_platform_probe("herdr-windows:x86").unwrap_err(),
+            parse_windows_platform_probe("flockr-windows:x86").unwrap_err(),
             "unsupported remote platform: Windows X86"
         );
     }
 
     #[test]
     fn windows_arm64_probe_selects_x64_package() {
-        let platform = parse_windows_platform_probe("herdr-windows:ARM64")
+        let platform = parse_windows_platform_probe("flockr-windows:ARM64")
             .expect("Windows ARM64 should use the x64 build on a best-effort basis")
             .expect("the Windows platform marker should be recognized");
         assert_eq!(platform.platform.asset_key(), "windows-x86_64");
@@ -4688,7 +4688,7 @@ mod tests {
             (
                 "platform probe",
                 windows_platform_probe_command(),
-                "$arch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }; [Console]::Out.WriteLine('herdr-windows:' + $arch); exit 0",
+                "$arch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }; [Console]::Out.WriteLine('flockr-windows:' + $arch); exit 0",
             ),
             (
                 "PATH lookup",
@@ -4892,7 +4892,7 @@ function Get-Process {
     fn remote_output_framing_discards_any_banner_and_preserves_binary() {
         let payload = [0, 1, 2, 0xff, b'\n'];
         let mut input = vec![b'x'; 4 * 1024 * 1024];
-        input.extend_from_slice(b"\r\nherdr-remote-output-ready:1\r\n");
+        input.extend_from_slice(b"\r\nflockr-remote-output-ready:1\r\n");
         input.extend_from_slice(&payload);
         let mut reader = io::BufReader::with_capacity(17, io::Cursor::new(input));
 
@@ -4906,7 +4906,7 @@ function Get-Process {
         normalize_remote_stdout(&mut missing, false).unwrap();
         assert_eq!(missing, b"profile output without marker");
 
-        let mut platform = b"profile output\nherdr-remote-output-ready:1\nLinux\nx86_64\n".to_vec();
+        let mut platform = b"profile output\nflockr-remote-output-ready:1\nLinux\nx86_64\n".to_vec();
         normalize_remote_stdout(&mut platform, true).unwrap();
         let platform = String::from_utf8(platform).unwrap();
         let mut lines = platform.lines();
@@ -5028,7 +5028,7 @@ function Get-Process {
             remote_herdr
                 .executable
                 .bridge_command(crate::session::DEFAULT_SESSION_NAME),
-            "printf '\n%s\n' 'herdr-remote-output-ready:1'\nexec \"$HOME/.local/bin/herdr\" remote-client-bridge"
+            "printf '\n%s\n' 'flockr-remote-output-ready:1'\nexec \"$HOME/.local/bin/herdr\" remote-client-bridge"
         );
         assert_eq!(
             remote_herdr.executable.saved_bridge_command("agents"),
@@ -5049,7 +5049,7 @@ function Get-Process {
             remote_herdr
                 .executable
                 .bridge_command(crate::session::DEFAULT_SESSION_NAME),
-            "printf '\n%s\n' 'herdr-remote-output-ready:1'\nexec /usr/bin/herdr remote-client-bridge"
+            "printf '\n%s\n' 'flockr-remote-output-ready:1'\nexec /usr/bin/herdr remote-client-bridge"
         );
     }
 
@@ -5067,7 +5067,7 @@ function Get-Process {
             remote_herdr
                 .executable
                 .bridge_command(crate::session::DEFAULT_SESSION_NAME),
-            "printf '\n%s\n' 'herdr-remote-output-ready:1'\nexec '/opt/herdr bin/herdr' remote-client-bridge"
+            "printf '\n%s\n' 'flockr-remote-output-ready:1'\nexec '/opt/herdr bin/herdr' remote-client-bridge"
         );
     }
 
@@ -5085,7 +5085,7 @@ function Get-Process {
             remote_herdr
                 .executable
                 .bridge_command(crate::session::DEFAULT_SESSION_NAME),
-            "printf '\n%s\n' 'herdr-remote-output-ready:1'\nexec /opt/homebrew/bin/herdr remote-client-bridge"
+            "printf '\n%s\n' 'flockr-remote-output-ready:1'\nexec /opt/homebrew/bin/herdr remote-client-bridge"
         );
         assert_eq!(remote_herdr.platform.asset_key(), "macos-aarch64");
     }
@@ -5182,7 +5182,7 @@ function Get-Process {
             remote_herdr
                 .executable
                 .bridge_command(crate::session::DEFAULT_SESSION_NAME),
-            "printf '\n%s\n' 'herdr-remote-output-ready:1'\nexec '/opt/herdr'\\''s/bin/herdr' remote-client-bridge"
+            "printf '\n%s\n' 'flockr-remote-output-ready:1'\nexec '/opt/herdr'\\''s/bin/herdr' remote-client-bridge"
         );
     }
 
@@ -5640,7 +5640,7 @@ function Get-Process {
             .unwrap_or("")
             .to_string();
         assert!(
-            filename.starts_with("herdr-remote-"),
+            filename.starts_with("flockr-remote-"),
             "expected readable name, got {filename}"
         );
         assert!(filename.contains("-dev-default."), "got {filename}");

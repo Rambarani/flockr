@@ -3309,7 +3309,7 @@ mod tests {
         for (seq, session, reason) in [(1, "old-session", "startup"), (2, "new-session", "clear")] {
             let updates = app.handle_app_event(AppEvent::AgentSessionReported {
                 pane_id,
-                source: "herdr:claude".into(),
+                source: "flockr:claude".into(),
                 agent_label: "claude".into(),
                 seq: Some(seq),
                 session_ref: crate::agent_resume::AgentSessionRef::id(session),
@@ -3738,7 +3738,7 @@ mod tests {
         });
         state.handle_app_event(AppEvent::AgentResumeReported {
             pane_id,
-            source: "herdr:pi".into(),
+            source: "flockr:pi".into(),
             agent_label: "pi".into(),
             seq: None,
             argv: vec!["pi".into(), "--continue".into()],
@@ -3761,7 +3761,7 @@ mod tests {
 
         state.handle_app_event(AppEvent::AgentResumeReported {
             pane_id,
-            source: "herdr:pi".into(),
+            source: "flockr:pi".into(),
             agent_label: "pi".into(),
             seq: None,
             argv: vec!["pi".into(), "--continue".into()],
@@ -3818,7 +3818,7 @@ mod tests {
         });
         state.handle_app_event(AppEvent::HookStateReported {
             pane_id,
-            source: "herdr:pi".into(),
+            source: "flockr:pi".into(),
             agent_label: "pi".into(),
             state: AgentState::Working,
             message: None,
@@ -3885,7 +3885,7 @@ mod tests {
         });
         state.handle_app_event(AppEvent::HookStateReported {
             pane_id: bg_pane_id,
-            source: "herdr:codex".into(),
+            source: "flockr:codex".into(),
             agent_label: "codex".into(),
             state: AgentState::Working,
             message: None,
@@ -3933,7 +3933,7 @@ mod tests {
         });
         state.handle_app_event(AppEvent::HookStateReported {
             pane_id,
-            source: "herdr:claude".into(),
+            source: "flockr:claude".into(),
             agent_label: "claude".into(),
             state: AgentState::Blocked,
             message: None,
@@ -3982,7 +3982,7 @@ mod tests {
         });
         let terminal = state.terminals.get_mut(&terminal_id).unwrap();
         terminal.set_persisted_agent_session(crate::agent_resume::PersistedAgentSession {
-            source: "herdr:pi".into(),
+            source: "flockr:pi".into(),
             agent: "pi".into(),
             session_ref: crate::agent_resume::AgentSessionRef::path(
                 std::env::current_dir()
@@ -3994,7 +3994,7 @@ mod tests {
             .unwrap(),
         });
         terminal.set_hook_authority(
-            "herdr:pi".into(),
+            "flockr:pi".into(),
             "pi".into(),
             AgentState::Working,
             None,
@@ -4005,7 +4005,7 @@ mod tests {
 
         let updates = state.handle_app_event(AppEvent::HookAgentReleased {
             pane_id,
-            source: "herdr:pi".into(),
+            source: "flockr:pi".into(),
             agent_label: "pi".into(),
             known_agent: Some(Agent::Pi),
             seq: Some(2),
@@ -4042,7 +4042,7 @@ mod tests {
         });
         state.handle_app_event(AppEvent::HookStateReported {
             pane_id,
-            source: "herdr:devin".into(),
+            source: "flockr:devin".into(),
             agent_label: "devin".into(),
             state: AgentState::Working,
             message: None,

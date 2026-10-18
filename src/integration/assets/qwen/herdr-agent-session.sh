@@ -30,7 +30,7 @@ try:
     command = os.environ.get("FLOCKR_BIN_PATH") or "herdr"
     args = [
         command, "pane", "report-agent-session", os.environ["FLOCKR_PANE_ID"],
-        "--source", "herdr:qwen", "--agent", "qwen",
+        "--source", "flockr:qwen", "--agent", "qwen",
         "--agent-session-id", session_id, "--seq", str(time.time_ns()),
     ]
     if source in ("startup", "resume", "clear", "compact", "branch"):

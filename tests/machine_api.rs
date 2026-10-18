@@ -25,7 +25,7 @@ case "$last" in
         PATH="$TEST_ROOT/remote bin:/usr/bin:/bin" exec /bin/sh -c "$last" ;;
     '/bin/sh -s')
         script=$(cat)
-        printf 'login banner\nherdr-remote-output-ready:1\n'
+        printf 'login banner\nflockr-remote-output-ready:1\n'
         case "$script" in
             *'uname -s'*) uname -s; uname -m ;;
             *) echo "unexpected discovery: $script" >&2; exit 2 ;;
@@ -68,7 +68,7 @@ impl Harness {
         fs::write(
             &remote_wrapper,
             r#"#!/bin/sh
-if [ "$TEST_MODE" = old ]; then printf 'herdr-api-bridge-v1\n'; exit 2; fi
+if [ "$TEST_MODE" = old ]; then printf 'flockr-api-bridge-v1\n'; exit 2; fi
 case "$*" in
     *'--check')
         if IFS= read -r request; then

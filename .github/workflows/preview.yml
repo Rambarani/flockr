@@ -489,7 +489,7 @@ jobs:
           fi
 
           PREVIEW_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${PREVIEW_TAG}"
-          PREVIEW_COMMENT_MARKER="<!-- herdr:preview-released:${PREVIEW_TAG} -->"
+          PREVIEW_COMMENT_MARKER="<!-- flockr:preview-released:${PREVIEW_TAG} -->"
           PREVIEW_COMMENT="${PREVIEW_COMMENT_MARKER}"$'\n'"Released on the preview channel in [${PREVIEW_BUILD_ID}](${PREVIEW_URL}). This is available to preview users, but is not in a stable Herdr release yet."
 
           issue_has_comment_marker() {

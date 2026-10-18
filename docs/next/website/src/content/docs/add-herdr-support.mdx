@@ -45,7 +45,7 @@ Only report when `FLOCKR_ENV=1` and the other variables are set. Outside Herdr, 
 
 - Report `working` when a turn starts, `idle` when your agent is ready for input, and `blocked` when it needs the user to decide something. Add `--message` to explain a block.
 - `--agent` is the name users see. Use your own agent's name, not the name of an agent Herdr already supports.
-- `--source` identifies your integration. Keep it stable and unique. Don't start it with `herdr:`, because Herdr's own integrations use that prefix.
+- `--source` identifies your integration. Keep it stable and unique. Don't start it with `flockr:`, because Herdr's own integrations use that prefix.
 - `--seq` is optional but recommended. It must increase with every report from your source, including across sessions and restarts of your agent. A timestamp works well. Herdr ignores reports whose number is not higher than the last one it accepted, so late or out-of-order reports can't overwrite newer state.
 
 To change how your agent appears without changing its state, such as a title or custom status text, see [Custom status labels](/docs/integrations/#custom-status-labels).

@@ -178,7 +178,7 @@ smoke_http_count() {
   printf '%s\n' "$count"
 }
 
-echo "using herdr: $FLOCKR_BIN"
+echo "using flockr: $FLOCKR_BIN"
 echo "smoke base: $BASE"
 
 cargo build --locked --manifest-path "$ROOT/Cargo.toml" >/dev/null

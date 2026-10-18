@@ -27,7 +27,7 @@ $seq = [DateTime]::UtcNow.Ticks
 $herdr = if ([string]::IsNullOrWhiteSpace($env:FLOCKR_BIN_PATH)) { "herdr" } else { $env:FLOCKR_BIN_PATH }
 $commandArgs = @(
     "pane", "report-agent-session", $env:FLOCKR_PANE_ID,
-    "--source", "herdr:qwen", "--agent", "qwen",
+    "--source", "flockr:qwen", "--agent", "qwen",
     "--agent-session-id", [string]$payload.session_id,
     "--seq", [string]$seq
 )

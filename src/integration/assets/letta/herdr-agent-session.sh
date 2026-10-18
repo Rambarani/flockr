@@ -39,7 +39,7 @@ try:
     command = os.environ.get("FLOCKR_BIN_PATH") or "herdr"
     args = [
         command, "pane", "report-agent-session", os.environ["FLOCKR_PANE_ID"],
-        "--source", "herdr:letta", "--agent", "letta",
+        "--source", "flockr:letta", "--agent", "letta",
         "--agent-session-id", session_id, "--seq", str(time.time_ns()),
         "--session-start-source", "new" if payload.get("is_new_session") else "resume",
     ]

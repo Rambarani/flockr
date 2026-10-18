@@ -4000,7 +4000,7 @@ fn install_qwen_writes_session_hook_and_preserves_settings() {
     let hook_asset = fs::read_to_string(&installed.hook_path).unwrap();
     assert!(hook_asset.contains("FLOCKR_INTEGRATION_ID=qwen"));
     assert!(hook_asset.contains("FLOCKR_INTEGRATION_VERSION=2"));
-    assert!(hook_asset.contains("herdr:qwen"));
+    assert!(hook_asset.contains("flockr:qwen"));
 
     install_qwen().unwrap();
     let settings: Value =
@@ -4179,7 +4179,7 @@ fn letta_session_hook_is_silent_and_encodes_default_conversation() {
     assert!(output.stderr.is_empty());
     let args = fs::read_to_string(capture).unwrap();
     assert!(args.contains("report-agent-session w1:p2"));
-    assert!(args.contains("--source herdr:letta --agent letta"));
+    assert!(args.contains("--source flockr:letta --agent letta"));
     assert!(args.contains("--agent-session-id default:agent-123"));
     assert!(args.contains("--session-start-source resume"));
 

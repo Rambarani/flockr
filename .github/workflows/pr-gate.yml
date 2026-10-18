@@ -27,8 +27,8 @@ jobs:
               49699333, // dependabot[bot]
               41898282, // github-actions[bot]
             ]);
-            const REVIEW_TRIGGER_MARKER = '<!-- herdr:ai-review-trigger -->';
-            const COMMENT_MARKER = '<!-- herdr:pr-gate -->';
+            const REVIEW_TRIGGER_MARKER = '<!-- flockr:ai-review-trigger -->';
+            const COMMENT_MARKER = '<!-- flockr:pr-gate -->';
 
             const pullNumber = context.payload.pull_request.number;
             const defaultBranch = context.payload.repository.default_branch;

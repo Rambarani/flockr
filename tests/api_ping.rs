@@ -1826,7 +1826,7 @@ fn pane_report_agent_updates_effective_state() {
     let session = send_request(
         &socket_path,
         &format!(
-            r#"{{"id":"req_hook_session","method":"pane.report_agent_session","params":{{"pane_id":"{}","source":"herdr:pi","agent":"pi","agent_session_path":"{}","session_start_source":"startup","seq":1}}}}"#,
+            r#"{{"id":"req_hook_session","method":"pane.report_agent_session","params":{{"pane_id":"{}","source":"flockr:pi","agent":"pi","agent_session_path":"{}","session_start_source":"startup","seq":1}}}}"#,
             pane_id,
             session_path.display()
         ),
@@ -1835,7 +1835,7 @@ fn pane_report_agent_updates_effective_state() {
     let hook = send_request(
         &socket_path,
         &format!(
-            r#"{{"id":"req_hook_5","method":"pane.report_agent","params":{{"pane_id":"{}","source":"herdr:pi","agent":"pi","state":"working","message":"thinking","agent_session_path":"{}","seq":2}}}}"#,
+            r#"{{"id":"req_hook_5","method":"pane.report_agent","params":{{"pane_id":"{}","source":"flockr:pi","agent":"pi","state":"working","message":"thinking","agent_session_path":"{}","seq":2}}}}"#,
             pane_id,
             session_path.display()
         ),
@@ -1853,7 +1853,7 @@ fn pane_report_agent_updates_effective_state() {
     assert_eq!(pane["result"]["pane"]["agent_status"], "working");
     assert_eq!(
         pane["result"]["pane"]["agent_session"]["source"],
-        "herdr:pi"
+        "flockr:pi"
     );
     assert_eq!(pane["result"]["pane"]["agent_session"]["agent"], "pi");
     assert_eq!(pane["result"]["pane"]["agent_session"]["kind"], "path");
@@ -1865,7 +1865,7 @@ fn pane_report_agent_updates_effective_state() {
     let metadata = send_request(
         &socket_path,
         &format!(
-            r#"{{"id":"req_hook_metadata","method":"pane.report_metadata","params":{{"pane_id":"{}","source":"user:pi-display","agent":"pi","applies_to_source":"herdr:pi","title":"Refactor auth","display_agent":"Pi auth","state_labels":{{"working":"deep in the mines"}},"tokens":{{"summary":"reviewing auth","model":"opus"}}}}}}"#,
+            r#"{{"id":"req_hook_metadata","method":"pane.report_metadata","params":{{"pane_id":"{}","source":"user:pi-display","agent":"pi","applies_to_source":"flockr:pi","title":"Refactor auth","display_agent":"Pi auth","state_labels":{{"working":"deep in the mines"}},"tokens":{{"summary":"reviewing auth","model":"opus"}}}}}}"#,
             pane_id
         ),
     );
@@ -1902,7 +1902,7 @@ fn pane_report_agent_updates_effective_state() {
     assert_eq!(agent["result"]["agent"]["agent"], "pi");
     assert_eq!(
         agent["result"]["agent"]["agent_session"]["source"],
-        "herdr:pi"
+        "flockr:pi"
     );
     assert_eq!(agent["result"]["agent"]["agent_session"]["agent"], "pi");
     assert_eq!(agent["result"]["agent"]["agent_session"]["kind"], "path");
@@ -2097,7 +2097,7 @@ fn official_release_waits_for_confirmed_process_exit() {
     let session = send_request(
         &socket_path,
         &format!(
-            r#"{{"id":"req_release_session","method":"pane.report_agent_session","params":{{"pane_id":"{}","source":"herdr:pi","agent":"pi","agent_session_path":"{}","session_start_source":"startup","seq":1}}}}"#,
+            r#"{{"id":"req_release_session","method":"pane.report_agent_session","params":{{"pane_id":"{}","source":"flockr:pi","agent":"pi","agent_session_path":"{}","session_start_source":"startup","seq":1}}}}"#,
             pane_id,
             session_path.display()
         ),
@@ -2106,7 +2106,7 @@ fn official_release_waits_for_confirmed_process_exit() {
     let hook = send_request(
         &socket_path,
         &format!(
-            r#"{{"id":"req_release_4","method":"pane.report_agent","params":{{"pane_id":"{}","source":"herdr:pi","agent":"pi","state":"working","agent_session_path":"{}","seq":2}}}}"#,
+            r#"{{"id":"req_release_4","method":"pane.report_agent","params":{{"pane_id":"{}","source":"flockr:pi","agent":"pi","state":"working","agent_session_path":"{}","seq":2}}}}"#,
             pane_id,
             session_path.display()
         ),
@@ -2116,7 +2116,7 @@ fn official_release_waits_for_confirmed_process_exit() {
     let released = send_request(
         &socket_path,
         &format!(
-            r#"{{"id":"req_release_5","method":"pane.release_agent","params":{{"pane_id":"{}","source":"herdr:pi","agent":"pi"}}}}"#,
+            r#"{{"id":"req_release_5","method":"pane.release_agent","params":{{"pane_id":"{}","source":"flockr:pi","agent":"pi"}}}}"#,
             pane_id
         ),
     );
@@ -2259,7 +2259,7 @@ fn pane_clear_agent_authority_restores_fallback_state() {
     let hook = send_request(
         &socket_path,
         &format!(
-            r#"{{"id":"req_clear_4","method":"pane.report_agent","params":{{"pane_id":"{}","source":"herdr:pi","agent":"pi","state":"idle"}}}}"#,
+            r#"{{"id":"req_clear_4","method":"pane.report_agent","params":{{"pane_id":"{}","source":"flockr:pi","agent":"pi","state":"idle"}}}}"#,
             pane_id
         ),
     );
@@ -2268,7 +2268,7 @@ fn pane_clear_agent_authority_restores_fallback_state() {
     let cleared = send_request(
         &socket_path,
         &format!(
-            r#"{{"id":"req_clear_5","method":"pane.clear_agent_authority","params":{{"pane_id":"{}","source":"herdr:pi"}}}}"#,
+            r#"{{"id":"req_clear_5","method":"pane.clear_agent_authority","params":{{"pane_id":"{}","source":"flockr:pi"}}}}"#,
             pane_id
         ),
     );

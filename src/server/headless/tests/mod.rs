@@ -4956,7 +4956,7 @@ fn windows_shutdown_probe_preserves_panes_and_agent_sessions() {
         terminal.respawn_shell_on_exit = true;
         terminal.set_agent_name("codex".into());
         terminal.set_persisted_agent_session(crate::agent_resume::PersistedAgentSession {
-            source: "herdr:codex".into(),
+            source: "flockr:codex".into(),
             agent: "codex".into(),
             session_ref: crate::agent_resume::AgentSessionRef::id("previous-session").unwrap(),
         });
@@ -4973,7 +4973,7 @@ fn windows_shutdown_probe_preserves_panes_and_agent_sessions() {
             .get_mut(&terminal_id)
             .unwrap()
             .set_persisted_agent_session(crate::agent_resume::PersistedAgentSession {
-                source: "herdr:codex".into(),
+                source: "flockr:codex".into(),
                 agent: "codex".into(),
                 session_ref: crate::agent_resume::AgentSessionRef::id("shutdown-session").unwrap(),
             });
@@ -6193,7 +6193,7 @@ async fn headless_scheduled_tasks_start_pending_agent_resume_without_foreground_
         .pending_agent_resume_plan = Some(crate::agent_resume::AgentResumePlan {
         agent: "codex".into(),
         argv: vec!["/bin/sh".into(), "-c".into(), "sleep 5".into()],
-        dedupe_key: "herdr:codex\0codex\0Id\0codex-session".into(),
+        dedupe_key: "flockr:codex\0codex\0Id\0codex-session".into(),
     });
 
     server.render_and_stream();
@@ -7911,7 +7911,7 @@ fn api_resume_argv_is_ignored_when_its_session_report_is_refused() {
     let report = |session: &str| {
         api::schema::Method::PaneReportAgentSession(api::schema::PaneReportAgentSessionParams {
             pane_id: public_pane_id.clone(),
-            source: "herdr:claude".into(),
+            source: "flockr:claude".into(),
             agent: "claude".into(),
             seq: None,
             agent_session_id: Some(session.into()),
@@ -8031,13 +8031,13 @@ fn completion_guard_api_session_replacement_does_not_notify_finished() {
                     .unwrap();
             let new_session = cwd.join("completion-new.jsonl").display().to_string();
             terminal.set_persisted_agent_session(PersistedAgentSession {
-                source: "herdr:pi".into(),
+                source: "flockr:pi".into(),
                 agent: "pi".into(),
                 session_ref: old_session.clone(),
             });
             terminal
                 .set_hook_authority_with_session_ref(
-                    "herdr:pi".into(),
+                    "flockr:pi".into(),
                     "pi".into(),
                     AgentState::Idle,
                     None,
@@ -8050,7 +8050,7 @@ fn completion_guard_api_session_replacement_does_not_notify_finished() {
                 &mut server,
                 Method::PaneReportAgentSession(PaneReportAgentSessionParams {
                     pane_id: public_pane_id.clone(),
-                    source: "herdr:pi".into(),
+                    source: "flockr:pi".into(),
                     agent: "pi".into(),
                     seq: Some(11),
                     agent_session_id: None,
@@ -8061,7 +8061,7 @@ fn completion_guard_api_session_replacement_does_not_notify_finished() {
             );
             let mut report = PaneReportAgentParams {
                 pane_id: public_pane_id,
-                source: "herdr:pi".into(),
+                source: "flockr:pi".into(),
                 agent: "pi".into(),
                 state: PaneAgentState::Idle,
                 message: None,
@@ -8204,7 +8204,7 @@ fn stale_api_agent_report_does_not_forward_done_sound() {
         .get_mut(&terminal_id)
         .unwrap()
         .set_persisted_agent_session(crate::agent_resume::PersistedAgentSession {
-            source: "herdr:pi".into(),
+            source: "flockr:pi".into(),
             agent: "pi".into(),
             session_ref: crate::agent_resume::AgentSessionRef::path(
                 std::env::current_dir()
@@ -8222,7 +8222,7 @@ fn stale_api_agent_report_does_not_forward_done_sound() {
         .get_mut(&terminal_id)
         .unwrap()
         .set_hook_authority(
-            "herdr:pi".into(),
+            "flockr:pi".into(),
             "pi".into(),
             crate::detect::AgentState::Working,
             None,
@@ -8252,7 +8252,7 @@ fn stale_api_agent_report_does_not_forward_done_sound() {
             id: "stale".into(),
             method: api::schema::Method::PaneReportAgent(api::schema::PaneReportAgentParams {
                 pane_id: public_pane_id,
-                source: "herdr:pi".into(),
+                source: "flockr:pi".into(),
                 agent: "pi".into(),
                 state: api::schema::PaneAgentState::Idle,
                 message: None,

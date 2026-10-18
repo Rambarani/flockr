@@ -493,7 +493,7 @@ fn cross_area_detach_and_reattach_preserves_state() {
     client_shell_handshake(&mut client_a, CURRENT_PROTOCOL, 100, 30).expect("shell handshake");
     assert!(wait_for_frame(&mut client_a, Duration::from_secs(2)));
 
-    // Use herdr: create a workspace and write output into its pane.
+    // Use flockr: create a workspace and write output into its pane.
     let create = workspace_create(&api_socket, "cross-ssh-state");
     let workspace_id = create["result"]["workspace"]["workspace_id"]
         .as_str()

@@ -15,6 +15,8 @@ A terminal multiplexer sits between your terminal and the programs running insid
 
 The prefix solves this. Press the prefix key, default `ctrl+b`, and the next keypress goes to Flockr instead of your terminal. `prefix+c` means: press `ctrl+b`, release, then press `c`. Flockr reserves one key instead of dozens.
 
+Press the prefix and pause for a moment (400 ms by default) and a **which-key** popup lists every key that can come next, grouped by category and generated from your live keybindings, including overrides and custom commands. It never intercepts the key you press: type the follow-up key as usual and the popup disappears, or press `esc` to cancel prefix mode. Change the delay with `ui.which_key.delay_ms` or turn it off with `ui.which_key.enabled = false`.
+
 Press `prefix+?` at any time to see every active binding. Press `/` in the keybind help to filter actions and shortcuts; use Backspace to edit the filter or `ctrl+u` to clear it.
 
 ## Learn these five first

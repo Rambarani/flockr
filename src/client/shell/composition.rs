@@ -642,6 +642,17 @@ impl ClientShellState {
         if let Some(bar) = mode_bar {
             occlusion.cover(bar);
         }
+        if self.which_key.visible() {
+            let cursor = frame.cursor.clone();
+            let mut composed = frame.to_ratatui_buffer()?;
+            if let Some(rect) =
+                self.render_which_key_popup(&mut composed, Rect::new(0, 0, cols, rows), mode_bar)
+            {
+                occlusion.cover(rect);
+                let cursor = cursor.filter(|cursor| !contains(rect, (cursor.x, cursor.y)));
+                frame.replace_from_ratatui_buffer_preserving_effects(&composed, cursor);
+            }
+        }
         if let Some(overlay) = self.overlay.as_ref() {
             let mut composed = frame.to_ratatui_buffer()?;
             let cursor = if let ClientShellOverlay::ContextMenu(menu) = overlay {

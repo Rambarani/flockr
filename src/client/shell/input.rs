@@ -372,6 +372,7 @@ impl ClientShellState {
             self.reconcile_input_source();
         }
         outcome.repaint |= self.resume_mobile_switcher_if_ready();
+        outcome.repaint |= self.sync_which_key(std::time::Instant::now());
         outcome
     }
 

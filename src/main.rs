@@ -418,6 +418,12 @@ const DEFAULT_CONFIG: &str = r##"# flockr configuration
 # enabled = true
 # position = "bottom-center"
 
+# Which-key popup: after the prefix key, list the available next keys
+[ui.which_key]
+# enabled = true
+# Milliseconds to wait after the prefix key before showing the popup (0-10000).
+# delay_ms = 400
+
 # Play sounds when agents change state in background workspaces
 [ui.sound]
 # enabled = true

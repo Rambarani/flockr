@@ -7,6 +7,7 @@ mod sidebar;
 mod sound;
 mod tab_bar;
 mod theme;
+mod ui_popups;
 mod window_title;
 mod write;
 
@@ -35,6 +36,7 @@ pub use self::{
     sound::SoundConfig,
     tab_bar::TabBarRightEntryConfig,
     theme::{parse_color, CustomThemeColors, ModeThemeColors, ThemeConfig, THEME_NAMES},
+    ui_popups::WhichKeyConfig,
     window_title::{WindowTitlePart, WindowTitleTemplate, WindowTitleToken},
 };
 
@@ -119,6 +121,7 @@ impl Config {
             .chain(self.remote_image_paste_key().err())
             .chain(self.theme.diagnostics())
             .chain(self.ui.sound.diagnostics())
+            .chain(self.ui.which_key.diagnostics())
             .chain(tab_bar_right_diagnostics(&self.ui.tab_bar_right))
             .chain(window_title_diagnostics(&self.ui.window_title))
             .chain(self.invalid_sidebar_bounds_diagnostic())

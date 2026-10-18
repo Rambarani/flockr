@@ -42,7 +42,7 @@ fn binding_label(bindings: &ActionKeybinds) -> String {
     bindings.label().unwrap_or_else(|| "unset".to_owned())
 }
 
-fn indexed_label(bindings: &[IndexedKeybind]) -> String {
+pub(crate) fn indexed_label(bindings: &[IndexedKeybind]) -> String {
     if bindings.is_empty() {
         return "unset".to_owned();
     }

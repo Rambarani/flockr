@@ -1227,6 +1227,24 @@
       ]
     },
     {
+      "id": "popups",
+      "title": "Popups",
+      "keys": [
+        {
+          "key": "ui.which_key.enabled",
+          "type": "boolean",
+          "default": "true",
+          "description": "Show the which-key popup, a list of the keys that can follow the prefix, when prefix mode waits."
+        },
+        {
+          "key": "ui.which_key.delay_ms",
+          "type": "integer",
+          "default": "400",
+          "description": "Milliseconds to wait after the prefix key before showing the which-key popup. Values above 10000 are clamped with a config diagnostic."
+        }
+      ]
+    },
+    {
       "id": "sound",
       "title": "Sound",
       "keys": [

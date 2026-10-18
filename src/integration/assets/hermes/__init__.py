@@ -1,4 +1,4 @@
-"""Hermes plugin installed by Herdr to report resumable session identity."""
+"""Hermes plugin installed by Flockr to report resumable session identity."""
 
 # FLOCKR_INTEGRATION_ID=hermes
 # FLOCKR_INTEGRATION_VERSION=5
@@ -25,7 +25,7 @@ def _send_session(session_id: str, start_source: str) -> None:
     if pane_id is None:
         return
     command = [
-        os.environ.get("FLOCKR_BIN_PATH") or "herdr",
+        os.environ.get("FLOCKR_BIN_PATH") or "flockr",
         "pane",
         "report-agent-session",
         pane_id,

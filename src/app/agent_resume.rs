@@ -503,13 +503,13 @@ mod tests {
             app.state.active = Some(0);
             app.state.ensure_test_terminals();
             if missing_shell {
-                app.state.default_shell = "__herdr_missing_resume_shell__".into();
+                app.state.default_shell = "__flockr_missing_resume_shell__".into();
             }
             let terminal = app.state.terminals.get_mut(&terminal_id).unwrap();
             if !missing_shell {
                 terminal.cwd = std::env::current_dir()
                     .unwrap()
-                    .join("__herdr_missing_resume_cwd__");
+                    .join("__flockr_missing_resume_cwd__");
                 assert!(!terminal.cwd.exists());
             }
             let session = crate::agent_resume::PersistedAgentSession {

@@ -985,12 +985,12 @@ mod tests {
     #[test]
     fn reported_cwd_parses_file_uri_and_bare_paths() {
         assert_eq!(
-            parse_reported_cwd(b"file:///tmp/herdr%20repo"),
-            Some(std::path::PathBuf::from("/tmp/herdr repo"))
+            parse_reported_cwd(b"file:///tmp/flockr%20repo"),
+            Some(std::path::PathBuf::from("/tmp/flockr repo"))
         );
         assert_eq!(
-            parse_reported_cwd(b"C:\\Users\\herdr\\src\\herdr"),
-            Some(std::path::PathBuf::from("C:\\Users\\herdr\\src\\herdr"))
+            parse_reported_cwd(b"C:\\Users\\flockr\\src\\flockr"),
+            Some(std::path::PathBuf::from("C:\\Users\\flockr\\src\\flockr"))
         );
         assert_eq!(
             parse_reported_cwd(b"\"C:\\my proj\""),

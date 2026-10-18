@@ -63,7 +63,7 @@ jobs:
           fi
 
           PENDING_COMMENT_MARKER="<!-- flockr:pending-release -->"
-          PENDING_COMMENT="${PENDING_COMMENT_MARKER}"$'\n'"Implemented on master and queued for the next release. This is not available in a published Herdr release yet."
+          PENDING_COMMENT="${PENDING_COMMENT_MARKER}"$'\n'"Implemented on master and queued for the next release. This is not available in a published Flockr release yet."
 
           issue_has_comment_marker() {
             local issue="$1"

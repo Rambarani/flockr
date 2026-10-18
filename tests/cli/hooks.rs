@@ -2,7 +2,7 @@ use super::harness::*;
 
 fn run_claude_hook(action: &str, hook_input: &str) -> Option<serde_json::Value> {
     run_shell_hook(
-        "src/integration/assets/claude/herdr-agent-state.sh",
+        "src/integration/assets/claude/flockr-agent-state.sh",
         &[action],
         hook_input,
     )
@@ -10,7 +10,7 @@ fn run_claude_hook(action: &str, hook_input: &str) -> Option<serde_json::Value> 
 
 fn run_codex_hook(action: &str, hook_input: &str) -> Option<serde_json::Value> {
     run_shell_hook(
-        "src/integration/assets/codex/herdr-agent-state.sh",
+        "src/integration/assets/codex/flockr-agent-state.sh",
         &[action],
         hook_input,
     )
@@ -18,7 +18,7 @@ fn run_codex_hook(action: &str, hook_input: &str) -> Option<serde_json::Value> {
 
 fn run_copilot_hook(hook_input: &str) -> Option<serde_json::Value> {
     run_shell_hook(
-        "src/integration/assets/copilot/herdr-agent-state.sh",
+        "src/integration/assets/copilot/flockr-agent-state.sh",
         &[],
         hook_input,
     )
@@ -30,7 +30,7 @@ fn run_devin_hook(
     envs: &[(&str, &str)],
 ) -> Option<serde_json::Value> {
     run_shell_hook_with_env(
-        "src/integration/assets/devin/herdr-agent-state.sh",
+        "src/integration/assets/devin/flockr-agent-state.sh",
         &[action],
         hook_input,
         envs,
@@ -39,7 +39,7 @@ fn run_devin_hook(
 
 fn run_grok_hook(hook_input: &str, envs: &[(&str, &str)]) -> Option<serde_json::Value> {
     run_shell_hook_with_env(
-        "src/integration/assets/grok/herdr-agent-state.sh",
+        "src/integration/assets/grok/flockr-agent-state.sh",
         &["session"],
         hook_input,
         envs,
@@ -58,7 +58,7 @@ fn run_shell_hook_with_env(
 ) -> Option<serde_json::Value> {
     let base = unique_test_dir();
     fs::create_dir_all(&base).unwrap();
-    let socket_path = base.join("herdr.sock");
+    let socket_path = base.join("flockr.sock");
     let listener = UnixListener::bind(&socket_path).unwrap();
 
     let server = thread::spawn(move || {
@@ -176,7 +176,7 @@ fn claude_hook_ignores_cursor_compatibility_payloads() {
 
     for cursor_version in ["2026.08.11-e8db854", ""] {
         assert!(run_shell_hook_with_env(
-            "src/integration/assets/claude/herdr-agent-state.sh",
+            "src/integration/assets/claude/flockr-agent-state.sh",
             &["session"],
             r#"{"hook_event_name":"SessionStart","session_id":"cursor-session"}"#,
             &[("CURSOR_VERSION", cursor_version)],
@@ -198,7 +198,7 @@ fn codex_hook_reports_persisted_root_session_and_ignores_ephemeral_or_nested_ses
     assert!(request["params"].get("state").is_none());
 
     let matching_request = run_shell_hook_with_env(
-        "src/integration/assets/codex/herdr-agent-state.sh",
+        "src/integration/assets/codex/flockr-agent-state.sh",
         &["session"],
         r#"{"hook_event_name":"SessionStart","session_id":"codex-session","transcript_path":"/tmp/codex-session.jsonl"}"#,
         &[("CODEX_THREAD_ID", "codex-session")],
@@ -216,7 +216,7 @@ fn codex_hook_reports_persisted_root_session_and_ignores_ephemeral_or_nested_ses
     .is_none());
 
     assert!(run_shell_hook_with_env(
-        "src/integration/assets/codex/herdr-agent-state.sh",
+        "src/integration/assets/codex/flockr-agent-state.sh",
         &["session"],
         r#"{"hook_event_name":"SessionStart","session_id":"nested-session","transcript_path":"/tmp/nested-session.jsonl"}"#,
         &[("CODEX_THREAD_ID", "parent-session")],

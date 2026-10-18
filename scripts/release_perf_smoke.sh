@@ -29,7 +29,7 @@ case "$(uname -m)" in
   *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;;
 esac
 
-root=$(mktemp -d /var/tmp/herdr-release-perf-smoke.XXXXXX)
+root=$(mktemp -d /var/tmp/flockr-release-perf-smoke.XXXXXX)
 cleanup() { rm -rf "$root"; }
 trap cleanup EXIT
 trap 'exit 130' INT
@@ -38,9 +38,9 @@ mkdir -p "$root/results"
 
 if [[ -z "$baseline" ]]; then
   baseline_version=$(jq -er '.version' "$repo_root/distribution/latest.json")
-  baseline="$root/herdr-baseline"
+  baseline="$root/flockr-baseline"
   curl -fL --retry 3 \
-    "https://github.com/Rambarani/flockr/releases/download/v${baseline_version}/herdr-${platform}-${arch}" \
+    "https://github.com/Rambarani/flockr/releases/download/v${baseline_version}/flockr-${platform}-${arch}" \
     -o "$baseline"
   chmod +x "$baseline"
 else

@@ -14,14 +14,14 @@ RELEASE_FILES = {
     "docs/next/README.md",
     "docs/next/README.zh-CN.md",
     "docs/next/product-announcement.json",
-    "skills/herdr/SKILL.md",
+    "skills/flockr/SKILL.md",
 }
 ASSETS = {
-    "herdr-linux-x86_64",
-    "herdr-linux-aarch64",
-    "herdr-macos-x86_64",
-    "herdr-macos-aarch64",
-    "herdr-windows-x86_64.zip",
+    "flockr-linux-x86_64",
+    "flockr-linux-aarch64",
+    "flockr-macos-x86_64",
+    "flockr-macos-aarch64",
+    "flockr-windows-x86_64.zip",
 }
 
 
@@ -74,9 +74,9 @@ def normalized_cargo(text: str, path: str) -> tuple[dict, str]:
     if path == "Cargo.toml":
         version = data["package"].pop("version")
     else:
-        packages = [p for p in data["package"] if p["name"] == "herdr" and "source" not in p]
+        packages = [p for p in data["package"] if p["name"] == "flockr" and "source" not in p]
         if len(packages) != 1:
-            raise ValueError("expected exactly one local herdr package in Cargo.lock")
+            raise ValueError("expected exactly one local flockr package in Cargo.lock")
         version = packages[0].pop("version")
     return data, version
 
@@ -90,7 +90,7 @@ def validate_diff(preview: str, candidate: str, version: str | None = None) -> N
             before, _ = normalized_cargo(git("show", f"{preview}:{path}"), path)
             after, _ = normalized_cargo(git("show", f"{candidate}:{path}"), path)
             if before != after:
-                raise ValueError(f"{path}: only the herdr package version may change")
+                raise ValueError(f"{path}: only the flockr package version may change")
         elif path not in RELEASE_FILES and not (
             path.startswith("docs/next/website/src/content/docs/")
             and path.endswith((".md", ".mdx"))

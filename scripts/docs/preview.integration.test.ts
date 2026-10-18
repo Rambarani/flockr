@@ -49,7 +49,7 @@ describe('preview documentation snapshots', () => {
 });
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), 'herdr-preview-docs-'));
+  const root = await mkdtemp(join(tmpdir(), 'flockr-preview-docs-'));
   temporaryDirectories.push(root);
   await write(root, 'docs/next/website/src/content/docs/index.mdx', 'selected preview\n');
   await write(root, 'docs/next/website/src/data/config-reference.json', '{"preview":true}\n');

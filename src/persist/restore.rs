@@ -1094,7 +1094,7 @@ mod tests {
     #[test]
     fn restored_worktree_space_membership_preserves_unavailable_checkout_and_rejects_replacement() {
         let root = std::env::temp_dir().join(format!(
-            "herdr-restored-worktree-{}-{}",
+            "flockr-restored-worktree-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -1107,7 +1107,7 @@ mod tests {
         let checkout = root.join("checkout");
         let membership = crate::workspace::WorktreeSpaceMembership {
             key: "original-repo-key".into(),
-            label: "herdr".into(),
+            label: "flockr".into(),
             repo_root: root.join("original-repo"),
             checkout_path: checkout.clone(),
             is_linked_worktree: true,
@@ -1427,11 +1427,11 @@ mod tests {
     async fn failed_cold_restore_preserves_panes_and_saved_directories() {
         for missing_shell in [false, true] {
             let mut snapshot: SessionSnapshot = serde_json::from_str(include_str!(
-                "../../tests/fixtures/session/current-herdr-session.json"
+                "../../tests/fixtures/session/current-flockr-session.json"
             ))
             .unwrap();
             let cwd = std::env::current_dir().unwrap();
-            let missing = cwd.join("__herdr_missing_restore_directory__");
+            let missing = cwd.join("__flockr_missing_restore_directory__");
             assert!(!missing.exists());
             for workspace in &mut snapshot.workspaces {
                 workspace.identity_cwd = cwd.clone();
@@ -1466,7 +1466,7 @@ mod tests {
                 80,
                 0,
                 if missing_shell {
-                    "__herdr_missing_restore_shell__"
+                    "__flockr_missing_restore_shell__"
                 } else {
                     test_restore_shell()
                 },

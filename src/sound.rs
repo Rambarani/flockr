@@ -77,7 +77,7 @@ impl SoundChoice {
 
     pub fn description(self) -> &'static str {
         match self {
-            Self::Default => "classic herdr sounds",
+            Self::Default => "classic flockr sounds",
             Self::BuiltIn(sound) => sound.description(),
         }
     }
@@ -230,7 +230,7 @@ fn playback_error(output: &Output) -> String {
 
 fn temp_sound_path() -> PathBuf {
     let id = SOUND_TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
-    std::env::temp_dir().join(format!("herdr-sound-{}-{id}.mp3", std::process::id()))
+    std::env::temp_dir().join(format!("flockr-sound-{}-{id}.mp3", std::process::id()))
 }
 
 #[cfg(windows)]
@@ -660,7 +660,7 @@ mod tests {
             args: &[
                 "-c",
                 "printf '%s' \"$$\" > \"$1\"; exec sleep 2",
-                "herdr-sound-timeout-test",
+                "flockr-sound-timeout-test",
             ],
             volume: VolumeFlag::None,
         };
@@ -690,7 +690,7 @@ mod tests {
             args: &[
                 "-c",
                 "i=0; while [ \"$i\" -lt 8192 ]; do printf 0123456789abcdef; i=$((i + 1)); done; i=0; while [ \"$i\" -lt 8192 ]; do printf fedcba9876543210; i=$((i + 1)); done >&2; exit 7",
-                "herdr-sound-output-test",
+                "flockr-sound-output-test",
             ],
             volume: VolumeFlag::None,
         };

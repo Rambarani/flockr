@@ -1,14 +1,14 @@
 #!/bin/sh
 set -eu
 
-BIN="herdr"
+BIN="flockr"
 MANIFEST_URL="https://raw.githubusercontent.com/Rambarani/flockr/main/distribution/latest.json"
 INSTALL_DIR="${FLOCKR_INSTALL_DIR:-$HOME/.local/bin}"
 
 main() {
     echo ""
     echo "      ,ww"
-    echo "     wWWWWWWW_)  herdr installer"
+    echo "     wWWWWWWW_)  flockr installer"
     echo "     \`WWWWWW'    github.com/Rambarani/flockr"
     echo "      II  II"
     echo ""
@@ -22,7 +22,7 @@ main() {
     esac
 
     if [ "$OS" = "Linux" ] && [ "$(uname -o 2>/dev/null || true)" = "Android" ]; then
-        err "Android/Termux is not currently supported by Herdr release binaries. SSH to a supported host instead: https://github.com/Rambarani/flockr/blob/main/docs/next/website/src/content/docs/how-to-work.mdx#work-from-your-phone"
+        err "Android/Termux is not currently supported by Flockr release binaries. SSH to a supported host instead: https://github.com/Rambarani/flockr/blob/main/docs/next/website/src/content/docs/how-to-work.mdx#work-from-your-phone"
     fi
 
     ARCH="$(uname -m)"
@@ -38,7 +38,7 @@ main() {
     need curl
     need awk
 
-    # use the same manifest as `herdr update` so installs and updates agree
+    # use the same manifest as `flockr update` so installs and updates agree
     # on the public latest release.
     TARGET="${os}-${arch}"
     log "fetching latest release manifest..."
@@ -105,7 +105,7 @@ main() {
         openssl)   ACTUAL_SHA256="$(openssl dgst -sha256 < "${TMP}/${BIN}" | awk '{ print $NF }')" ;;
     esac
     if [ "$ACTUAL_SHA256" != "$SHA256" ]; then
-        err "downloaded Herdr checksum did not match"
+        err "downloaded Flockr checksum did not match"
     fi
 
     # install
@@ -131,7 +131,7 @@ main() {
     # verify
     if command -v "$BIN" >/dev/null 2>&1; then
         echo ""
-        log "ready. run 'herdr' to get started."
+        log "ready. run 'flockr' to get started."
     fi
 
     echo ""

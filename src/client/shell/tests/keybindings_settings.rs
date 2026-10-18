@@ -186,7 +186,7 @@ fn remote_client_preferences_process_child() {
 #[test]
 fn manual_client_chrome_preferences_round_trip_per_endpoint() {
     let path = std::env::temp_dir().join(format!(
-        "herdr-client-shell-prefs-{}.json",
+        "flockr-client-shell-prefs-{}.json",
         std::process::id()
     ));
     let _ = std::fs::remove_file(&path);

@@ -20,8 +20,8 @@ if [ "$FAKE_STRICT_HOST_KEY_FAILURE" = yes ] && [ "$strict_host_key_check" = yes
     echo 'Host key verification failed.' >&2
     exit 255
 fi
-if [ "$last" = 'command -v herdr' ]; then
-    if [ "$FAKE_INSTALLED" != missing ]; then echo /home/remote/.local/bin/herdr; fi
+if [ "$last" = 'command -v flockr' ]; then
+    if [ "$FAKE_INSTALLED" != missing ]; then echo /home/remote/.local/bin/flockr; fi
     exit 0
 fi
 case "$last" in
@@ -36,7 +36,7 @@ case "$script" in
     *'uname -s'*) echo platform >>"$FAKE_ROOT/probes"; uname -s; uname -m ;;
     *'version='*)
         echo candidates >>"$FAKE_ROOT/probes"
-        if [ "$FAKE_INSTALLED" != missing ]; then echo /home/remote/.local/bin/herdr; fi ;;
+        if [ "$FAKE_INSTALLED" != missing ]; then echo /home/remote/.local/bin/flockr; fi ;;
     *'status client --json'*)
         if [ "$FAKE_INSTALLED" = new ] || [ -f "$FAKE_ROOT/installed" ]; then
             printf '%s\n' "$FAKE_CLIENT_STATUS"
@@ -60,9 +60,9 @@ case "$script" in
     *'remote-client-bridge'*)
         printf '%s\n' "$script" >"$FAKE_ROOT/start-command"
         echo start >>"$FAKE_ROOT/actions"; echo 'test startup failure' >&2; exit 1 ;;
-    *'mkdir -p'*) printf '/fake/tmp\000/fake/herdr\000' ;;
+    *'mkdir -p'*) printf '/fake/tmp\000/fake/flockr\000' ;;
     *'chmod 755'*) echo install >>"$FAKE_ROOT/actions"; touch "$FAKE_ROOT/installed" ;;
-    *'command -v herdr'*) if [ "$FAKE_INSTALLED" != missing ]; then echo /home/remote/.local/bin/herdr; fi ;;
+    *'command -v flockr'*) if [ "$FAKE_INSTALLED" != missing ]; then echo /home/remote/.local/bin/flockr; fi ;;
     *'test -x '*) exit 1 ;;
     *) echo "unexpected fake SSH script: $script" >&2; exit 1 ;;
 esac
@@ -112,7 +112,7 @@ fn setup_options(
     options: SetupOptions<'_>,
 ) -> SetupResult {
     let root = std::path::PathBuf::from(format!(
-        "/var/tmp/herdr-machine-setup-{}-{}-{}-{}-{}-{}",
+        "/var/tmp/flockr-machine-setup-{}-{}-{}-{}-{}-{}",
         std::process::id(),
         installed,
         answer.trim().is_empty(),
@@ -124,9 +124,9 @@ fn setup_options(
             .as_nanos()
     ));
     let app = if cfg!(debug_assertions) {
-        "herdr-dev"
+        "flockr-dev"
     } else {
-        "herdr"
+        "flockr"
     };
     fs::create_dir_all(root.join("bin")).unwrap();
     fs::create_dir_all(root.join("config").join(app)).unwrap();
@@ -137,14 +137,14 @@ fn setup_options(
         "onboarding = false\n[remote]\nmanage_ssh_config = false\n",
     )
     .unwrap();
-    let status = Command::new(env!("CARGO_BIN_EXE_herdr"))
+    let status = Command::new(env!("CARGO_BIN_EXE_flockr"))
         .args(["status", "client", "--json"])
         .output()
         .unwrap();
     assert!(status.status.success());
 
     let pair = native_pty_system().openpty(PtySize::default()).unwrap();
-    let mut command = CommandBuilder::new(env!("CARGO_BIN_EXE_herdr"));
+    let mut command = CommandBuilder::new(env!("CARGO_BIN_EXE_flockr"));
     if handoff {
         command.args(["--remote", "fake-host", "--handoff"]);
     } else {
@@ -282,14 +282,14 @@ fn machine_add_accepts_help_argument_order() {
         .unwrap()
         .as_nanos();
     let root = std::env::temp_dir().join(format!(
-        "herdr-machine-add-order-{}-{nonce}",
+        "flockr-machine-add-order-{}-{nonce}",
         std::process::id()
     ));
     fs::create_dir(&root).unwrap();
     let app = if cfg!(debug_assertions) {
-        "herdr-dev"
+        "flockr-dev"
     } else {
-        "herdr"
+        "flockr"
     };
     fs::create_dir_all(root.join("config").join(app)).unwrap();
     fs::write(
@@ -297,7 +297,7 @@ fn machine_add_accepts_help_argument_order() {
         "onboarding = false\n[remote]\nmanage_ssh_config = false\n",
     )
     .unwrap();
-    let mut command = Command::new(env!("CARGO_BIN_EXE_herdr"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_flockr"));
     command.args(["machine", "add", "--label", "coder", "workstation.coder"]);
     // Reach remote preparation, but never execute SSH or start a server.
     command.env("PATH", root.join("no-executables"));

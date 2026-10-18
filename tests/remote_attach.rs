@@ -24,7 +24,7 @@ impl Drop for TestCleanup {
     fn drop(&mut self) {
         if let Some(mut child) = self.child.take() {
             // The child leads a private process group and has not been reaped.
-            // Kill its fake SSH descendants too, not just the Herdr launcher.
+            // Kill its fake SSH descendants too, not just the Flockr launcher.
             // SAFETY: the negative PID targets only this test's process group.
             unsafe { libc::kill(-(child.id() as libc::pid_t), libc::SIGKILL) };
             let _ = child.wait();
@@ -105,7 +105,7 @@ exit 255
 
     let inherited_path = std::env::var("PATH").unwrap_or_default();
     let path = format!("{}:{inherited_path}", temp_dir.display());
-    let child = Command::new(env!("CARGO_BIN_EXE_herdr"))
+    let child = Command::new(env!("CARGO_BIN_EXE_flockr"))
         .args(["--remote", "check-host"])
         .env("PATH", path)
         .env("FAKE_SSH_FRAMED", if framed_shell { "1" } else { "0" })

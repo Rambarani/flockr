@@ -16,7 +16,7 @@ const SOCKET_PERMISSION_MODE: u32 = 0o600;
 /// Contract-aligned override behavior:
 /// 1. If CLI `--session <name>` is active, use that session's client socket.
 /// 2. If `FLOCKR_SOCKET_PATH` is set, derive the client socket path from it by
-///    inserting `-client` before `.sock` (e.g. `herdr.sock` -> `herdr-client.sock`).
+///    inserting `-client` before `.sock` (e.g. `flockr.sock` -> `flockr-client.sock`).
 ///    This keeps JSON API and client socket overrides consistent.
 /// 3. Otherwise, honor `FLOCKR_CLIENT_SOCKET_PATH` (legacy/testing fallback).
 /// 4. Otherwise, use the active session data directory.
@@ -51,7 +51,7 @@ pub(crate) fn derive_client_socket_from_api_socket(api_socket_path: &Path) -> Pa
     let stem = api_socket_path
         .file_stem()
         .and_then(|s| s.to_str())
-        .unwrap_or("herdr");
+        .unwrap_or("flockr");
     let parent = api_socket_path.parent().unwrap_or_else(|| Path::new(""));
 
     parent.join(format!("{stem}-client.sock"))
@@ -63,7 +63,7 @@ pub(crate) fn derive_client_socket_from_api_socket(api_socket_path: &Path) -> Pa
 pub(crate) fn prepare_socket_path(path: &Path) -> io::Result<()> {
     crate::ipc::prepare_socket_path(path, |path| {
         format!(
-            "herdr server is already running (socket busy at {})",
+            "flockr server is already running (socket busy at {})",
             path.display()
         )
     })
@@ -83,23 +83,23 @@ mod tests {
 
     #[test]
     fn client_socket_path_derived_from_api_socket_override() {
-        let path = client_socket_path_from_overrides(Some("/tmp/test-herdr.sock"), None);
-        assert_eq!(path, PathBuf::from("/tmp/test-herdr-client.sock"));
+        let path = client_socket_path_from_overrides(Some("/tmp/test-flockr.sock"), None);
+        assert_eq!(path, PathBuf::from("/tmp/test-flockr-client.sock"));
     }
 
     #[test]
     fn client_socket_path_api_override_takes_precedence_over_legacy_client_override() {
         let path = client_socket_path_from_overrides(
-            Some("/tmp/test-herdr.sock"),
+            Some("/tmp/test-flockr.sock"),
             Some("/tmp/legacy-client.sock"),
         );
-        assert_eq!(path, PathBuf::from("/tmp/test-herdr-client.sock"));
+        assert_eq!(path, PathBuf::from("/tmp/test-flockr-client.sock"));
     }
 
     #[test]
     fn client_socket_path_respects_legacy_client_override_without_api_override() {
-        let path = client_socket_path_from_overrides(None, Some("/tmp/test-herdr-client.sock"));
-        assert_eq!(path, PathBuf::from("/tmp/test-herdr-client.sock"));
+        let path = client_socket_path_from_overrides(None, Some("/tmp/test-flockr-client.sock"));
+        assert_eq!(path, PathBuf::from("/tmp/test-flockr-client.sock"));
     }
 
     #[test]
@@ -107,7 +107,7 @@ mod tests {
         std::env::remove_var(crate::session::SESSION_ENV_VAR);
         crate::session::clear_explicit_session_for_test();
         let path = client_socket_path_from_overrides(None, None);
-        assert_eq!(path, crate::config::config_dir().join("herdr-client.sock"));
+        assert_eq!(path, crate::config::config_dir().join("flockr-client.sock"));
     }
 
     #[test]

@@ -612,7 +612,7 @@ contains = ["{contains}"]
         let old_config = std::env::var_os("XDG_CONFIG_HOME");
         let old_state = std::env::var_os("XDG_STATE_HOME");
         let dir = std::env::temp_dir().join(format!(
-            "herdr-manifest-update-{name}-{}",
+            "flockr-manifest-update-{name}-{}",
             std::process::id()
         ));
         let config_dir = dir.join("config");
@@ -678,7 +678,7 @@ contains = ["{contains}"]
         with_state_dir("auto-update-reloads-cache", || {
             let old_catalog_url = std::env::var_os(CATALOG_URL_ENV);
             let web_dir = std::env::temp_dir()
-                .join(format!("herdr-manifest-update-web-{}", std::process::id()));
+                .join(format!("flockr-manifest-update-web-{}", std::process::id()));
             let _ = fs::remove_dir_all(&web_dir);
             fs::create_dir_all(&web_dir).unwrap();
             fs::write(
@@ -748,7 +748,7 @@ path = "codex.toml"
 
             let old_catalog_url = std::env::var_os(CATALOG_URL_ENV);
             let web_dir = std::env::temp_dir().join(format!(
-                "herdr-manifest-update-current-web-{}",
+                "flockr-manifest-update-current-web-{}",
                 std::process::id()
             ));
             let _ = fs::remove_dir_all(&web_dir);
@@ -817,7 +817,7 @@ path = "codex.toml"
 
             let old_catalog_url = std::env::var_os(CATALOG_URL_ENV);
             let web_dir = std::env::temp_dir().join(format!(
-                "herdr-manifest-update-partial-web-{}",
+                "flockr-manifest-update-partial-web-{}",
                 std::process::id()
             ));
             let _ = fs::remove_dir_all(&web_dir);

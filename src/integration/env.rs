@@ -195,7 +195,7 @@ pub(crate) fn antigravity_cli_dir() -> io::Result<PathBuf> {
 }
 
 pub(crate) fn grok_dir() -> io::Result<PathBuf> {
-    // GROK_CONFIG_DIR is a herdr-level override only (primarily a test
+    // GROK_CONFIG_DIR is a flockr-level override only (primarily a test
     // seam); the grok CLI does not honor it, so it stays first and explicit.
     if let Some(value) = std::env::var_os(GROK_CONFIG_DIR_ENV_VAR).filter(|value| !value.is_empty())
     {
@@ -282,7 +282,7 @@ mod tests {
     fn opencode_state_dir_honors_xdg_state_home() {
         let _lock = integration_env_lock();
         let original = std::env::var_os("XDG_STATE_HOME");
-        let xdg = std::env::temp_dir().join("herdr-xdg-state");
+        let xdg = std::env::temp_dir().join("flockr-xdg-state");
         std::env::set_var("XDG_STATE_HOME", &xdg);
         assert_eq!(opencode_state_dir().unwrap(), xdg.join("opencode"));
         match original {

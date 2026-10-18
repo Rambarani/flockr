@@ -11,10 +11,10 @@ $env:XDG_CONFIG_HOME = $plan.config_home
 $env:FLOCKR_SESSION = $plan.session
 if ($plan.profile -ne 'default') { $env:FLOCKR_WINDOWS_INPUT_PROBE = $plan.profile }
 Add-Type -Path "$PSScriptRoot/Native.cs"
-$before = [HerdrInputGauntlet.ConsoleProbe]::Geometry()
+$before = [FlockrInputGauntlet.ConsoleProbe]::Geometry()
 $child = $null
 try {
-    if ($plan.path -in @('herdr', 'herdr-remote')) {
+    if ($plan.path -in @('flockr', 'flockr-remote')) {
         $child = New-GauntletProcess $plan.exe @('--session', $plan.session) $plan
     } else {
         $child = New-GauntletProcess $plan.pwsh @('-NoProfile', '-File', "$PSScriptRoot/Probe.ps1", '-PlanPath', $PlanPath) $plan
@@ -24,7 +24,7 @@ try {
         $sequence++
         Write-GauntletJson (Join-Path $plan.work 'outer.json') @{
             nonce = $plan.nonce; pid = $PID; child_pid = $child.Id; sequence = $sequence
-            geometry = [HerdrInputGauntlet.ConsoleProbe]::Geometry(); before = $before
+            geometry = [FlockrInputGauntlet.ConsoleProbe]::Geometry(); before = $before
         }
         Start-Sleep -Milliseconds 100
     }
@@ -40,6 +40,6 @@ try {
         $child.Dispose()
     }
     Write-GauntletJson (Join-Path $plan.work 'bootstrap-exit.json') @{
-        nonce = $plan.nonce; before = $before; after = [HerdrInputGauntlet.ConsoleProbe]::Geometry(); cleanup_errors = $cleanup
+        nonce = $plan.nonce; before = $before; after = [FlockrInputGauntlet.ConsoleProbe]::Geometry(); cleanup_errors = $cleanup
     }
 }

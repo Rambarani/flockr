@@ -729,7 +729,8 @@ mod tests {
         );
 
         assert!(
-            session_ref_from_report("flockr:claude", "claude", None, Some(claude_session)).is_none()
+            session_ref_from_report("flockr:claude", "claude", None, Some(claude_session))
+                .is_none()
         );
 
         let session_ref =
@@ -743,12 +744,14 @@ mod tests {
         );
 
         let session_ref =
-            session_ref_from_report("flockr:devin", "devin", Some("devin-id".into()), None).unwrap();
+            session_ref_from_report("flockr:devin", "devin", Some("devin-id".into()), None)
+                .unwrap();
         assert_eq!(session_ref.kind, AgentSessionRefKind::Id);
         assert_eq!(session_ref.value, "devin-id");
 
         let session_ref =
-            session_ref_from_report("flockr:droid", "droid", Some("droid-id".into()), None).unwrap();
+            session_ref_from_report("flockr:droid", "droid", Some("droid-id".into()), None)
+                .unwrap();
         assert_eq!(session_ref.kind, AgentSessionRefKind::Id);
         assert_eq!(session_ref.value, "droid-id");
         assert!(session_ref_from_report(

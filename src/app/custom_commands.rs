@@ -563,7 +563,7 @@ fn unique_scrollback_path(attempt: u32) -> std::path::PathBuf {
         .map(|duration| duration.as_nanos())
         .unwrap_or(0);
     std::env::temp_dir().join(format!(
-        "herdr-scrollback-{}-{nanos}-{attempt}.txt",
+        "flockr-scrollback-{}-{nanos}-{attempt}.txt",
         std::process::id()
     ))
 }
@@ -733,7 +733,7 @@ mod tests {
     fn shell_command_invocation_executes_endpoint_owned_definition() {
         let mut app = test_app();
         let path = std::path::PathBuf::from(format!(
-            "/var/tmp/herdr-command-invoke-{}-{}",
+            "/var/tmp/flockr-command-invoke-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

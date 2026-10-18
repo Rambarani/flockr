@@ -2,7 +2,7 @@
 //!
 //! Each tone is a short list of notes rendered to 16-bit mono PCM and wrapped
 //! in a WAV container when played. The tones are synthesized from scratch
-//! (sine partials with an exponential decay), so Herdr ships no third-party
+//! (sine partials with an exponential decay), so Flockr ships no third-party
 //! audio and the binary carries no extra sound files.
 
 use std::f32::consts::TAU;
@@ -15,7 +15,7 @@ const RELEASE_MS: f32 = 10.0;
 /// Peak level after normalization, as a fraction of full scale.
 const PEAK_LEVEL: f32 = 0.8;
 
-/// A tone Herdr can play without any file on disk. Select one by `name()` in
+/// A tone Flockr can play without any file on disk. Select one by `name()` in
 /// `[ui.sound]`, for example `done = "chime"`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BuiltInSound {

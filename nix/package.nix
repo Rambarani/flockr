@@ -15,7 +15,7 @@
 let
   manifest = lib.importTOML ../Cargo.toml;
   zigDeps = callPackage ../vendor/libghostty-vt/build.zig.zon.nix {
-    name = "herdr-libghostty-vt-zig-cache";
+    name = "flockr-libghostty-vt-zig-cache";
     inherit zstd;
     linkFarm =
       name: entries:
@@ -32,7 +32,7 @@ let
   ];
 in
 rustPlatform.buildRustPackage {
-  pname = "herdr";
+  pname = "flockr";
   version = manifest.package.version;
 
   src = lib.fileset.toSource {
@@ -42,7 +42,7 @@ rustPlatform.buildRustPackage {
         ../assets
         ../crates
         ../distribution/install.ps1
-        ../docs/next/api/herdr-api.schema.json
+        ../docs/next/api/flockr-api.schema.json
         ../src
         ../vendor/libghostty-vt
         ../vendor/libghostty-vt.vendor.json
@@ -50,7 +50,7 @@ rustPlatform.buildRustPackage {
         ../build.rs
         ../Cargo.lock
         ../Cargo.toml
-        ../skills/herdr/SKILL.md
+        ../skills/flockr/SKILL.md
       ]
     );
   };
@@ -85,7 +85,7 @@ rustPlatform.buildRustPackage {
     description = "Terminal workspace manager for AI coding agents";
     homepage = "https://github.com/Rambarani/flockr";
     license = lib.licenses.asl20;
-    mainProgram = "herdr";
+    mainProgram = "flockr";
     platforms = lib.platforms.linux ++ lib.platforms.darwin;
   };
 }

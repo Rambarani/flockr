@@ -59,39 +59,39 @@ $pathTestVariable = "FLOCKR_INSTALLER_PATH_TEST"
 $oldPathTestVariable = [Environment]::GetEnvironmentVariable($pathTestVariable, "Process")
 $ownedPathTestVariable = "FLOCKR_INSTALLER_OWNED_PATH_TEST"
 $oldOwnedPathTestVariable = [Environment]::GetEnvironmentVariable($ownedPathTestVariable, "Process")
-$testRegistryPath = "Software\HerdrInstallerTests-$([Guid]::NewGuid().ToString('N'))"
+$testRegistryPath = "Software\FlockrInstallerTests-$([Guid]::NewGuid().ToString('N'))"
 $testEnvironmentKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($testRegistryPath)
 if ($null -eq $testEnvironmentKey) {
     throw "unable to create temporary installer test registry key"
 }
 try {
     [Environment]::SetEnvironmentVariable($pathTestVariable, "C:\expanded", "Process")
-    [Environment]::SetEnvironmentVariable($ownedPathTestVariable, "C:\Herdr", "Process")
+    [Environment]::SetEnvironmentVariable($ownedPathTestVariable, "C:\Flockr", "Process")
     $testEnvironmentKey.SetValue(
         "Path",
-        "C:\Herdr\releases\deleted;%$ownedPathTestVariable%\bin;C:\Herdr\bin;%$pathTestVariable%\bin;`"C:\Program Files\Tool`";C:\existing;C:\Herdr\releases\old\nested;C:\Herdr\releases-old\old;C:\Herdr\releases\deleted",
+        "C:\Flockr\releases\deleted;%$ownedPathTestVariable%\bin;C:\Flockr\bin;%$pathTestVariable%\bin;`"C:\Program Files\Tool`";C:\existing;C:\Flockr\releases\old\nested;C:\Flockr\releases-old\old;C:\Flockr\releases\deleted",
         [Microsoft.Win32.RegistryValueKind]::ExpandString
     )
-    $ownedEntries = @("C:\Herdr\bin", "C:\Herdr\current")
+    $ownedEntries = @("C:\Flockr\bin", "C:\Flockr\current")
     $pathChanged = Update-PathRegistryEntry `
         -EnvironmentKey $testEnvironmentKey `
-        -Entry "C:\Herdr\releases\new" `
+        -Entry "C:\Flockr\releases\new" `
         -OwnedEntriesToRemove $ownedEntries `
-        -OwnedEntryParentToRemove "C:\Herdr\releases"
+        -OwnedEntryParentToRemove "C:\Flockr\releases"
     if (-not $pathChanged) {
         throw "installer PATH update reported no change"
     }
     if (Update-PathRegistryEntry `
         -EnvironmentKey $testEnvironmentKey `
-        -Entry "C:\Herdr\releases\new" `
+        -Entry "C:\Flockr\releases\new" `
         -OwnedEntriesToRemove $ownedEntries `
-        -OwnedEntryParentToRemove "C:\Herdr\releases") {
+        -OwnedEntryParentToRemove "C:\Flockr\releases") {
         throw "installer PATH update was not idempotent"
     }
 
     $options = [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames
     $rawPath = $testEnvironmentKey.GetValue("Path", $null, $options)
-    $expectedPath = "C:\Herdr\releases\new;%$pathTestVariable%\bin;`"C:\Program Files\Tool`";C:\existing;C:\Herdr\releases\old\nested;C:\Herdr\releases-old\old"
+    $expectedPath = "C:\Flockr\releases\new;%$pathTestVariable%\bin;`"C:\Program Files\Tool`";C:\existing;C:\Flockr\releases\old\nested;C:\Flockr\releases-old\old"
     if ($rawPath -cne $expectedPath) {
         throw "installer changed raw PATH: expected '$expectedPath', got '$rawPath'"
     }
@@ -106,12 +106,12 @@ try {
 }
 
 $archive = (Resolve-Path -LiteralPath $ArchivePath).Path
-$root = Join-Path $env:RUNNER_TEMP ("herdr-installer-test-" + [Guid]::NewGuid().ToString("N"))
+$root = Join-Path $env:RUNNER_TEMP ("flockr-installer-test-" + [Guid]::NewGuid().ToString("N"))
 $webRoot = Join-Path $root "web"
-$herdrHome = Join-Path $root "home"
+$flockrHome = Join-Path $root "home"
 $installDir = Join-Path $root "bin"
 New-Item -ItemType Directory -Force -Path $webRoot | Out-Null
-Copy-Item -LiteralPath $archive -Destination (Join-Path $webRoot "herdr-windows-x86_64.zip")
+Copy-Item -LiteralPath $archive -Destination (Join-Path $webRoot "flockr-windows-x86_64.zip")
 Copy-Item -LiteralPath $installerPath -Destination (Join-Path $webRoot "install.ps1")
 $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
 
@@ -125,7 +125,7 @@ $previewManifest = @{
     build_id = "installer-test"
     assets = @{
         "windows-x86_64" = @{
-            url = "http://127.0.0.1:$port/herdr-windows-x86_64.zip"
+            url = "http://127.0.0.1:$port/flockr-windows-x86_64.zip"
             sha256 = $hash
             format = "zip"
         }
@@ -138,7 +138,7 @@ $legacyStableManifest = @{
 $stableManifest = @{
     version = "0.0.1"
     assets = @{
-        "windows-x86_64" = "http://127.0.0.1:$port/herdr-windows-x86_64.zip"
+        "windows-x86_64" = "http://127.0.0.1:$port/flockr-windows-x86_64.zip"
     }
     sha256 = @{
         "windows-x86_64" = $hash
@@ -154,7 +154,7 @@ $legacyStableManifest | Out-File -LiteralPath $stableManifestPath -Encoding utf8
 $customPreviewManifest | ConvertTo-Json -Depth 5 | Out-File -LiteralPath $customPreviewManifestPath -Encoding utf8
 
 $server = $null
-$oldHerdrHome = $env:FLOCKR_HOME
+$oldFlockrHome = $env:FLOCKR_HOME
 $oldInstallerUrl = $env:FLOCKR_INSTALLER_URL
 $oldProcessPath = $env:Path
 $registryOptions = [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames
@@ -247,7 +247,7 @@ try {
             -LocalPackageIdentity "0.0.0-preview.local-package" `
             -LocalPackageSha256 ("0" * 64)
     } catch {
-        if ($_.Exception.Message -notlike "Downloaded Herdr checksum did not match.*") {
+        if ($_.Exception.Message -notlike "Downloaded Flockr checksum did not match.*") {
             throw
         }
         $badLocalChecksumRejected = $true
@@ -263,14 +263,14 @@ try {
         -LocalPackageFormat "zip" `
         -LocalPackageIdentity "0.0.0-preview.local-package" `
         -LocalPackageSha256 $hash
-    if (-not (Test-Path -LiteralPath (Join-Path $localInstallDir "herdr.exe") -PathType Leaf)) {
+    if (-not (Test-Path -LiteralPath (Join-Path $localInstallDir "flockr.exe") -PathType Leaf)) {
         throw "installer did not activate the verified local package"
     }
-    $env:FLOCKR_HOME = $herdrHome
+    $env:FLOCKR_HOME = $flockrHome
 
     $required = @(
-        "herdr.exe",
-        "conpty\herdr-conpty.json",
+        "flockr.exe",
+        "conpty\flockr-conpty.json",
         "conpty\conpty.dll",
         "conpty\x64\OpenConsole.exe",
         "conpty\arm64\OpenConsole.exe",
@@ -283,7 +283,7 @@ try {
         }
     }
 
-    $releasesDir = Join-Path $herdrHome "packages\standalone\releases"
+    $releasesDir = Join-Path $flockrHome "packages\standalone\releases"
     $releaseDir = Get-ChildItem -LiteralPath $releasesDir -Directory |
         Where-Object { -not $_.Name.StartsWith(".staging.") } |
         Select-Object -First 1
@@ -291,16 +291,16 @@ try {
         throw "installer did not create a versioned release"
     }
 
-    $pathWithoutHerdr = @(
+    $pathWithoutFlockr = @(
         $env:Path.Split(";", [System.StringSplitOptions]::RemoveEmptyEntries) |
             Where-Object {
-                -not (Test-Path -LiteralPath (Join-Path $_ "herdr.exe") -PathType Leaf) -and
-                -not (Test-Path -LiteralPath (Join-Path $_ "herdr.cmd") -PathType Leaf)
+                -not (Test-Path -LiteralPath (Join-Path $_ "flockr.exe") -PathType Leaf) -and
+                -not (Test-Path -LiteralPath (Join-Path $_ "flockr.cmd") -PathType Leaf)
             }
     ) -join ";"
-    $env:Path = $pathWithoutHerdr
-    if ($null -ne (Get-Command herdr -ErrorAction SilentlyContinue)) {
-        throw "test PATH still resolves Herdr before current-junction migration discovery"
+    $env:Path = $pathWithoutFlockr
+    if ($null -ne (Get-Command flockr -ErrorAction SilentlyContinue)) {
+        throw "test PATH still resolves Flockr before current-junction migration discovery"
     }
     $oldConfigPath = $env:FLOCKR_CONFIG_PATH
     try {
@@ -344,7 +344,7 @@ try {
     if (-not $downloadFailed) {
         throw "installer repair unexpectedly accepted a missing archive"
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $releaseDir.FullName "herdr.exe") -PathType Leaf)) {
+    if (-not (Test-Path -LiteralPath (Join-Path $releaseDir.FullName "flockr.exe") -PathType Leaf)) {
         throw "failed repair removed the existing release"
     }
 
@@ -355,7 +355,7 @@ try {
     $transientLockTimer = New-Object System.Timers.Timer
     $transientLockTimer.Interval = 300
     $transientLockTimer.AutoReset = $false
-    $transientLockSource = "HerdrTransientInstallerLock-$PID"
+    $transientLockSource = "FlockrTransientInstallerLock-$PID"
     $transientLockRelease = Register-ObjectEvent `
         -InputObject $transientLockTimer `
         -EventName Elapsed `
@@ -438,14 +438,14 @@ try {
         if (-not $swapFailed) {
             throw "installer unexpectedly activated a release with a locked staged file"
         }
-        if (-not (Test-Path -LiteralPath (Join-Path $releaseDir.FullName "herdr.exe") -PathType Leaf)) {
+        if (-not (Test-Path -LiteralPath (Join-Path $releaseDir.FullName "flockr.exe") -PathType Leaf)) {
             throw "failed activation did not restore the prior release"
         }
         if (@(Get-ChildItem -LiteralPath $releasesDir -Force -Directory -Filter ".backup.$($releaseDir.Name).*").Count -ne 0) {
             throw "failed activation stranded a release backup"
         }
-        foreach ($junction in @($installDir, (Join-Path $herdrHome "packages\standalone\current"))) {
-            if (-not (Test-Path -LiteralPath (Join-Path $junction "herdr.exe") -PathType Leaf)) {
+        foreach ($junction in @($installDir, (Join-Path $flockrHome "packages\standalone\current"))) {
+            if (-not (Test-Path -LiteralPath (Join-Path $junction "flockr.exe") -PathType Leaf)) {
                 throw "failed activation left an invalid installer junction at $junction"
             }
         }
@@ -496,7 +496,7 @@ try {
         throw "installer accepted a manifest that did not match the updater-selected build"
     }
 
-    $currentDir = Join-Path $herdrHome "packages\standalone\current"
+    $currentDir = Join-Path $flockrHome "packages\standalone\current"
     $unrelatedPathOne = Join-Path $env:SystemRoot "System32"
     $unrelatedPathTwo = Join-Path $root "unrelated-two"
     New-Item -ItemType Directory -Force -Path $unrelatedPathTwo | Out-Null
@@ -518,7 +518,7 @@ try {
         -ManifestUrl $stableManifestUrl `
         -InstallDir $installDir `
         -Retain 1
-    $stableReleaseDir = Get-ChildItem -LiteralPath (Join-Path $herdrHome "packages\standalone\releases") -Directory |
+    $stableReleaseDir = Get-ChildItem -LiteralPath (Join-Path $flockrHome "packages\standalone\releases") -Directory |
         Where-Object { $_.Name.StartsWith("0.0.1-") } |
         Select-Object -First 1
     if ($null -eq $stableReleaseDir) {
@@ -545,14 +545,14 @@ try {
         -not $pathDirectory.FullName.Equals($stableReleaseDir.FullName, [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "installer PATH does not start with the active concrete release directory"
     }
-    $resolvedHerdr = Get-Command herdr -CommandType Application -ErrorAction Stop
-    if (-not $resolvedHerdr.Source.Equals(
-        (Join-Path $stableReleaseDir.FullName "herdr.exe"),
+    $resolvedFlockr = Get-Command flockr -CommandType Application -ErrorAction Stop
+    if (-not $resolvedFlockr.Source.Equals(
+        (Join-Path $stableReleaseDir.FullName "flockr.exe"),
         [System.StringComparison]::OrdinalIgnoreCase
     )) {
         throw "installed command does not resolve through the active concrete release"
     }
-    & herdr --version *> $null
+    & flockr --version *> $null
     if ($LASTEXITCODE -ne 0) {
         throw "installed command failed from the concrete release PATH entry"
     }
@@ -580,7 +580,7 @@ if "%1"=="channel" if "%2"=="show" (
   exit /b 0
 )
 exit /b 1
-"@ | Out-File -LiteralPath (Join-Path $fakeBin "herdr.cmd") -Encoding ascii
+"@ | Out-File -LiteralPath (Join-Path $fakeBin "flockr.cmd") -Encoding ascii
 
     $preserveHome = Join-Path $root "preserve-home"
     $preserveBin = Join-Path $root "preserve-bin"
@@ -593,7 +593,7 @@ exit /b 1
             -InstallDir $preserveBin `
             -ExpectedBuildId "installer-test"
     } catch {
-        if ($_.Exception.Message -notlike "Refusing to run unrecognized Herdr command*") {
+        if ($_.Exception.Message -notlike "Refusing to run unrecognized Flockr command*") {
             throw
         }
         $unrecognizedCommandRejected = $true
@@ -619,7 +619,7 @@ exit /b 1
         throw "installer invoked an unrecognized command despite an explicit channel"
     }
 } finally {
-    $env:FLOCKR_HOME = $oldHerdrHome
+    $env:FLOCKR_HOME = $oldFlockrHome
     $env:FLOCKR_INSTALLER_URL = $oldInstallerUrl
     $env:Path = $oldProcessPath
     if ($null -ne $server -and -not $server.HasExited) {

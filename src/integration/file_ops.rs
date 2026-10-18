@@ -12,7 +12,7 @@ pub(crate) fn remove_file_if_exists(path: &Path) -> io::Result<bool> {
 
 #[cfg(windows)]
 pub(crate) fn legacy_bash_hook_path(hook_path: &Path) -> std::path::PathBuf {
-    hook_path.with_file_name("herdr-agent-state.sh")
+    hook_path.with_file_name("flockr-agent-state.sh")
 }
 
 #[cfg(windows)]

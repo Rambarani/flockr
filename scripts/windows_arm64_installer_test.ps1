@@ -11,7 +11,7 @@ if ($architecture -ne "Arm64") {
     throw "This test requires Windows ARM64, found $architecture."
 }
 
-$root = Join-Path $env:RUNNER_TEMP "herdr-windows-arm64-installer-test"
+$root = Join-Path $env:RUNNER_TEMP "flockr-windows-arm64-installer-test"
 $env:FLOCKR_HOME = Join-Path $root "home"
 $env:FLOCKR_INSTALL_DIR = Join-Path $root "bin"
 $env:FLOCKR_CHANNEL = "preview"
@@ -32,13 +32,13 @@ if ($installerExitCode -ne 0) {
     throw "The installer failed on Windows ARM64 with exit code $installerExitCode."
 }
 
-$installedHerdr = Join-Path $env:FLOCKR_INSTALL_DIR "herdr.exe"
-if (-not (Test-Path -LiteralPath $installedHerdr -PathType Leaf)) {
-    throw "The installer exited successfully without activating herdr.exe."
+$installedFlockr = Join-Path $env:FLOCKR_INSTALL_DIR "flockr.exe"
+if (-not (Test-Path -LiteralPath $installedFlockr -PathType Leaf)) {
+    throw "The installer exited successfully without activating flockr.exe."
 }
-& $installedHerdr --version
+& $installedFlockr --version
 if ($LASTEXITCODE -ne 0) {
-    throw "The installed x86_64 Herdr executable failed with exit code $LASTEXITCODE."
+    throw "The installed x86_64 Flockr executable failed with exit code $LASTEXITCODE."
 }
 
 $releases = Join-Path $env:FLOCKR_HOME "packages\standalone\releases"

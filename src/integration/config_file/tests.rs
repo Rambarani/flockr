@@ -6,7 +6,7 @@ struct Directory(PathBuf);
 impl Directory {
     fn new() -> Self {
         let path = std::env::temp_dir().join(format!(
-            "herdr-config-write-{}-{}",
+            "flockr-config-write-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -207,7 +207,7 @@ fn partial_write_errors_preserve_files_and_do_not_remove_collisions() {
         let dir = PathBuf::from(path);
         // This process runs only this test. A collision must neither be used nor removed.
         NEXT_TEMP.store(0, Ordering::Relaxed);
-        let collision = dir.join(format!(".herdr-config-{}-0.tmp", std::process::id()));
+        let collision = dir.join(format!(".flockr-config-{}-0.tmp", std::process::id()));
         fs::write(&collision, b"unrelated file").unwrap();
         for name in ["existing", "new"] {
             let error = write_config(&dir.join(name), vec![b'x'; 8192]).unwrap_err();
@@ -220,7 +220,7 @@ fn partial_write_errors_preserve_files_and_do_not_remove_collisions() {
     let dir = Directory::new();
     fs::write(dir.0.join("existing"), b"original").unwrap();
     let output = std::process::Command::new("bash")
-        .args(["-c", "trap '' XFSZ; ulimit -f 1; exec \"$@\"", "herdr-test"])
+        .args(["-c", "trap '' XFSZ; ulimit -f 1; exec \"$@\"", "flockr-test"])
         .arg(std::env::current_exe().unwrap())
         .args(["--exact", "integration::config_file::tests::partial_write_errors_preserve_files_and_do_not_remove_collisions", "--nocapture"])
         .env(CHILD, &dir.0)

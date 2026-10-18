@@ -1,5 +1,5 @@
 [package]
-name = "herdr"
+name = "flockr"
 version = "0.9.5"
 edition = "2021"
 build = "build.rs"
@@ -12,8 +12,8 @@ categories = ["command-line-utilities"]
 include = [
     "src/**/*",
     "assets/sounds/*",
-    "docs/next/api/herdr-api.schema.json",
-    "skills/herdr/SKILL.md",
+    "docs/next/api/flockr-api.schema.json",
+    "skills/flockr/SKILL.md",
     "distribution/install.ps1",
     "README.md",
     "LICENSE",

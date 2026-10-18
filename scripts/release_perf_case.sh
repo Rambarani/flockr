@@ -28,7 +28,7 @@ esac
 case "$platform" in linux) platform_tag=l ;; macos) platform_tag=m ;; *) exit 2 ;; esac
 variant_tag=${variant:0:1}
 name="rps${platform_tag}${variant_tag}${scenario_tag}r${round}x$$"
-state="/var/tmp/herdr-release-perf-$name"
+state="/var/tmp/flockr-release-perf-$name"
 xdg="$state/xdg"
 runtime="$state/run"
 gate="$state/start-output"
@@ -88,7 +88,7 @@ while IFS= read -r pane_id; do
 done < "$pane_file"
 touch "$gate"
 
-socket="$xdg/herdr/sessions/$name/herdr.sock"
+socket="$xdg/flockr/sessions/$name/flockr.sock"
 server_pid=
 for _ in $(seq 1 80); do
   server_pid=$(lsof -t "$socket" 2>/dev/null | head -n1 || true)

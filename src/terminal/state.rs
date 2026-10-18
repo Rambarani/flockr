@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 // Effective state arbitration is intentionally centralized here. Full lifecycle
-// Herdr hook integrations are hook-authoritative while live; screen recovery
+// Flockr hook integrations are hook-authoritative while live; screen recovery
 // remains only for session-only/custom hook paths and fallback detection.
 // Process-exit updates clear matching hook authority before recomputing state.
 
@@ -1398,7 +1398,11 @@ impl TerminalState {
                 "codex",
                 Some("startup" | "clear" | "resume" | "compact")
             ) | ("flockr:mastracode", "mastracode", Some("startup"))
-                | ("flockr:hermes", "hermes", Some("startup" | "new" | "resume"))
+                | (
+                    "flockr:hermes",
+                    "hermes",
+                    Some("startup" | "new" | "resume")
+                )
                 | ("flockr:opencode", "opencode", Some("select"))
                 | ("flockr:pi", "pi", Some("new" | "resume" | "fork"))
                 | ("flockr:grok", "grok", Some("new"))
@@ -1874,8 +1878,8 @@ impl TerminalState {
         })
     }
 
-    /// A reporter that Herdr cannot also identify by process holds this pane,
-    /// so only the pane returning to its shell can tell Herdr it exited.
+    /// A reporter that Flockr cannot also identify by process holds this pane,
+    /// so only the pane returning to its shell can tell Flockr it exited.
     pub fn self_reported_agent_active(&self) -> bool {
         self.hook_authority.as_ref().is_some_and(|authority| {
             crate::detect::parse_agent_label(&authority.agent_label).is_none()
@@ -1929,7 +1933,7 @@ impl TerminalState {
     }
 
     /// A reporter may own the resume command when it holds the pane, or when it
-    /// is an agent Herdr currently sees running there and can therefore see exit.
+    /// is an agent Flockr currently sees running there and can therefore see exit.
     pub fn can_record_reported_resume(&self, source: &str, agent_label: &str) -> bool {
         match self.hook_authority.as_ref() {
             Some(authority) => authority.source == source && authority.agent_label == agent_label,

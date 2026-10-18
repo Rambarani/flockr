@@ -80,27 +80,27 @@ jobs:
         include:
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
-            name: herdr-linux-x86_64
+            name: flockr-linux-x86_64
             libghostty_vt_optimize: ReleaseFast
             libghostty_vt_simd: 'true'
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
-            name: herdr-linux-aarch64
+            name: flockr-linux-aarch64
             libghostty_vt_optimize: ReleaseFast
             libghostty_vt_simd: 'true'
           - target: x86_64-apple-darwin
             os: macos-latest
-            name: herdr-macos-x86_64
+            name: flockr-macos-x86_64
             libghostty_vt_optimize: ReleaseFast
             libghostty_vt_simd: 'true'
           - target: aarch64-apple-darwin
             os: macos-latest
-            name: herdr-macos-aarch64
+            name: flockr-macos-aarch64
             libghostty_vt_optimize: ReleaseFast
             libghostty_vt_simd: 'true'
           - target: x86_64-pc-windows-msvc
             os: windows-2022
-            name: herdr-windows-x86_64.zip
+            name: flockr-windows-x86_64.zip
             libghostty_vt_optimize: ReleaseFast
             libghostty_vt_simd: 'true'
 
@@ -174,7 +174,7 @@ jobs:
       - name: Package artifact
         if: runner.os != 'Windows'
         shell: bash
-        run: cp target/${{ matrix.target }}/release/herdr ${{ matrix.name }}
+        run: cp target/${{ matrix.target }}/release/flockr ${{ matrix.name }}
 
       - name: Package artifact
         if: runner.os == 'Windows'
@@ -182,13 +182,13 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $package = Join-Path $env:RUNNER_TEMP "Microsoft.Windows.Console.ConPTY.nupkg"
-          $stage = Join-Path $env:RUNNER_TEMP "herdr-windows-x86_64"
+          $stage = Join-Path $env:RUNNER_TEMP "flockr-windows-x86_64"
           .\scripts\package_windows_conpty.ps1 `
-            -HerdrExe target\${{ matrix.target }}\release\herdr.exe `
+            -FlockrExe target\${{ matrix.target }}\release\flockr.exe `
             -PackagePath $package `
             -StageDir $stage `
             -OutputPath ${{ matrix.name }}
-          $version = (& (Join-Path $stage "herdr.exe") --version | Out-String).Trim()
+          $version = (& (Join-Path $stage "flockr.exe") --version | Out-String).Trim()
           $tagVersion = $env:GITHUB_REF_NAME -replace '^v', ''
           if ($version -notmatch [regex]::Escape($tagVersion) -or $version -match "preview") {
             throw "Packaged Windows binary has unexpected version identity: $version"
@@ -252,11 +252,11 @@ jobs:
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           files: |
-            herdr-linux-x86_64/herdr-linux-x86_64
-            herdr-linux-aarch64/herdr-linux-aarch64
-            herdr-macos-x86_64/herdr-macos-x86_64
-            herdr-macos-aarch64/herdr-macos-aarch64
-            herdr-windows-x86_64.zip/herdr-windows-x86_64.zip
+            flockr-linux-x86_64/flockr-linux-x86_64
+            flockr-linux-aarch64/flockr-linux-aarch64
+            flockr-macos-x86_64/flockr-macos-x86_64
+            flockr-macos-aarch64/flockr-macos-aarch64
+            flockr-windows-x86_64.zip/flockr-windows-x86_64.zip
           body_path: RELEASE_NOTES.md
 
   update-nix-package:
@@ -275,7 +275,7 @@ jobs:
           GH_HOST: github.com
         run: |
           if ! gh workflow run update-check.yml --repo Rambarani/flockr-nix --ref main; then
-            echo "::warning::Nix update could not be triggered. The Herdr release is already published; run update-check manually in Rambarani/flockr-nix."
+            echo "::warning::Nix update could not be triggered. The Flockr release is already published; run update-check manually in Rambarani/flockr-nix."
             exit 1
           fi
 

@@ -16,7 +16,7 @@ function Invoke-Checked {
 }
 
 $exe = (Resolve-Path $ExePath).Path
-$fakeDir = Join-Path ([System.IO.Path]::GetTempPath()) "herdr-fake-conpty-$([guid]::NewGuid().ToString('N'))"
+$fakeDir = Join-Path ([System.IO.Path]::GetTempPath()) "flockr-fake-conpty-$([guid]::NewGuid().ToString('N'))"
 New-Item -ItemType Directory -Force $fakeDir | Out-Null
 
 $fakeSource = Join-Path $fakeDir "fake_conpty.rs"

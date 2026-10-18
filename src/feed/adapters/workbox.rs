@@ -8,6 +8,11 @@
 //! `workbox mark <id> <action>`. The detail view gets `fields` (Source,
 //! Reason, Where, Status, From, Key, Snoozed until, Today) and the snippet as
 //! `body`, the same facts workbox's own detail pane shows.
+//!
+//! Items are grouped into categories (tabs in the Feed overlay) from their
+//! `source` and `reason`, following workbox's own `tabs::classify`: see
+//! `CATEGORIES` and `RULES`. The `tab` field is not used, because workbox
+//! leaves it empty for exactly the items that fall outside its four tabs.
 
 use serde::Deserialize;
 
@@ -28,6 +33,67 @@ impl Default for AdaptOptions {
             bin: DEFAULT_BIN.to_owned(),
         }
     }
+}
+
+/// The categories, in tab order: id, title, and the shorter title for narrow
+/// places. Items that match no rule are left without a group and land in the
+/// feed's implicit "Other".
+const CATEGORIES: &[(&str, &str, &str)] = &[
+    ("new-house-prs", "New House PR Requests", "New House PRs"),
+    ("ticket-mentions", "JIRA Mentions", "JIRA Mentions"),
+    ("jira-assigned", "New Tickets Assigned", "New Tickets"),
+    ("old-house-prs", "Old House PR Requests", "Old House PRs"),
+    ("my-prs", "My PRs (activity)", "My PRs"),
+];
+
+/// Which category a `source` and `reason` (workbox's `Reason::as_str`) belong
+/// to. The first matching rule wins.
+///
+/// - GitHub `review_requested` and `mention`: someone wants me on a new-house
+///   PR. Workbox shows these on its "New House" tab with its other GitHub
+///   reasons; a mention on a PR is a request to look, so it stays here (the
+///   `review-pr` skill treats the two the same way).
+/// - GitHub `changes_requested`, `commented`, `approved` come only from
+///   workbox's activity scan of my own open PRs (and `authored` is my own
+///   PR), so they are "My PRs (activity)", not requests of me. Workbox shows
+///   them on the New House tab, but mixing them in would hide the actual
+///   requests; they stay visible in their own tab.
+/// - Jira `mention` (and `commented`, which workbox never emits for Jira)
+///   are mentions; Jira `assigned` is a ticket assigned to me. Workbox has no
+///   Jira `status_changed` item (only GitHub notifications give that reason),
+///   so it is not mapped.
+/// - Bitbucket `review_requested` is the old-house PR request. Other
+///   Bitbucket reasons (my own PRs) have no workbox tab; `authored`,
+///   `changes_requested`, `commented` and `approved` go to My PRs.
+/// - Everything else (`status_changed`, `updated`, unknown reasons, other
+///   sources) is "Other".
+const RULES: &[(&str, &[&str], &str)] = &[
+    ("github", &["review_requested", "mention"], "new-house-prs"),
+    ("jira", &["mention", "commented"], "ticket-mentions"),
+    ("jira", &["assigned"], "jira-assigned"),
+    ("bitbucket", &["review_requested"], "old-house-prs"),
+    (
+        "github",
+        &["authored", "changes_requested", "commented", "approved"],
+        "my-prs",
+    ),
+    (
+        "bitbucket",
+        &["authored", "changes_requested", "commented", "approved"],
+        "my-prs",
+    ),
+];
+
+/// The category id for an item, or `None` for "Other".
+fn category(source: &str, reason: &str) -> Option<&'static str> {
+    let source = source.trim().to_ascii_lowercase();
+    let reason = reason.trim().to_ascii_lowercase();
+    RULES
+        .iter()
+        .find(|(rule_source, reasons, _)| {
+            *rule_source == source && reasons.contains(&reason.as_str())
+        })
+        .map(|(_, _, id)| *id)
 }
 
 /// The fields of one `workbox list --json` element that the feed uses.
@@ -159,6 +225,9 @@ pub(crate) fn adapt(
         if let Some(updated_at) = non_empty(&item.updated_at) {
             entry.insert("updated_at".into(), updated_at.into());
         }
+        if let Some(group) = category(&item.source, &item.reason) {
+            entry.insert("group".into(), group.into());
+        }
         entry.insert("fields".into(), serde_json::Value::Array(fields(&item)));
         if let Some(snippet) = item.snippet.as_deref().and_then(non_empty) {
             entry.insert("body".into(), snippet.into());
@@ -182,6 +251,12 @@ pub(crate) fn adapt(
         serde_json::json!({
             "version": 1,
             "title": options.title,
+            "groups": CATEGORIES
+                .iter()
+                .map(|(id, title, short_title)| {
+                    serde_json::json!({"id": id, "title": title, "short_title": short_title})
+                })
+                .collect::<Vec<_>>(),
             "items": feed_items,
         }),
         warnings,
@@ -367,5 +442,142 @@ mod tests {
         let (feed, warnings) = adapt("[]\n", &AdaptOptions::default()).unwrap();
         assert!(warnings.is_empty());
         assert_eq!(feed["items"], serde_json::json!([]));
+    }
+
+    /// One item per source and reason that workbox can produce, plus
+    /// combinations it cannot, with the category each must land in.
+    const MATRIX: &[(&str, &str, Option<&str>)] = &[
+        ("github", "review_requested", Some("new-house-prs")),
+        ("github", "mention", Some("new-house-prs")),
+        ("github", "changes_requested", Some("my-prs")),
+        ("github", "commented", Some("my-prs")),
+        ("github", "approved", Some("my-prs")),
+        ("github", "authored", Some("my-prs")),
+        ("github", "assigned", None),
+        ("github", "status_changed", None),
+        ("github", "updated", None),
+        ("jira", "mention", Some("ticket-mentions")),
+        ("jira", "commented", Some("ticket-mentions")),
+        ("jira", "assigned", Some("jira-assigned")),
+        ("jira", "status_changed", None),
+        ("jira", "review_requested", None),
+        ("jira", "authored", None),
+        ("jira", "updated", None),
+        ("jira", "changes_requested", None),
+        ("jira", "approved", None),
+        ("bitbucket", "review_requested", Some("old-house-prs")),
+        ("bitbucket", "authored", Some("my-prs")),
+        ("bitbucket", "changes_requested", Some("my-prs")),
+        ("bitbucket", "commented", Some("my-prs")),
+        ("bitbucket", "approved", Some("my-prs")),
+        ("bitbucket", "mention", None),
+        ("bitbucket", "assigned", None),
+        ("bitbucket", "status_changed", None),
+        ("bitbucket", "updated", None),
+        ("slack", "mention", None),
+        ("", "", None),
+    ];
+
+    #[test]
+    fn every_source_and_reason_maps_to_its_category() {
+        for (source, reason, want) in MATRIX {
+            assert_eq!(category(source, reason), *want, "{source} / {reason}");
+        }
+        assert_eq!(
+            category(" GitHub ", "Review_Requested"),
+            Some("new-house-prs")
+        );
+    }
+
+    #[test]
+    fn the_matrix_covers_every_workbox_reason_for_every_source() {
+        for source in ["github", "jira", "bitbucket"] {
+            for reason in [
+                "mention",
+                "review_requested",
+                "assigned",
+                "commented",
+                "status_changed",
+                "authored",
+                "updated",
+                "changes_requested",
+                "approved",
+            ] {
+                assert!(
+                    MATRIX.iter().any(|(s, r, _)| *s == source && *r == reason),
+                    "{source} / {reason} is not in the matrix"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rules_only_name_declared_categories() {
+        for (_, _, id) in RULES {
+            assert!(
+                CATEGORIES.iter().any(|(declared, _, _)| declared == id),
+                "{id}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_feed_built_from_the_matrix_groups_every_item_as_mapped() {
+        let input = serde_json::Value::Array(
+            MATRIX
+                .iter()
+                .enumerate()
+                .map(|(n, (source, reason, _))| {
+                    serde_json::json!({"id": format!("i{n}"), "title": format!("t{n}"),
+                        "source": source, "reason": reason, "unread": n % 2 == 0})
+                })
+                .collect(),
+        )
+        .to_string();
+        let (feed, warnings) = adapt(&input, &AdaptOptions::default()).unwrap();
+        assert!(warnings.is_empty());
+        let parsed = parse_feed(&feed.to_string()).expect("valid feed");
+        assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+        let order: Vec<_> = parsed.groups.iter().map(|g| g.id.as_str()).collect();
+        assert_eq!(
+            order,
+            [
+                "new-house-prs",
+                "ticket-mentions",
+                "jira-assigned",
+                "old-house-prs",
+                "my-prs",
+                "other"
+            ]
+        );
+        let titles: Vec<_> = parsed.groups.iter().map(|g| g.title.as_str()).collect();
+        assert_eq!(
+            titles[..4],
+            [
+                "New House PR Requests",
+                "JIRA Mentions",
+                "New Tickets Assigned",
+                "Old House PR Requests"
+            ]
+        );
+        for (item, (source, reason, want)) in parsed.items.iter().zip(MATRIX) {
+            assert_eq!(
+                item.group.as_deref(),
+                Some(want.unwrap_or("other")),
+                "{source} / {reason}"
+            );
+        }
+    }
+
+    #[test]
+    fn there_is_no_other_group_when_every_item_has_a_category() {
+        let (feed, _) = adapt(
+            r#"[{"id":"a","title":"A","source":"jira","reason":"assigned"}]"#,
+            &AdaptOptions::default(),
+        )
+        .unwrap();
+        let parsed = parse_feed(&feed.to_string()).unwrap();
+        assert_eq!(parsed.groups.len(), 5);
+        assert!(parsed.groups.iter().all(|g| g.id != "other"));
     }
 }

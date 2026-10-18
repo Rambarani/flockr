@@ -340,6 +340,7 @@ fn optional_text(
 }
 
 /// Why `key` cannot be an action key, if it cannot.
+#[cfg(test)]
 pub(crate) fn action_key_problem(key: &str) -> Option<String> {
     action_key_problem_in(key, false)
 }

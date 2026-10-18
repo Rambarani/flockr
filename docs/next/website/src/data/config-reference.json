@@ -704,6 +704,24 @@
           "description": "Rename the agent in the focused pane. An empty name clears the alias."
         },
         {
+          "key": "keys.toggle_agent_group",
+          "type": "keybinding",
+          "default": "\"prefix+shift+e\"",
+          "description": "Collapse or expand the workspace group of the focused agent in the agent list. Collapsed groups keep their header, state counts, and blocked highlight."
+        },
+        {
+          "key": "keys.collapse_agent_groups",
+          "type": "keybinding",
+          "default": "unset",
+          "description": "Collapse every workspace group in the agent list. Unset by default."
+        },
+        {
+          "key": "keys.expand_agent_groups",
+          "type": "keybinding",
+          "default": "unset",
+          "description": "Expand every workspace group in the agent list. Unset by default."
+        },
+        {
           "key": "keys.edit_scrollback",
           "type": "keybinding",
           "default": "\"prefix+e\"",
@@ -1070,7 +1088,7 @@
           "key": "ui.sidebar.group_agents_by_workspace",
           "type": "boolean",
           "default": "true",
-          "description": "Show a header with the workspace name and per-state agent counts above each workspace's agents in the expanded Agent sidebar. Applies only while ui.agent_panel_sort is \"spaces\" and no agent view is active. With several machines connected, groups are per machine and workspace."
+          "description": "Show a header with the workspace name and per-state agent counts above each workspace's agents in the expanded Agent sidebar. Click a header to collapse or expand its group. Applies only while ui.agent_panel_sort is \"spaces\" and no agent view is active. With several machines connected, groups are per machine and workspace."
         },
         {
           "key": "ui.sidebar.agents.row_gap",

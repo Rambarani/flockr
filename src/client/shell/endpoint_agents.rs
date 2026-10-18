@@ -1,3 +1,7 @@
+use super::agent_groups::{
+    group_agent_items, group_headers_enabled, item_layout, reveal_index, ungrouped_items,
+    AgentGroupMember, AgentGroupSeed, AgentListItem, CollapsedGroups,
+};
 use super::render::put_text;
 use super::*;
 
@@ -48,6 +52,7 @@ pub(super) fn render_expanded(
     agent_view_label: Option<&str>,
     endpoints: &[ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
+    collapsed: CollapsedGroups<'_>,
     config: &ClientShellConfig,
     agent_scroll: &mut usize,
     hits: &mut ShellHitMap,
@@ -61,16 +66,16 @@ pub(super) fn render_expanded(
     ) {
         return;
     }
-    let rows = agent_rows(endpoints, active_endpoint_id, config);
+    let items = agent_items(endpoints, active_endpoint_id, config, collapsed);
     super::agent_sidebar::render_agent_list(
         buffer,
         area,
-        &rows,
+        &items,
         agent_view_label.map(|_| " no matching agents"),
         config,
         agent_scroll,
         hits,
-        |row| row.agent.height(),
+        |row| row.agent.rows.len(),
         |buffer, rect, row, hits| {
             super::agent_sidebar::render_agent_row(buffer, rect, &row.agent, config);
             if row.stale {
@@ -81,11 +86,8 @@ pub(super) fn render_expanded(
                         .add_modifier(Modifier::DIM),
                 );
             }
-            hits.endpoint_agents.push((
-                row.agent.body_rect(rect),
-                row.endpoint_id.clone(),
-                row.agent.pane_id.clone(),
-            ));
+            hits.endpoint_agents
+                .push((rect, row.endpoint_id.clone(), row.agent.pane_id.clone()));
         },
     );
 }
@@ -100,21 +102,22 @@ impl ClientShellState {
         if body_height == 0 {
             return;
         }
-        let rows = agent_rows(&self.endpoints, &self.active_endpoint_id, &self.config);
-        let Some(target) = rows
-            .iter()
-            .position(|row| &row.endpoint_id == endpoint_id && row.agent.pane_id == pane_id)
-        else {
+        let items = agent_items(
+            &self.endpoints,
+            &self.active_endpoint_id,
+            &self.config,
+            self.collapsed_group_sets(),
+        );
+        let Some(target) = reveal_index(&items, endpoint_id, pane_id, |row| {
+            &row.endpoint_id == endpoint_id && row.agent.pane_id == pane_id
+        }) else {
             return;
         };
-        let heights = rows
-            .iter()
-            .map(|row| row.agent.height().min(u16::MAX as usize) as u16)
-            .collect::<Vec<_>>();
-        let mut gaps = vec![self.config.agents.row_gap; rows.len()];
-        if let Some(last) = gaps.last_mut() {
-            *last = 0;
-        }
+        let (heights, gaps) = item_layout(
+            &items,
+            |row| row.agent.rows.len(),
+            self.config.agents.row_gap,
+        );
         self.agent_scroll = super::scroll::list_scroll_start_to_reveal(
             &heights,
             &gaps,
@@ -132,11 +135,12 @@ struct EndpointAgentRow {
     agent: super::agent_sidebar::AgentRow,
 }
 
-fn agent_rows(
+/// Every online-cached agent in list order with the group it belongs to.
+fn agent_entries(
     endpoints: &[ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
     config: &ClientShellConfig,
-) -> Vec<EndpointAgentRow> {
+) -> Vec<(AgentGroupSeed, EndpointAgentRow)> {
     let mut rendered_rows = endpoints
         .iter()
         .filter_map(|endpoint| {
@@ -159,7 +163,7 @@ fn agent_rows(
         .flatten()
         .collect::<HashMap<_, _>>();
 
-    let mut rows = super::aggregate_navigation::aggregate_agent_rows(
+    super::aggregate_navigation::aggregate_agent_rows(
         endpoints,
         active_endpoint_id,
         config.agent_panel_sort,
@@ -179,16 +183,18 @@ fn agent_rows(
             .unwrap_or_default();
         // Groups are per machine and workspace: ids and labels are only unique
         // within one endpoint. With several machines the header names both.
-        let group = (
-            format!("{:?}\0{}", row.endpoint.endpoint_id, row.agent.workspace_id),
-            if endpoints.len() > 1 {
+        let seed = AgentGroupSeed {
+            endpoint_id: row.endpoint.endpoint_id.clone(),
+            workspace_id: row.agent.workspace_id.clone(),
+            label: if endpoints.len() > 1 {
                 format!("{} · {workspace_label}", row.endpoint.label)
             } else {
                 workspace_label.to_owned()
             },
-        );
+            stale: row.endpoint.stale(),
+        };
         Some((
-            group,
+            seed,
             EndpointAgentRow {
                 endpoint_id: row.endpoint.endpoint_id.clone(),
                 machine_label: row.endpoint.label.to_owned(),
@@ -197,19 +203,41 @@ fn agent_rows(
             },
         ))
     })
-    .collect::<Vec<_>>();
+    .collect()
+}
 
+/// Flat agent rows in list order, without group headers.
+fn agent_rows(
+    endpoints: &[ClientShellEndpoint],
+    active_endpoint_id: &ClientEndpointId,
+    config: &ClientShellConfig,
+) -> Vec<EndpointAgentRow> {
+    agent_entries(endpoints, active_endpoint_id, config)
+        .into_iter()
+        .map(|(_, row)| row)
+        .collect()
+}
+
+/// The combined agent list: rows under per-machine workspace headers when
+/// grouping applies (collapsed groups keep only their header).
+fn agent_items(
+    endpoints: &[ClientShellEndpoint],
+    active_endpoint_id: &ClientEndpointId,
+    config: &ClientShellConfig,
+    collapsed: CollapsedGroups<'_>,
+) -> Vec<AgentListItem<EndpointAgentRow>> {
+    let entries = agent_entries(endpoints, active_endpoint_id, config);
     let agent_view_active = endpoints
         .iter()
         .find(|endpoint| &endpoint.endpoint_id == active_endpoint_id)
         .and_then(|endpoint| endpoint.snapshot.as_deref())
         .is_some_and(|snapshot| snapshot.agent_view_label.is_some());
-    if super::agent_sidebar::group_headers_enabled(config, agent_view_active) {
-        super::agent_sidebar::assign_group_headers(
-            rows.iter_mut()
-                .map(|((key, label), row)| (key.clone(), label.clone(), &mut row.agent))
-                .collect(),
-        );
+    if !group_headers_enabled(config, agent_view_active) {
+        return ungrouped_items(entries.into_iter().map(|(_, row)| row).collect());
     }
-    rows.into_iter().map(|(_, row)| row).collect()
+    group_agent_items(entries, collapsed, |row| AgentGroupMember {
+        status: row.agent.status,
+        focused: row.agent.focused,
+        pane_id: &row.agent.pane_id,
+    })
 }

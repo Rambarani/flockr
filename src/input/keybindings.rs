@@ -40,6 +40,9 @@ pub(crate) enum KeybindAction {
     MoveTabNext,
     CloseTab,
     RenamePane,
+    ExpandAgentGroups,
+    CollapseAgentGroups,
+    ToggleAgentGroup,
     RenameAgent,
     FocusPaneLeft,
     FocusPaneDown,
@@ -121,6 +124,18 @@ pub(crate) fn resolve_non_indexed_action(
         (&keybinds.move_tab_next, KeybindAction::MoveTabNext),
         (&keybinds.close_tab, KeybindAction::CloseTab),
         (&keybinds.rename_pane, KeybindAction::RenamePane),
+        (
+            &keybinds.expand_agent_groups,
+            KeybindAction::ExpandAgentGroups,
+        ),
+        (
+            &keybinds.collapse_agent_groups,
+            KeybindAction::CollapseAgentGroups,
+        ),
+        (
+            &keybinds.toggle_agent_group,
+            KeybindAction::ToggleAgentGroup,
+        ),
         (&keybinds.rename_agent, KeybindAction::RenameAgent),
         (&keybinds.edit_scrollback, KeybindAction::EditScrollback),
         (&keybinds.clear_pane, KeybindAction::ClearPane),

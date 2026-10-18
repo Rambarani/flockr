@@ -1836,6 +1836,10 @@ impl ClientShellState {
                 if !self.config.mouse_capture {
                     return;
                 }
+                if !self.sidebar_collapsed && self.open_agent_group_context_menu(point) {
+                    outcome.repaint = true;
+                    return;
+                }
                 let agent_pane_id = (!self.sidebar_collapsed)
                     .then(|| self.agent_row_at(point))
                     .flatten()
@@ -2150,6 +2154,9 @@ impl ClientShellState {
                     .flatten();
                 if let Some(tab_press) = tab_press {
                     self.tab_press = Some(tab_press);
+                    return;
+                }
+                if self.handle_agent_header_click(point, outcome) {
                     return;
                 }
                 if self.handle_endpoint_agent_click(point, outcome) {

@@ -96,6 +96,7 @@ pub(super) struct ShellHitMap {
     pub(super) popup: Option<PaneHit>,
     pub(super) pane_splits: Vec<PaneSplitHit>,
     pub(super) agents: Vec<(Rect, String)>,
+    pub(super) agent_headers: Vec<super::agent_groups::AgentHeaderHit>,
     pub(super) endpoint_agents: Vec<(Rect, ClientEndpointId, String)>,
     pub(super) agent_body: Rect,
     pub(super) agent_scrollbar: Rect,
@@ -533,6 +534,9 @@ pub(super) enum ClientContextMenuAction {
     NewTab,
     RenameAgent,
     ClearAgentName,
+    ToggleAgentGroup,
+    CollapseAgentGroups,
+    ExpandAgentGroups,
     RenamePane,
     ClearPaneName,
     SwapWithFocusedPane,
@@ -567,6 +571,13 @@ pub(super) enum ClientContextMenuTarget {
     Agent {
         pane_id: String,
         has_name: bool,
+    },
+    AgentGroup {
+        endpoint_id: ClientEndpointId,
+        workspace_id: String,
+        collapsed: bool,
+        /// Only the active endpoint can rename its workspaces.
+        can_rename: bool,
     },
 }
 
@@ -792,6 +803,10 @@ pub(super) enum ClientAgentListTarget {
     Agent {
         endpoint_id: ClientEndpointId,
         pane_id: String,
+    },
+    Group {
+        endpoint_id: ClientEndpointId,
+        workspace_id: String,
     },
 }
 

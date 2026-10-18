@@ -357,17 +357,19 @@ impl ClientShellState {
     }
 
     pub(super) fn open_rename_workspace_overlay(&mut self) {
-        let Some(snapshot) = self.snapshot.as_deref() else {
-            return;
-        };
         let Some(workspace_id) = self.workspace_action_id() else {
             return;
         };
-        let Some(workspace) = snapshot
-            .workspaces
-            .iter()
-            .find(|workspace| workspace.workspace_id == workspace_id)
-        else {
+        self.open_rename_workspace_overlay_for(workspace_id);
+    }
+
+    pub(super) fn open_rename_workspace_overlay_for(&mut self, workspace_id: String) {
+        let Some(workspace) = self.snapshot.as_deref().and_then(|snapshot| {
+            snapshot
+                .workspaces
+                .iter()
+                .find(|workspace| workspace.workspace_id == workspace_id)
+        }) else {
             return;
         };
         self.overlay = Some(ClientShellOverlay::Rename(ClientRenameOverlay {

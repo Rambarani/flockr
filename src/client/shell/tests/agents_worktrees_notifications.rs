@@ -1736,7 +1736,7 @@ fn agent_sidebar_groups_agents_under_workspace_headers() {
                     .skip(body.x as usize)
                     .take(body.width as usize)
                     .collect::<String>()
-                    .starts_with(&format!(" {label}"))
+                    .starts_with(&format!(" ▾ {label}"))
             })
             .collect::<Vec<_>>()
     };
@@ -2036,4 +2036,531 @@ fn sidebar_agent_label_prefers_the_renamed_alias_over_reported_display_name() {
     let text = frame_rows(&frame).join("\n");
     assert!(text.contains("reviewer"), "alias shown: {text}");
     assert!(!text.contains("Codex CLI"));
+}
+
+fn click_agent_header(state: &mut ClientShellState, index: usize) -> ClientShellInput {
+    let rect = state.hits.agent_headers[index].rect;
+    mouse_at(
+        state,
+        MouseEventKind::Down(MouseButton::Left),
+        rect.x + 1,
+        rect.y,
+    )
+}
+
+fn recompose(state: &mut ClientShellState) -> FrameData {
+    state.compose(106, 30).expect("agent sidebar frame").frame
+}
+
+fn agent_hit_panes(state: &ClientShellState) -> Vec<&str> {
+    state
+        .hits
+        .agents
+        .iter()
+        .map(|(_, pane_id)| pane_id.as_str())
+        .collect()
+}
+
+fn focus_target(input: &ClientShellInput) -> Option<&str> {
+    match &input.actions[..] {
+        [ClientShellAction::Endpoint { request, .. }] => match &request.method {
+            crate::api::schema::Method::PaneFocus(target) => Some(target.pane_id.as_str()),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+#[test]
+fn agent_group_headers_are_list_items_with_their_own_hit_rects() {
+    let (state, _) = sidebar_agent_state(&Config::default());
+    let body = state.hits.agent_body;
+    let headers = state
+        .hits
+        .agent_headers
+        .iter()
+        .map(|hit| {
+            (
+                hit.workspace_id.as_str(),
+                hit.rect.y,
+                hit.rect.height,
+                hit.collapsed,
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        headers,
+        [("ws_1", body.y, 1, false), ("ws_2", body.y + 5, 1, false)]
+    );
+    // Agent rows keep their own rects between the headers.
+    let agents = state
+        .hits
+        .agents
+        .iter()
+        .map(|(rect, pane_id)| (pane_id.as_str(), rect.y))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        agents,
+        [
+            ("pane_1", body.y + 1),
+            ("pane_2", body.y + 3),
+            ("pane_3", body.y + 6)
+        ]
+    );
+}
+
+#[test]
+fn clicking_a_group_header_collapses_and_expands_its_agents() {
+    let (mut state, _) = sidebar_agent_state(&Config::default());
+    let body = state.hits.agent_body;
+
+    let collapse = click_agent_header(&mut state, 0);
+    assert!(collapse.actions.is_empty() && collapse.repaint);
+    let frame = recompose(&mut state);
+    assert_eq!(agent_hit_panes(&state), ["pane_3"]);
+    assert_eq!(
+        state.hits.agents[0].0.y,
+        body.y + 2,
+        "second group moves up"
+    );
+    let rows = frame_rows(&frame);
+    let header = rows[body.y as usize]
+        .chars()
+        .skip(body.x as usize)
+        .take(body.width as usize)
+        .collect::<String>();
+    assert!(header.starts_with(" ▸ client-shell"), "header: {header}");
+    // Counts stay visible so a hidden blocked agent is still accounted for.
+    assert!(header.contains("1●"), "header: {header}");
+    assert!(state.hits.agent_headers[0].collapsed);
+
+    // A stale hit rect from the expanded layout no longer focuses anything.
+    let hidden_row = mouse_at(
+        &mut state,
+        MouseEventKind::Down(MouseButton::Left),
+        body.x + 1,
+        body.y + 4,
+    );
+    assert!(focus_target(&hidden_row).is_none_or(|pane| pane != "pane_2"));
+
+    click_agent_header(&mut state, 0);
+    recompose(&mut state);
+    assert_eq!(agent_hit_panes(&state), ["pane_1", "pane_2", "pane_3"]);
+    assert!(!state.hits.agent_headers[0].collapsed);
+}
+
+#[test]
+fn group_toggle_ignores_other_groups_and_uses_a_dedicated_state_key() {
+    let (mut state, _) = sidebar_agent_state(&Config::default());
+    click_agent_header(&mut state, 1);
+    recompose(&mut state);
+    assert_eq!(agent_hit_panes(&state), ["pane_1", "pane_2"]);
+    assert!(state.collapsed_groups.contains("agents:ws_2"));
+    assert_eq!(state.collapsed_groups.len(), 1);
+}
+
+#[test]
+fn collapsed_group_with_a_blocked_agent_highlights_its_header() {
+    let (mut state, _) = sidebar_agent_state(&Config::default());
+    let blocked = status_color(AgentStatus::Blocked, &state.config.palette);
+    let label_fg = |state: &mut ClientShellState, workspace: &str| {
+        let frame = recompose(state);
+        let buffer = frame.to_ratatui_buffer().expect("sidebar buffer");
+        let header = state
+            .hits
+            .agent_headers
+            .iter()
+            .find(|hit| hit.workspace_id == workspace)
+            .expect("header")
+            .rect;
+        let label = if workspace == "ws_1" {
+            "client-shell"
+        } else {
+            "api-server"
+        };
+        let (x, y) = cell_symbol_position(&frame, header, label);
+        buffer.cell((x, y)).expect("label cell").fg
+    };
+    // Expanded: the row shows the state, the header stays muted.
+    assert_ne!(label_fg(&mut state, "ws_1"), blocked);
+    click_agent_header(&mut state, 0);
+    assert_eq!(label_fg(&mut state, "ws_1"), blocked);
+    // A collapsed group without a blocked agent is not highlighted.
+    click_agent_header(&mut state, 1);
+    assert_ne!(label_fg(&mut state, "ws_2"), blocked);
+}
+
+#[test]
+fn group_header_shows_focus_even_when_the_focused_agent_is_hidden() {
+    let (mut state, _) = sidebar_agent_state(&Config::default());
+    click_agent_header(&mut state, 0);
+    let frame = recompose(&mut state);
+    let buffer = frame.to_ratatui_buffer().expect("sidebar buffer");
+    let header = state.hits.agent_headers[0].rect;
+    let (x, y) = cell_symbol_position(&frame, header, "client-shell");
+    assert_eq!(
+        buffer.cell((x, y)).expect("label cell").bg,
+        state.config.palette.active_row_bg
+    );
+    let other = state.hits.agent_headers[1].rect;
+    let (x, y) = cell_symbol_position(&frame, other, "api-server");
+    assert_ne!(
+        buffer.cell((x, y)).expect("label cell").bg,
+        state.config.palette.active_row_bg
+    );
+}
+
+#[test]
+fn double_click_on_a_group_header_renames_the_workspace_without_changing_collapse() {
+    let (mut state, _) = sidebar_agent_state(&Config::default());
+    click_agent_header(&mut state, 1);
+    assert!(state.overlay.is_none());
+    let second = click_agent_header(&mut state, 1);
+    assert!(second.actions.is_empty());
+    assert!(matches!(
+        state.overlay.as_ref(),
+        Some(ClientShellOverlay::Rename(ClientRenameOverlay {
+            title: "rename workspace",
+            target: ClientRenameTarget::Workspace { workspace_id },
+            ..
+        })) if workspace_id == "ws_2"
+    ));
+    recompose(&mut state);
+    assert_eq!(agent_hit_panes(&state), ["pane_1", "pane_2", "pane_3"]);
+    assert!(state.collapsed_groups.is_empty());
+
+    state.handle_input_bytes(&[0x15]);
+    state.handle_input_bytes(b"backend");
+    let save = state.handle_input_bytes(b"\r");
+    let [ClientShellAction::Endpoint { request, .. }] = &save.actions[..] else {
+        panic!("workspace rename should use the endpoint API");
+    };
+    assert!(matches!(
+        &request.method,
+        crate::api::schema::Method::WorkspaceRename(params)
+            if params.workspace_id == "ws_2" && params.label == "backend"
+    ));
+}
+
+#[test]
+fn right_click_on_a_group_header_offers_rename_and_collapse_controls() {
+    let (mut state, _) = sidebar_agent_state(&Config::default());
+    let header = state.hits.agent_headers[0].rect;
+    let open = |state: &mut ClientShellState| {
+        mouse_at(
+            state,
+            MouseEventKind::Down(MouseButton::Right),
+            header.x + 2,
+            header.y,
+        );
+        state.compose(106, 30).expect("context menu frame");
+    };
+    open(&mut state);
+    let actions = match state.overlay.as_ref() {
+        Some(ClientShellOverlay::ContextMenu(menu)) => menu
+            .items()
+            .iter()
+            .map(|item| item.action)
+            .collect::<Vec<_>>(),
+        _ => panic!("group header context menu"),
+    };
+    assert_eq!(
+        actions,
+        [
+            ClientContextMenuAction::Rename,
+            ClientContextMenuAction::ToggleAgentGroup,
+            ClientContextMenuAction::CollapseAgentGroups,
+            ClientContextMenuAction::ExpandAgentGroups,
+        ]
+    );
+    let click_item = |state: &mut ClientShellState, index: usize| {
+        let row = state.hits.context_menu_rows[index].0;
+        mouse_at(
+            state,
+            MouseEventKind::Down(MouseButton::Left),
+            row.x + 1,
+            row.y,
+        );
+    };
+
+    click_item(&mut state, 2);
+    recompose(&mut state);
+    assert!(
+        agent_hit_panes(&state).is_empty(),
+        "collapse all hides every row"
+    );
+    assert_eq!(state.hits.agent_headers.len(), 2);
+
+    open(&mut state);
+    click_item(&mut state, 3);
+    recompose(&mut state);
+    assert_eq!(agent_hit_panes(&state), ["pane_1", "pane_2", "pane_3"]);
+
+    open(&mut state);
+    click_item(&mut state, 0);
+    assert!(matches!(
+        state.overlay.as_ref(),
+        Some(ClientShellOverlay::Rename(ClientRenameOverlay {
+            target: ClientRenameTarget::Workspace { workspace_id },
+            ..
+        })) if workspace_id == "ws_1"
+    ));
+}
+
+#[test]
+fn group_bindings_toggle_the_focused_group_and_collapse_or_expand_all() {
+    use crate::input::{KeybindAction, KeybindMatch};
+
+    let (mut state, _) = sidebar_agent_state(&Config::default());
+    let mut outcome = ClientShellInput::default();
+    state.record_binding(
+        KeybindMatch::Action(KeybindAction::ToggleAgentGroup),
+        &mut outcome,
+    );
+    recompose(&mut state);
+    assert_eq!(agent_hit_panes(&state), ["pane_3"], "focused group is ws_1");
+    state.record_binding(
+        KeybindMatch::Action(KeybindAction::ToggleAgentGroup),
+        &mut outcome,
+    );
+    recompose(&mut state);
+    assert_eq!(agent_hit_panes(&state), ["pane_1", "pane_2", "pane_3"]);
+
+    state.record_binding(
+        KeybindMatch::Action(KeybindAction::CollapseAgentGroups),
+        &mut outcome,
+    );
+    recompose(&mut state);
+    assert!(agent_hit_panes(&state).is_empty());
+    state.record_binding(
+        KeybindMatch::Action(KeybindAction::ExpandAgentGroups),
+        &mut outcome,
+    );
+    recompose(&mut state);
+    assert_eq!(agent_hit_panes(&state).len(), 3);
+    assert!(state.collapsed_groups.is_empty());
+}
+
+#[test]
+fn group_bindings_have_expected_defaults_and_report_when_grouping_is_off() {
+    let config = Config::default();
+    let keybinds = config.keybinds();
+    let resolve = |code, modifiers| {
+        crate::input::resolve_non_indexed_action(
+            &keybinds,
+            &crate::input::TerminalKey::new(code, modifiers),
+            crate::input::KeybindDispatch::Prefix,
+        )
+    };
+    assert_eq!(
+        resolve(KeyCode::Char('e'), KeyModifiers::SHIFT),
+        Some(crate::input::KeybindAction::ToggleAgentGroup)
+    );
+    assert!(!config.keys.collapse_agent_groups.has_values());
+    assert!(!config.keys.expand_agent_groups.has_values());
+
+    let mut config = Config::default();
+    config.ui.sidebar.group_agents_by_workspace = false;
+    let (mut state, _) = sidebar_agent_state(&config);
+    let mut outcome = ClientShellInput::default();
+    state.record_binding(
+        crate::input::KeybindMatch::Action(crate::input::KeybindAction::CollapseAgentGroups),
+        &mut outcome,
+    );
+    assert!(state.collapsed_groups.is_empty());
+    assert!(state.visible_endpoint_notice.is_some());
+}
+
+#[test]
+fn next_and_previous_agent_skip_collapsed_groups() {
+    use crate::input::{KeybindAction, KeybindMatch};
+
+    let (mut state, _) = sidebar_agent_state(&Config::default());
+    click_agent_header(&mut state, 1);
+    recompose(&mut state);
+    let step = |state: &mut ClientShellState, action| {
+        let mut outcome = ClientShellInput::default();
+        state.record_binding(KeybindMatch::Action(action), &mut outcome);
+        focus_target(&outcome).map(str::to_owned)
+    };
+    // pane_1 (focused) -> pane_2 -> wraps over the hidden pane_3 to pane_1.
+    assert_eq!(
+        step(&mut state, KeybindAction::NextAgent).as_deref(),
+        Some("pane_2")
+    );
+    assert_eq!(
+        step(&mut state, KeybindAction::PreviousAgent).as_deref(),
+        Some("pane_2"),
+        "previous from pane_1 wraps to the last visible agent"
+    );
+
+    // Focus inside the collapsed group: stepping leaves it for visible agents.
+    let mut snapshot = two_workspace_agent_snapshot();
+    snapshot.agents[0].focused = false;
+    snapshot.agents[2].focused = true;
+    snapshot.focused_pane_id = Some("pane_3".into());
+    state.set_snapshot(Box::new(snapshot));
+    assert_eq!(
+        step(&mut state, KeybindAction::NextAgent),
+        Some("pane_1".into())
+    );
+}
+
+#[test]
+fn stepping_falls_back_to_all_agents_when_every_group_is_collapsed() {
+    use crate::input::{KeybindAction, KeybindMatch};
+
+    let (mut state, _) = sidebar_agent_state(&Config::default());
+    let mut outcome = ClientShellInput::default();
+    state.record_binding(
+        KeybindMatch::Action(KeybindAction::CollapseAgentGroups),
+        &mut outcome,
+    );
+    recompose(&mut state);
+    let mut step = ClientShellInput::default();
+    state.record_binding(KeybindMatch::Action(KeybindAction::NextAgent), &mut step);
+    assert_eq!(focus_target(&step), Some("pane_2"));
+}
+
+fn many_workspace_agent_snapshot(count: usize) -> ClientShellSnapshot {
+    let mut projected = two_workspace_agent_snapshot();
+    let template = projected.workspaces[0].clone();
+    projected.workspaces.clear();
+    projected.agents.clear();
+    for index in 0..count {
+        let mut workspace = template.clone();
+        workspace.workspace_id = format!("ws_{index}");
+        workspace.number = index + 1;
+        workspace.label = format!("space-{index}");
+        workspace.focused = index == 0;
+        projected.workspaces.push(workspace);
+        projected.agents.push(ClientShellAgent {
+            pane_id: format!("pane_{index}"),
+            workspace_id: format!("ws_{index}"),
+            tab_id: "tab_1".into(),
+            name: Some(format!("agent-{index}")),
+            display_agent: None,
+            agent: Some("pi".into()),
+            title: None,
+            terminal_title: None,
+            terminal_title_stripped: None,
+            agent_status: AgentStatus::Idle,
+            state_change_seq: 1,
+            state_labels: Vec::new(),
+            tokens: Vec::new(),
+            focused: index == 0,
+        });
+    }
+    projected
+}
+
+#[test]
+fn revealing_an_agent_in_a_collapsed_group_scrolls_to_its_header() {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(many_workspace_agent_snapshot(12)));
+    state.set_pane_surface(surface());
+    state.compose(106, 24).expect("frame");
+    assert!(state.hits.agent_max_scroll > 0, "list must overflow");
+    assert!(!state
+        .hits
+        .agent_headers
+        .iter()
+        .any(|hit| hit.workspace_id == "ws_11"));
+
+    state.collapsed_groups.insert("agents:ws_11".into());
+    state.reveal_snapshot_agent("pane_11");
+    state.compose(106, 24).expect("frame");
+    let header = state
+        .hits
+        .agent_headers
+        .iter()
+        .find(|hit| hit.workspace_id == "ws_11")
+        .expect("collapsed group header is revealed");
+    assert!(header.collapsed);
+    assert!(!state.hits.agents.iter().any(|(_, pane)| pane == "pane_11"));
+}
+
+#[test]
+fn collapsed_group_state_persists_across_client_restarts() {
+    let path = std::env::temp_dir().join(format!(
+        "flockr-shell-agent-groups-{}.json",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&path);
+    let config =
+        ClientShellConfig::from_config(&Config::default()).with_preferences_path(path.clone());
+    let mut state = ClientShellState::new(config);
+    state.set_snapshot(Box::new(two_workspace_agent_snapshot()));
+    state.set_pane_surface(surface());
+    recompose(&mut state);
+    click_agent_header(&mut state, 0);
+
+    let restored_config =
+        ClientShellConfig::from_config(&Config::default()).with_preferences_path(path.clone());
+    let mut restored = ClientShellState::new(restored_config);
+    restored.set_snapshot(Box::new(two_workspace_agent_snapshot()));
+    restored.set_pane_surface(surface());
+    recompose(&mut restored);
+    assert_eq!(agent_hit_panes(&restored), ["pane_3"]);
+    assert!(restored.hits.agent_headers[0].collapsed);
+    assert!(!restored.hits.agent_headers[1].collapsed);
+
+    // Expanding again is persisted too.
+    click_agent_header(&mut restored, 0);
+    let reloaded = ClientShellState::new(
+        ClientShellConfig::from_config(&Config::default()).with_preferences_path(path.clone()),
+    );
+    assert!(reloaded.collapsed_groups.is_empty());
+    std::fs::remove_file(path).expect("remove agent group preferences");
+}
+
+#[test]
+fn collapsed_agent_groups_do_not_collide_with_worktree_group_keys() {
+    let (mut state, _) = sidebar_agent_state(&Config::default());
+    state.collapsed_groups.insert("/repo".into());
+    click_agent_header(&mut state, 0);
+    click_agent_header(&mut state, 0);
+    assert!(state.collapsed_groups.contains("/repo"));
+    let mut outcome = ClientShellInput::default();
+    state.set_all_agent_groups(true, &mut outcome);
+    state.set_all_agent_groups(false, &mut outcome);
+    assert_eq!(
+        state.collapsed_groups.len(),
+        1,
+        "expand all keeps worktree groups"
+    );
+    assert!(state.collapsed_groups.contains("/repo"));
+}
+
+#[test]
+fn step_visible_agent_wraps_skips_hidden_and_falls_back() {
+    use super::super::agent_groups::step_visible_agent;
+
+    let targets = [1, 2, 3, 4];
+    let visible = |value: &i32| value % 2 == 0;
+    assert_eq!(
+        step_visible_agent(&targets, visible, Some(1), false),
+        Some(3)
+    );
+    assert_eq!(
+        step_visible_agent(&targets, visible, Some(3), false),
+        Some(1)
+    );
+    assert_eq!(
+        step_visible_agent(&targets, visible, Some(1), true),
+        Some(3)
+    );
+    assert_eq!(step_visible_agent(&targets, visible, None, false), Some(1));
+    assert_eq!(step_visible_agent(&targets, visible, None, true), Some(3));
+    // Current agent hidden (index 0 holds 1): stepping still moves on.
+    assert_eq!(
+        step_visible_agent(&targets, visible, Some(0), false),
+        Some(1)
+    );
+    // Everything hidden: walk the unfiltered list.
+    assert_eq!(
+        step_visible_agent(&targets, |_: &i32| false, Some(0), false),
+        Some(1)
+    );
+    assert_eq!(step_visible_agent::<i32>(&[], visible, None, false), None);
 }

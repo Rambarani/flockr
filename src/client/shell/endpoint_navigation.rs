@@ -237,14 +237,17 @@ impl ClientShellState {
                         target.endpoint_id == self.active_endpoint_id
                             && Some(target.pane_id.as_str()) == focused
                     });
-                    match (current, action) {
-                        (Some(index), KeybindAction::PreviousAgent) => {
-                            (index + agents.len() - 1) % agents.len()
-                        }
-                        (Some(index), KeybindAction::NextAgent) => (index + 1) % agents.len(),
-                        (None, KeybindAction::PreviousAgent) => agents.len() - 1,
-                        _ => 0,
-                    }
+                    // Agents inside a collapsed workspace group are not listed,
+                    // so stepping skips them.
+                    let Some(next) = super::agent_groups::step_visible_agent(
+                        &agents,
+                        |target| !self.agent_group_hides(&target.endpoint_id, &target.workspace_id),
+                        current,
+                        action == KeybindAction::PreviousAgent,
+                    ) else {
+                        return true;
+                    };
+                    next
                 }
                 _ => unreachable!("endpoint agent navigation"),
             };

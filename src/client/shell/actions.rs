@@ -148,6 +148,15 @@ impl ClientShellState {
                     outcome.repaint = true;
                     return;
                 }
+                if matches!(
+                    action,
+                    crate::input::KeybindAction::ToggleAgentGroup
+                        | crate::input::KeybindAction::CollapseAgentGroups
+                        | crate::input::KeybindAction::ExpandAgentGroups
+                ) {
+                    self.apply_agent_group_action(action, outcome);
+                    return;
+                }
                 if action == crate::input::KeybindAction::RenameAgent {
                     let pane_id = self
                         .snapshot
@@ -926,24 +935,27 @@ impl ClientShellState {
                 let current = agents.iter().position(|pane_id| {
                     Some(pane_id.as_str()) == snapshot.focused_pane_id.as_deref()
                 });
-                let next = match (current, action) {
-                    (Some(current), KeybindAction::PreviousAgent) => {
-                        (current + agents.len() - 1) % agents.len()
-                    }
-                    (Some(current), KeybindAction::NextAgent) => (current + 1) % agents.len(),
-                    (None, KeybindAction::PreviousAgent) => agents.len() - 1,
-                    (None, KeybindAction::NextAgent) => 0,
-                    _ => unreachable!("relative agent action"),
-                };
+                // Agents inside a collapsed workspace group are not listed, so
+                // stepping skips them.
+                let next = super::agent_groups::step_visible_agent(
+                    &agents,
+                    |pane_id| {
+                        !snapshot
+                            .agents
+                            .iter()
+                            .find(|agent| &agent.pane_id == pane_id)
+                            .is_some_and(|agent| {
+                                self.agent_group_hides(
+                                    &self.active_endpoint_id,
+                                    &agent.workspace_id,
+                                )
+                            })
+                    },
+                    current,
+                    action == KeybindAction::PreviousAgent,
+                )?;
                 let pane_id = agents[next].clone();
-                if !self
-                    .hits
-                    .agents
-                    .iter()
-                    .any(|(_, visible_pane_id)| visible_pane_id == &pane_id)
-                {
-                    self.agent_scroll = next.min(self.hits.agent_max_scroll);
-                }
+                self.reveal_snapshot_agent(&pane_id);
                 Some(Method::PaneFocus(PaneTarget { pane_id }))
             }
             KeybindAction::SwitchWorkspace(index) => {

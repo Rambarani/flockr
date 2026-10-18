@@ -50,6 +50,25 @@ impl ClientContextMenuOverlay {
                 item("Rename", Action::Rename),
                 item("Close", Action::Close),
             ],
+            ClientContextMenuTarget::AgentGroup {
+                collapsed,
+                can_rename,
+                ..
+            } => {
+                let mut items = Vec::new();
+                if *can_rename {
+                    items.push(item("Rename workspace", Action::Rename));
+                }
+                items.extend([
+                    item(
+                        if *collapsed { "Expand" } else { "Collapse" },
+                        Action::ToggleAgentGroup,
+                    ),
+                    item("Collapse all", Action::CollapseAgentGroups),
+                    item("Expand all", Action::ExpandAgentGroups),
+                ]);
+                items
+            }
             ClientContextMenuTarget::Agent { has_name, .. } => {
                 let mut items = vec![item("Rename agent", Action::RenameAgent)];
                 if *has_name {
@@ -228,6 +247,25 @@ impl ClientShellState {
                 tab_id,
                 workspace_id,
             } => self.activate_tab_context_action(tab_id, workspace_id, action, outcome),
+            ClientContextMenuTarget::AgentGroup {
+                endpoint_id,
+                workspace_id,
+                ..
+            } => match action {
+                ClientContextMenuAction::Rename => {
+                    self.open_rename_workspace_overlay_for(workspace_id)
+                }
+                ClientContextMenuAction::ToggleAgentGroup => {
+                    self.toggle_agent_group_and_persist(&endpoint_id, &workspace_id, outcome)
+                }
+                ClientContextMenuAction::CollapseAgentGroups => {
+                    self.set_all_agent_groups(true, outcome)
+                }
+                ClientContextMenuAction::ExpandAgentGroups => {
+                    self.set_all_agent_groups(false, outcome)
+                }
+                _ => {}
+            },
             ClientContextMenuTarget::Agent { pane_id, .. } => match action {
                 ClientContextMenuAction::RenameAgent => {
                     self.open_rename_agent_overlay(&pane_id);

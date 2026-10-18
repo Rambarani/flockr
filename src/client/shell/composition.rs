@@ -735,6 +735,7 @@ impl ClientShellState {
                         super::feed_overlay::FeedOverlayHits {
                             popup: rendered.area,
                             tabs: rendered.tabs.clone(),
+                            groups: rendered.groups.clone(),
                             rows: rendered.rows.clone(),
                             viewport_rows: rendered.viewport_rows,
                             offset: rendered.offset,

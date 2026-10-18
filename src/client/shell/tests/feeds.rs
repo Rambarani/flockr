@@ -6,9 +6,9 @@ use super::agents_worktrees_notifications::two_workspace_agent_snapshot;
 use super::endpoints::state_with_remote;
 use super::*;
 use crate::api::schema::{
-    FeedActionInfo, FeedActionResult, FeedField, FeedGetParams, FeedItemInfo, FeedItemState,
-    FeedListParams, FeedRunActionParams, FeedSummary, FeedTarget, JobInfo, JobRunInfo,
-    JobRunStatus, JobRunTrigger, JobScheduleKind, JobState, JobTarget, Method, Request,
+    FeedActionInfo, FeedActionResult, FeedField, FeedGetParams, FeedGroupInfo, FeedItemInfo,
+    FeedItemState, FeedListParams, FeedRunActionParams, FeedSummary, FeedTarget, JobInfo,
+    JobRunInfo, JobRunStatus, JobRunTrigger, JobScheduleKind, JobState, JobTarget, Method, Request,
     ResponseResult,
 };
 use crate::client::shell::feed_state::FeedItems;
@@ -1867,4 +1867,537 @@ fn a_failed_sync_run_is_reported_and_a_refused_one_too() {
 #[test]
 fn s_is_not_an_action_key_any_more() {
     assert!(crate::feed::format::action_key_problem("S").is_some());
+}
+
+// ----- groups (category tabs) -------------------------------------------
+
+fn group_info(
+    id: &str,
+    title: &str,
+    short: Option<&str>,
+    count: u32,
+    unread: u32,
+) -> FeedGroupInfo {
+    FeedGroupInfo {
+        id: id.into(),
+        title: title.into(),
+        short_title: short.map(str::to_owned),
+        count,
+        unread,
+    }
+}
+
+/// The five `today_items` spread over four groups, the last one implicit.
+fn grouped_feed() -> (FeedSummary, Vec<FeedItemInfo>) {
+    let mut items = today_items();
+    for (item, group) in items
+        .iter_mut()
+        .zip(["reviews", "reviews", "mentions", "tickets", "other"])
+    {
+        item.group = Some(group.into());
+    }
+    let mut feed = summary("workbox-sync", "Today (workbox)", 5, 2, 3);
+    feed.groups = vec![
+        group_info("reviews", "Review Requests", Some("Reviews"), 2, 2),
+        group_info("mentions", "Mentions", None, 1, 0),
+        group_info("tickets", "Tickets", None, 1, 0),
+        group_info("empty", "Nothing Here", None, 0, 0),
+        group_info("other", "Other", None, 1, 0),
+    ];
+    (feed, items)
+}
+
+fn titles(state: &ClientShellState) -> Vec<String> {
+    state
+        .visible_feed_items()
+        .iter()
+        .map(|item| item.id.clone())
+        .collect()
+}
+
+fn selected_group(state: &ClientShellState) -> Option<String> {
+    match &state.overlay {
+        Some(ClientShellOverlay::Feed(overlay)) => overlay.group.clone(),
+        other => panic!("expected the Feed overlay, got {other:?}"),
+    }
+}
+
+fn tab_labels(state: &ClientShellState, frame: &str) -> String {
+    let row = state
+        .hits
+        .feed_overlay
+        .groups
+        .first()
+        .expect("category tabs")
+        .0
+        .y;
+    frame.lines().nth(usize::from(row)).unwrap().to_owned()
+}
+
+#[test]
+fn a_wide_overlay_shows_the_category_tab_bar_with_counts_and_unread() {
+    let mut state = overlay_state(vec![grouped_feed()]);
+    let frame = compose_at(&mut state, 200, 50);
+    let bar = tab_labels(&state, &frame);
+    for expected in [
+        "All 5 ●2",
+        "Reviews 2 ●2",
+        "Mentions 1",
+        "Tickets 1",
+        "Nothing Here 0",
+        "Other 1",
+    ] {
+        assert!(bar.contains(expected), "missing {expected:?} in {bar:?}");
+    }
+    let hits = &state.hits.feed_overlay;
+    assert_eq!(hits.groups.len(), 6);
+    assert_eq!(hits.groups[0].1, None, "the first tab is All");
+    assert_eq!(hits.groups[1].1.as_deref(), Some("reviews"));
+    let info_row = frame
+        .lines()
+        .position(|line| line.contains("5 items · 2 unread"))
+        .unwrap();
+    assert_eq!(
+        usize::from(hits.groups[0].0.y),
+        info_row + 1,
+        "under the info line"
+    );
+    assert!(hits.rows[0].0.y > hits.groups[0].0.y);
+    assert_eq!(hits.rows.len(), 5, "All shows every item");
+}
+
+#[test]
+fn a_feed_without_groups_has_no_tab_bar_and_keeps_its_layout() {
+    let mut state = overlay_state(vec![workbox_feed()]);
+    let frame = compose_at(&mut state, 200, 50);
+    assert!(state.hits.feed_overlay.groups.is_empty());
+    assert!(!frame.contains("All 5"));
+    // Digits and brackets are not category keys here, so they stay free.
+    let input = press(&mut state, '1');
+    assert!(requests(&input).is_empty());
+    press(&mut state, ']');
+    assert_eq!(selected_item(&state), "nh-1");
+}
+
+#[test]
+fn a_narrow_overlay_shortens_the_labels_and_then_scrolls_the_tab_bar() {
+    let mut state = overlay_state(vec![grouped_feed()]);
+    // Narrower than the full labels: the unread marks go first.
+    let frame = compose_at(&mut state, 70, 30);
+    let bar = tab_labels(&state, &frame);
+    assert!(
+        bar.contains("All 5") && !bar.contains('●') || bar.contains("Other 1"),
+        "{bar:?}"
+    );
+    assert_eq!(state.hits.feed_overlay.groups.len(), 6, "{bar:?}");
+    // Very narrow: not every tab fits, so the bar scrolls and marks the edge.
+    let frame = compose_at(&mut state, 40, 30);
+    let bar = tab_labels(&state, &frame);
+    assert!(bar.contains('›'), "{bar:?}");
+    assert!(state.hits.feed_overlay.groups.len() < 6);
+    for line in frame.lines() {
+        assert!(line.chars().count() <= 40, "{line:?}");
+    }
+    // Selecting the last tab scrolls it into view with a marker on the left.
+    press(&mut state, '5');
+    let frame = compose_at(&mut state, 40, 30);
+    let bar = tab_labels(&state, &frame);
+    assert!(bar.contains('‹') && bar.contains("Other"), "{bar:?}");
+    assert!(
+        state
+            .hits
+            .feed_overlay
+            .groups
+            .iter()
+            .any(|(_, group)| group.as_deref() == Some("other")),
+        "the selected tab is always drawn"
+    );
+}
+
+#[test]
+fn brackets_and_digits_switch_category_and_zero_is_all() {
+    let mut state = overlay_state(vec![grouped_feed()]);
+    compose(&mut state);
+    assert_eq!(selected_group(&state), None);
+    press(&mut state, ']');
+    assert_eq!(selected_group(&state).as_deref(), Some("reviews"));
+    assert_eq!(titles(&state), ["nh-1", "nh-2"]);
+    press(&mut state, ']');
+    assert_eq!(titles(&state), ["nh-3"]);
+    press(&mut state, '[');
+    press(&mut state, '[');
+    assert_eq!(selected_group(&state), None, "[ steps back to All");
+    press(&mut state, '[');
+    assert_eq!(
+        selected_group(&state).as_deref(),
+        Some("other"),
+        "and wraps to the last tab"
+    );
+    press(&mut state, ']');
+    assert_eq!(selected_group(&state), None, "] wraps to All");
+
+    press(&mut state, '3');
+    assert_eq!(selected_group(&state).as_deref(), Some("tickets"));
+    assert_eq!(titles(&state), ["nh-4"]);
+    press(&mut state, '4');
+    assert!(titles(&state).is_empty(), "a declared but empty category");
+    assert!(compose(&mut state).contains("Nothing in this category."));
+    press(&mut state, '0');
+    assert_eq!(selected_group(&state), None);
+    assert_eq!(titles(&state).len(), 5);
+    // A digit past the last tab does nothing.
+    press(&mut state, '2');
+    let input = press(&mut state, '9');
+    assert_eq!(selected_group(&state).as_deref(), Some("mentions"));
+    assert!(!input.repaint && requests(&input).is_empty());
+}
+
+#[test]
+fn the_selection_restarts_at_the_top_of_the_new_category() {
+    let mut state = overlay_state(vec![grouped_feed()]);
+    compose(&mut state);
+    press(&mut state, 'j');
+    press(&mut state, 'j');
+    assert_eq!(selected_item(&state), "nh-3");
+    press(&mut state, '1');
+    assert_eq!(selected_item(&state), "nh-1");
+    press(&mut state, 'j');
+    assert_eq!(selected_item(&state), "nh-2");
+    press(&mut state, '0');
+    assert_eq!(selected_item(&state), "nh-1");
+}
+
+#[test]
+fn clicking_a_category_tab_selects_it() {
+    let mut state = overlay_state(vec![grouped_feed()]);
+    compose_at(&mut state, 200, 50);
+    let (rect, group) = state.hits.feed_overlay.groups[2].clone();
+    assert_eq!(group.as_deref(), Some("mentions"));
+    left_click(&mut state, rect);
+    assert_eq!(selected_group(&state).as_deref(), Some("mentions"));
+    assert_eq!(titles(&state), ["nh-3"]);
+    let frame = compose_at(&mut state, 200, 50);
+    assert!(frame.contains("Reply Dana"));
+    let (all, _) = state.hits.feed_overlay.groups[0].clone();
+    left_click(&mut state, all);
+    assert_eq!(selected_group(&state), None);
+    assert_eq!(titles(&state).len(), 5);
+}
+
+#[test]
+fn the_filter_applies_within_the_selected_category() {
+    let mut state = overlay_state(vec![grouped_feed()]);
+    compose(&mut state);
+    press(&mut state, '1');
+    press(&mut state, '/');
+    for ch in "re".chars() {
+        press(&mut state, ch);
+    }
+    // "Review retry" is in Reviews; "Reply Dana" and "Update runbook" also
+    // contain "re" but belong to other categories.
+    assert_eq!(titles(&state), ["nh-2"]);
+    state.handle_raw_events(vec![key(KeyCode::Enter)]);
+    // Digits are not typed into the filter once it is accepted: they switch.
+    press(&mut state, '0');
+    assert_eq!(selected_group(&state), None);
+    assert!(titles(&state).contains(&"nh-2".to_owned()) && titles(&state).len() > 1);
+    // While typing, digits and brackets belong to the filter.
+    press(&mut state, '/');
+    press(&mut state, '1');
+    assert_eq!(selected_group(&state), None);
+    state.handle_raw_events(vec![key(KeyCode::Esc)]);
+    press(&mut state, '3');
+    press(&mut state, '/');
+    press(&mut state, 'x');
+    assert!(titles(&state).is_empty());
+    assert!(compose(&mut state).contains("No items match the filter."));
+    state.handle_raw_events(vec![key(KeyCode::Esc)]);
+    assert_eq!(
+        selected_group(&state).as_deref(),
+        Some("tickets"),
+        "esc clears only the filter"
+    );
+    assert_eq!(titles(&state), ["nh-4"]);
+}
+
+#[test]
+fn the_detail_pane_follows_the_category_and_its_filtered_list() {
+    let mut feed = detailed_feed();
+    feed.0.groups = vec![
+        group_info("a", "A", None, 1, 1),
+        group_info("b", "B", None, 1, 0),
+    ];
+    feed.1[0].group = Some("a".into());
+    feed.1[1].group = Some("b".into());
+    let mut state = overlay_state(vec![feed]);
+    let frame = compose_at(&mut state, 200, 50);
+    assert!(frame.contains("can you look at the redirect?"));
+    press(&mut state, '2');
+    let frame = compose_at(&mut state, 200, 50);
+    assert!(
+        frame.contains("body line 1") && !frame.contains("can you look"),
+        "{frame}"
+    );
+    assert_eq!(selected_item(&state), "nh-2");
+    press(&mut state, '1');
+    let frame = compose_at(&mut state, 200, 50);
+    assert!(frame.contains("can you look") && !frame.contains("body line 1"));
+    // Actions run on the item the category shows.
+    press(&mut state, '2');
+    compose_at(&mut state, 200, 50);
+    let sent = requests(&press(&mut state, 'd'));
+    assert_eq!(
+        sent[0].method,
+        Method::FeedRunAction(FeedRunActionParams {
+            job_id: "workbox-sync".into(),
+            item_id: "nh-2".into(),
+            key: "d".into(),
+        })
+    );
+}
+
+#[test]
+fn the_category_is_remembered_per_feed_and_across_reopening() {
+    let mut other = summary("news", "News", 3, 1, 4);
+    other.groups = vec![group_info("x", "X", None, 3, 1)];
+    let mut news_items = vec![
+        item("n-1", "Rust 2027 edition", FeedItemState::Unread),
+        item("n-2", "Zig release", FeedItemState::Read),
+        item("n-3", "Kernel update", FeedItemState::Read),
+    ];
+    for item in &mut news_items {
+        item.group = Some("x".into());
+    }
+    let mut state = overlay_state(vec![grouped_feed(), (other, news_items)]);
+    compose(&mut state);
+    press(&mut state, '2');
+    assert_eq!(selected_group(&state).as_deref(), Some("mentions"));
+    state.handle_raw_events(vec![key(KeyCode::Tab)]);
+    assert_eq!(selected_group(&state), None, "news has its own choice");
+    press(&mut state, '1');
+    assert_eq!(selected_group(&state).as_deref(), Some("x"));
+    state.handle_raw_events(vec![key(KeyCode::Tab)]);
+    assert_eq!(
+        selected_group(&state).as_deref(),
+        Some("mentions"),
+        "coming back restores the first feed's category"
+    );
+    state.handle_raw_events(vec![key(KeyCode::Esc)]);
+    assert!(state.overlay.is_none());
+    open_overlay(&mut state);
+    assert_eq!(selected_group(&state).as_deref(), Some("mentions"));
+    assert_eq!(titles(&state), ["nh-3"]);
+    press(&mut state, '0');
+    state.handle_raw_events(vec![key(KeyCode::Esc)]);
+    open_overlay(&mut state);
+    assert_eq!(selected_group(&state), None, "All is remembered too");
+}
+
+#[test]
+fn the_category_is_saved_in_the_preferences_under_a_feedgroup_key() {
+    let path = std::env::temp_dir().join(format!(
+        "flockr-shell-feed-group-{}.json",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&path);
+    let build = || {
+        let config =
+            ClientShellConfig::from_config(&Config::default()).with_preferences_path(path.clone());
+        let mut state = ClientShellState::new(config);
+        state.set_snapshot(Box::new(two_workspace_agent_snapshot()));
+        state.set_pane_surface(surface());
+        state.compose(COLS, ROWS).expect("frame");
+        load(&mut state, vec![grouped_feed()]);
+        state
+    };
+    let mut state = build();
+    open_overlay(&mut state);
+    press(&mut state, '2');
+    let saved = std::fs::read_to_string(&path).expect("preferences written");
+    assert!(saved.contains("feedgroup:workbox-sync:mentions"), "{saved}");
+    press(&mut state, '3');
+    let saved = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        saved.contains("feedgroup:workbox-sync:tickets")
+            && !saved.contains("feedgroup:workbox-sync:mentions"),
+        "one entry per feed: {saved}"
+    );
+
+    let mut restored = build();
+    open_overlay(&mut restored);
+    assert_eq!(selected_group(&restored).as_deref(), Some("tickets"));
+    press(&mut restored, '0');
+    let saved = std::fs::read_to_string(&path).unwrap();
+    assert!(!saved.contains("feedgroup:"), "All clears it: {saved}");
+    std::fs::remove_file(path).expect("remove preferences");
+}
+
+#[test]
+fn a_remembered_category_that_no_longer_exists_shows_all() {
+    let mut state = overlay_state(vec![grouped_feed()]);
+    compose(&mut state);
+    press(&mut state, '2');
+    let mut changed = grouped_feed();
+    changed.0.groups.retain(|group| group.id != "mentions");
+    changed
+        .1
+        .retain(|item| item.group.as_deref() != Some("mentions"));
+    load_keeping_overlay(&mut state, changed);
+    assert_eq!(titles(&state).len(), 4, "falls back to All");
+    compose(&mut state);
+}
+
+fn load_keeping_overlay(state: &mut ClientShellState, feed: (FeedSummary, Vec<FeedItemInfo>)) {
+    state.feeds.feeds.clear();
+    state.feeds.items.clear();
+    state.feeds.items.insert(
+        feed.0.job_id.clone(),
+        FeedItems {
+            revision: feed.0.revision,
+            items: feed.1,
+        },
+    );
+    state.feeds.feeds.push(feed.0);
+}
+
+#[test]
+fn category_keys_do_not_break_existing_overlay_keys() {
+    let mut state = overlay_state(vec![grouped_feed()]);
+    compose(&mut state);
+    for ch in ['j', 'k', 'g', 'G'] {
+        press(&mut state, ch);
+    }
+    assert_eq!(selected_group(&state), None);
+    let sent = requests(&press(&mut state, 's'));
+    assert!(matches!(sent[0].method, Method::FeedRunAction(_)));
+    state.handle_raw_events(vec![key(KeyCode::Tab)]);
+    assert!(state.overlay.is_some(), "tab with one feed is a no-op");
+    press(&mut state, 'q');
+    assert!(state.overlay.is_none());
+}
+
+// ----- groups in the sidebar -----------------------------------------------
+
+#[test]
+fn a_grouped_feed_shows_group_rows_instead_of_items() {
+    let mut state = state_with_feeds(&Config::default(), vec![grouped_feed()]);
+    let frame = compose(&mut state);
+    let lines = feed_rows_text(&state, &frame);
+    assert_eq!(lines[1], " ▾ Today (workbox) 2");
+    assert_eq!(lines[2], "   Reviews 2 ●2");
+    assert_eq!(lines[3], "   Mentions 1");
+    assert_eq!(lines[4], "   Tickets 1");
+    assert_eq!(lines[5], "   Other 1", "empty groups are left out");
+    assert_eq!(lines.len(), 6, "{lines:?}");
+    assert!(state.hits.feed.rows.is_empty(), "no item rows");
+    assert_eq!(state.hits.feed.groups.len(), 4);
+    assert_eq!(state.hits.feed.groups[0].group_id, "reviews");
+}
+
+#[test]
+fn clicking_a_group_row_opens_the_overlay_on_that_category() {
+    let mut state = state_with_feeds(&Config::default(), vec![grouped_feed()]);
+    compose(&mut state);
+    let rect = state.hits.feed.groups[1].rect;
+    assert_eq!(state.hits.feed.groups[1].group_id, "mentions");
+    left_click(&mut state, rect);
+    assert_eq!(selected_group(&state).as_deref(), Some("mentions"));
+    match &state.overlay {
+        Some(ClientShellOverlay::Feed(overlay)) => {
+            assert_eq!(overlay.job_id.as_deref(), Some("workbox-sync"));
+        }
+        other => panic!("expected the Feed overlay, got {other:?}"),
+    }
+    let frame = compose_at(&mut state, 200, 50);
+    assert!(frame.contains("Reply Dana"));
+    assert_eq!(titles(&state), ["nh-3"]);
+}
+
+#[test]
+fn a_collapsed_grouped_feed_hides_its_group_rows_and_right_click_offers_the_menu() {
+    let mut state = state_with_feeds(&Config::default(), vec![grouped_feed()]);
+    compose(&mut state);
+    let group_row = state.hits.feed.groups[0].rect;
+    right_click(&mut state, group_row);
+    assert!(
+        matches!(state.overlay, Some(ClientShellOverlay::ContextMenu(_))),
+        "the feed's menu opens on a group row"
+    );
+    state.overlay = None;
+    let header = state.hits.feed.headers[0].rect;
+    left_click(&mut state, header);
+    compose(&mut state);
+    assert!(state.hits.feed.groups.is_empty());
+}
+
+#[test]
+fn a_grouped_feed_is_not_fetched_for_the_sidebar() {
+    let mut state = new_state(&Config::default());
+    state.compose(COLS, ROWS).expect("frame");
+    let list = requests(&tick(&mut state, Instant::now()));
+    let (grouped, _) = grouped_feed();
+    let flat = summary("news", "News", 3, 1, 4);
+    let (_, actions) = answer(
+        &mut state,
+        &list[0],
+        feed_list_result(vec![grouped, flat], 7),
+    );
+    let fetched: Vec<_> = actions
+        .iter()
+        .filter_map(|action| match action {
+            ClientShellAction::Endpoint { request, .. } => match &request.method {
+                Method::FeedGet(params) => Some(params.job_id.clone()),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect();
+    assert_eq!(fetched, ["news"], "only the flat feed needs its items");
+}
+
+#[test]
+fn group_rows_do_not_move_or_overlap_agent_rows() {
+    let mut baseline = new_state(&Config::default());
+    baseline.compose(COLS, ROWS).expect("frame");
+    let mut grouped = state_with_feeds(&Config::default(), vec![grouped_feed()]);
+    grouped.compose(COLS, ROWS).expect("frame");
+    assert_eq!(baseline.hits.agent_body.y, grouped.hits.agent_body.y);
+    assert_eq!(baseline.hits.agent_body.x, grouped.hits.agent_body.x);
+    assert_eq!(baseline.hits.agents, grouped.hits.agents);
+    assert_eq!(
+        baseline.hits.agent_headers.len(),
+        grouped.hits.agent_headers.len()
+    );
+    let agent_area = grouped.hits.agent_body;
+    for hit in &grouped.hits.feed.groups {
+        assert!(hit.rect.y >= agent_area.bottom(), "{:?}", hit.rect);
+    }
+    // A click on an agent row still selects that agent, not a feed row.
+    let (agent_rect, _) = grouped.hits.agents[0].clone();
+    left_click(&mut grouped, agent_rect);
+    assert!(grouped.overlay.is_none());
+}
+
+#[test]
+fn group_rows_are_cut_to_the_sidebar_width() {
+    let mut feed = grouped_feed();
+    feed.0.groups[0] = group_info(
+        "reviews",
+        "An extremely long category title that cannot fit",
+        None,
+        2,
+        2,
+    );
+    let mut state = state_with_feeds(&Config::default(), vec![feed]);
+    let frame = compose(&mut state);
+    let lines = feed_rows_text(&state, &frame);
+    let width = usize::from(state.hits.feed.area.width);
+    for line in &lines {
+        assert!(line.chars().count() <= width, "{line:?} overflows {width}");
+    }
+    assert!(
+        lines[2].contains('…') && lines[2].ends_with("2 ●2"),
+        "{:?}",
+        lines[2]
+    );
 }

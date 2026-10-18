@@ -79,25 +79,14 @@ impl StoredFeed {
     }
 }
 
-/// Everything that makes one stored feed look different to a client.
-fn visible_part(
-    feed: &StoredFeed,
-) -> (
-    &Option<String>,
-    &Vec<GroupRecord>,
-    &Vec<ItemRecord>,
-    bool,
-    &Option<String>,
-    &Vec<String>,
-) {
-    (
-        &feed.title,
-        &feed.groups,
-        &feed.items,
-        feed.stale,
-        &feed.error,
-        &feed.diagnostics,
-    )
+/// Whether two stored feeds look the same to a client.
+fn same_visible_part(a: &StoredFeed, b: &StoredFeed) -> bool {
+    a.title == b.title
+        && a.groups == b.groups
+        && a.items == b.items
+        && a.stale == b.stale
+        && a.error == b.error
+        && a.diagnostics == b.diagnostics
 }
 
 pub(crate) fn store_path(state_dir: &Path) -> PathBuf {
@@ -314,7 +303,7 @@ impl FeedManager {
                 next.error = Some(error);
             }
         }
-        let changed = visible_part(&next) != visible_part(&entry.stored);
+        let changed = !same_visible_part(&next, &entry.stored);
         let path = store_path(state_dir);
         entry.stored = next;
         if changed {

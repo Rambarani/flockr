@@ -148,6 +148,22 @@ impl ClientShellState {
                     outcome.repaint = true;
                     return;
                 }
+                if action == crate::input::KeybindAction::RenameAgent {
+                    let pane_id = self
+                        .snapshot
+                        .as_deref()
+                        .and_then(|snapshot| snapshot.focused_pane_id.clone());
+                    if !pane_id.is_some_and(|pane_id| self.open_rename_agent_overlay(&pane_id)) {
+                        self.push_endpoint_notice(
+                            ClientEndpointNoticeKind::Rejected,
+                            "rename_agent_no_agent",
+                            "No agent to rename",
+                            "Focus a pane with a detected agent first",
+                        );
+                    }
+                    outcome.repaint = true;
+                    return;
+                }
                 if action == crate::input::KeybindAction::WorkspacePicker {
                     self.pending_workspace_highlight = None;
                     self.mobile_switcher_scroll = 0;

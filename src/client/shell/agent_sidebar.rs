@@ -369,10 +369,12 @@ pub(super) fn agent_row(
     let tab_label = tab
         .filter(|tab| tab_count > 1 || tab.custom_label)
         .map(|tab| tab.label.as_str());
+    // The alias set through `agent.rename` wins over an integration-reported
+    // display name, so a rename is always visible in the row.
     let agent_label = agent
-        .display_agent
+        .name
         .as_deref()
-        .or(agent.name.as_deref())
+        .or(agent.display_agent.as_deref())
         .or(agent.agent.as_deref())
         .or(agent.title.as_deref());
     let labels = agent

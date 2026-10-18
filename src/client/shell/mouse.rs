@@ -1836,6 +1836,16 @@ impl ClientShellState {
                 if !self.config.mouse_capture {
                     return;
                 }
+                let agent_pane_id = (!self.sidebar_collapsed)
+                    .then(|| self.agent_row_at(point))
+                    .flatten()
+                    .filter(|(endpoint_id, _)| *endpoint_id == self.active_endpoint_id)
+                    .map(|(_, pane_id)| pane_id);
+                if let Some(pane_id) = agent_pane_id {
+                    self.open_agent_context_menu(pane_id, mouse.column, mouse.row);
+                    outcome.repaint = true;
+                    return;
+                }
                 let workspace_id = (!self.sidebar_collapsed)
                     .then(|| self.active_endpoint_workspace_at(point))
                     .flatten();
@@ -2152,6 +2162,11 @@ impl ClientShellState {
                     .find(|(rect, _)| super::contains(*rect, point))
                     .map(|(_, pane_id)| pane_id.clone());
                 if let Some(pane_id) = agent_pane_id {
+                    let endpoint_id = self.active_endpoint_id.clone();
+                    if self.agent_row_double_click_renames(&endpoint_id, &pane_id) {
+                        outcome.repaint = true;
+                        return;
+                    }
                     self.push_endpoint_method(
                         crate::api::schema::Method::PaneFocus(crate::api::schema::PaneTarget {
                             pane_id,

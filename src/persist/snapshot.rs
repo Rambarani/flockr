@@ -632,6 +632,32 @@ mod tests {
     }
 
     #[test]
+    fn renamed_workspace_and_unmanaged_agent_survive_snapshot_round_trip() {
+        let mut state = state_with_workspaces(&["rename-snapshot"]);
+        state.workspaces[0].set_custom_name("renamed-space".into());
+        let root = state.workspaces[0].tabs[0].root_pane;
+        let terminal_id = state.workspaces[0].tabs[0].panes[&root]
+            .attached_terminal_id
+            .clone();
+        let terminal = state.terminals.get_mut(&terminal_id).unwrap();
+        terminal.set_detected_state(
+            Some(crate::detect::Agent::Pi),
+            crate::detect::AgentState::Idle,
+        );
+        terminal.set_agent_name("reviewer".into());
+
+        let captured = capture_from_state(&state);
+        let snapshot = parse_snapshot(&serde_json::to_string(&captured).unwrap()).unwrap();
+        assert_eq!(
+            snapshot.workspaces[0].custom_name.as_deref(),
+            Some("renamed-space")
+        );
+        let pane = &snapshot.workspaces[0].tabs[0].panes[&root.raw()];
+        assert_eq!(pane.agent_name.as_deref(), Some("reviewer"));
+        assert_eq!(pane.managed_agent_kind, None);
+    }
+
+    #[test]
     fn layout_fingerprint_survives_json_round_trip() {
         let mut snapshot = parse_snapshot(include_str!(
             "../../tests/fixtures/session/current-flockr-session.json"

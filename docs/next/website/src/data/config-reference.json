@@ -698,6 +698,12 @@
           "description": "Rename the focused pane."
         },
         {
+          "key": "keys.rename_agent",
+          "type": "keybinding",
+          "default": "\"prefix+shift+a\"",
+          "description": "Rename the agent in the focused pane. An empty name clears the alias."
+        },
+        {
           "key": "keys.edit_scrollback",
           "type": "keybinding",
           "default": "\"prefix+e\"",

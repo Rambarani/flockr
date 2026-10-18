@@ -444,6 +444,30 @@ impl ClientShellState {
         }));
     }
 
+    /// Open the rename prompt for the agent running in `pane_id`. Returns false
+    /// when the pane has no agent in the current snapshot.
+    pub(super) fn open_rename_agent_overlay(&mut self, pane_id: &str) -> bool {
+        let Some(agent) = self.snapshot.as_deref().and_then(|snapshot| {
+            snapshot
+                .agents
+                .iter()
+                .find(|agent| agent.pane_id == pane_id)
+        }) else {
+            return false;
+        };
+        self.overlay = Some(ClientShellOverlay::Rename(ClientRenameOverlay {
+            title: "rename agent",
+            input: TextEditor::new(
+                agent.name.as_deref().unwrap_or_default(),
+                agent.name.is_none(),
+            ),
+            target: ClientRenameTarget::Agent {
+                pane_id: pane_id.to_owned(),
+            },
+        }));
+        true
+    }
+
     pub(super) fn insert_overlay_text(&mut self, text: &str) -> bool {
         if self.insert_worktree_overlay_text(text) {
             return true;
@@ -934,6 +958,21 @@ impl ClientShellState {
         let Some(ClientShellOverlay::Rename(rename)) = self.overlay.take() else {
             return;
         };
+        if matches!(rename.target, ClientRenameTarget::Agent { .. })
+            && !rename.input.trim().is_empty()
+            && !crate::app::valid_agent_name(rename.input.trim())
+        {
+            // Keep the prompt open so the typed name can be corrected.
+            self.push_endpoint_notice(
+                ClientEndpointNoticeKind::Rejected,
+                "rename_agent_invalid_name",
+                "Invalid agent name",
+                "Use a-z, 0-9, - and _, start with a letter, max 32 characters",
+            );
+            self.overlay = Some(ClientShellOverlay::Rename(rename));
+            outcome.repaint = true;
+            return;
+        }
         let trimmed = rename.input.trim();
         let method = match rename.target {
             ClientRenameTarget::NewWorkspace {
@@ -985,6 +1024,13 @@ impl ClientShellState {
                 crate::api::schema::PaneRenameParams {
                     pane_id,
                     label: Some(trimmed.to_owned()),
+                },
+            )),
+            // An empty name clears the alias, like `flockr agent rename --clear`.
+            ClientRenameTarget::Agent { pane_id } => Some(crate::api::schema::Method::AgentRename(
+                crate::api::schema::AgentRenameParams {
+                    target: pane_id,
+                    name: (!trimmed.is_empty()).then(|| trimmed.to_owned()),
                 },
             )),
         };

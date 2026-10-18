@@ -1823,3 +1823,217 @@ fn agent_sidebar_grouping_can_be_disabled_or_is_skipped_for_priority_sort() {
         "blocked agent sorts first"
     );
 }
+
+fn mouse_at(
+    state: &mut ClientShellState,
+    kind: MouseEventKind,
+    column: u16,
+    row: u16,
+) -> ClientShellInput {
+    state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
+        kind,
+        column,
+        row,
+        modifiers: KeyModifiers::empty(),
+    })])
+}
+
+fn assert_agent_rename_request(
+    input: &ClientShellInput,
+    expected_pane: &str,
+    expected_name: Option<&str>,
+) {
+    let [ClientShellAction::Endpoint { request, .. }] = &input.actions[..] else {
+        panic!(
+            "agent rename should use the endpoint API: {:?}",
+            input.actions
+        );
+    };
+    assert!(matches!(
+        &request.method,
+        crate::api::schema::Method::AgentRename(params)
+            if params.target == expected_pane && params.name.as_deref() == expected_name
+    ));
+}
+
+#[test]
+fn rename_agent_binding_renames_the_focused_agent_through_agent_rename() {
+    let (mut state, _) = sidebar_agent_state(&Config::default());
+    let mut open = ClientShellInput::default();
+    state.record_binding(
+        crate::input::KeybindMatch::Action(crate::input::KeybindAction::RenameAgent),
+        &mut open,
+    );
+    assert!(matches!(
+        state.overlay.as_ref(),
+        Some(ClientShellOverlay::Rename(ClientRenameOverlay {
+            title: "rename agent",
+            target: ClientRenameTarget::Agent { pane_id },
+            ..
+        })) if pane_id == "pane_1"
+    ));
+    assert!(state.handle_input_bytes(&[0x15]).actions.is_empty());
+    state.handle_input_bytes(b"reviewer");
+    assert_agent_rename_request(&state.handle_input_bytes(b"\r"), "pane_1", Some("reviewer"));
+    assert!(state.overlay.is_none());
+}
+
+#[test]
+fn rename_agent_binding_is_a_default_prefix_binding() {
+    let config = Config::default();
+    let keybinds = config.keybinds();
+    let key = crate::input::TerminalKey::new(KeyCode::Char('a'), KeyModifiers::SHIFT);
+    assert_eq!(
+        crate::input::resolve_non_indexed_action(
+            &keybinds,
+            &key,
+            crate::input::KeybindDispatch::Prefix
+        ),
+        Some(crate::input::KeybindAction::RenameAgent)
+    );
+}
+
+#[test]
+fn rename_agent_empty_name_clears_and_invalid_name_keeps_the_prompt_open() {
+    let (mut state, _) = sidebar_agent_state(&Config::default());
+    assert!(state.open_rename_agent_overlay("pane_2"));
+    state.handle_input_bytes(&[0x15]);
+    state.handle_input_bytes(b"Not Valid");
+    let rejected = state.handle_input_bytes(b"\r");
+    assert!(rejected.actions.is_empty(), "invalid names are not sent");
+    assert!(matches!(
+        state.overlay,
+        Some(ClientShellOverlay::Rename(ClientRenameOverlay {
+            target: ClientRenameTarget::Agent { .. },
+            ..
+        }))
+    ));
+    state.handle_input_bytes(&[0x15]);
+    assert_agent_rename_request(&state.handle_input_bytes(b"\r"), "pane_2", None);
+}
+
+#[test]
+fn rename_agent_without_an_agent_reports_instead_of_opening_a_prompt() {
+    let mut snapshot = two_workspace_agent_snapshot();
+    snapshot.agents.clear();
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(snapshot));
+    let mut open = ClientShellInput::default();
+    state.record_binding(
+        crate::input::KeybindMatch::Action(crate::input::KeybindAction::RenameAgent),
+        &mut open,
+    );
+    assert!(state.overlay.is_none());
+    assert!(open.repaint);
+    assert!(state.visible_endpoint_notice.is_some());
+}
+
+#[test]
+fn double_click_on_an_agent_row_opens_the_rename_prompt() {
+    let (mut state, _) = sidebar_agent_state(&Config::default());
+    let row = state.hits.agents[2].0;
+    let down = MouseEventKind::Down(MouseButton::Left);
+    let first = mouse_at(&mut state, down, row.x + 1, row.y);
+    assert!(matches!(
+        &first.actions[..],
+        [ClientShellAction::Endpoint { request, .. }]
+            if matches!(&request.method, crate::api::schema::Method::PaneFocus(_))
+    ));
+    assert!(state.overlay.is_none());
+    mouse_at(
+        &mut state,
+        MouseEventKind::Up(MouseButton::Left),
+        row.x + 1,
+        row.y,
+    );
+    let second = mouse_at(&mut state, down, row.x + 1, row.y);
+    assert!(second.actions.is_empty());
+    assert!(matches!(
+        state.overlay.as_ref(),
+        Some(ClientShellOverlay::Rename(ClientRenameOverlay {
+            target: ClientRenameTarget::Agent { pane_id },
+            ..
+        })) if pane_id == "pane_3"
+    ));
+}
+
+#[test]
+fn two_single_clicks_on_different_agents_do_not_rename() {
+    let (mut state, _) = sidebar_agent_state(&Config::default());
+    let down = MouseEventKind::Down(MouseButton::Left);
+    let (first, second) = (state.hits.agents[0].0, state.hits.agents[1].0);
+    mouse_at(&mut state, down, first.x + 1, first.y);
+    mouse_at(&mut state, down, second.x + 1, second.y);
+    assert!(state.overlay.is_none());
+}
+
+#[test]
+fn right_click_on_an_agent_row_offers_rename_and_clear() {
+    let (mut state, _) = sidebar_agent_state(&Config::default());
+    let row = state.hits.agents[1].0;
+    mouse_at(
+        &mut state,
+        MouseEventKind::Down(MouseButton::Right),
+        row.x + 2,
+        row.y,
+    );
+    let items = match state.overlay.as_ref() {
+        Some(ClientShellOverlay::ContextMenu(menu)) => menu.items(),
+        _ => panic!("agent context menu"),
+    };
+    let actions = items.iter().map(|item| item.action).collect::<Vec<_>>();
+    assert_eq!(
+        actions,
+        [
+            ClientContextMenuAction::RenameAgent,
+            ClientContextMenuAction::ClearAgentName
+        ]
+    );
+
+    state.compose(106, 30).expect("context menu frame");
+    let clear = state.hits.context_menu_rows[1].0;
+    let clicked = mouse_at(
+        &mut state,
+        MouseEventKind::Down(MouseButton::Left),
+        clear.x + 1,
+        clear.y,
+    );
+    assert_agent_rename_request(&clicked, "pane_2", None);
+
+    // The rename entry opens the same prompt as the keybinding.
+    mouse_at(
+        &mut state,
+        MouseEventKind::Down(MouseButton::Right),
+        row.x + 2,
+        row.y,
+    );
+    state.compose(106, 30).expect("context menu frame");
+    let rename = state.hits.context_menu_rows[0].0;
+    mouse_at(
+        &mut state,
+        MouseEventKind::Down(MouseButton::Left),
+        rename.x + 1,
+        rename.y,
+    );
+    assert!(matches!(
+        state.overlay.as_ref(),
+        Some(ClientShellOverlay::Rename(ClientRenameOverlay {
+            target: ClientRenameTarget::Agent { pane_id },
+            ..
+        })) if pane_id == "pane_2"
+    ));
+}
+
+#[test]
+fn sidebar_agent_label_prefers_the_renamed_alias_over_reported_display_name() {
+    let mut snapshot = two_workspace_agent_snapshot();
+    snapshot.agents[0].name = Some("reviewer".into());
+    snapshot.agents[0].display_agent = Some("Codex CLI".into());
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(snapshot));
+    state.set_pane_surface(surface());
+    let frame = state.compose(106, 30).expect("frame").frame;
+    let text = frame_rows(&frame).join("\n");
+    assert!(text.contains("reviewer"), "alias shown: {text}");
+    assert!(!text.contains("Codex CLI"));
+}

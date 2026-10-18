@@ -135,6 +135,8 @@ flockr agent rename reviewer --clear
 
 Targets accept a unique live agent name or the pane ID that currently hosts the agent. Terminal IDs and bare agent-kind labels are not accepted.
 
+You can also rename from the sidebar without the CLI. Double-click an agent row, right-click it and choose **Rename agent**, or press `prefix+shift+a` (`keys.rename_agent`) to rename the agent in the focused pane. The prompt follows the `agent.rename` rules: names match `[a-z][a-z0-9_-]{0,31}`, must be unique among live agents, and an empty name clears the alias. A renamed agent shows its alias in the sidebar instead of the reported display name. Like the CLI alias, it is kept across detach and reattach but is cleared when that agent exits or is replaced.
+
 ## Custom status labels
 
 Integrations report lifecycle state as semantic state only. Add display customization separately with pane metadata tokens.

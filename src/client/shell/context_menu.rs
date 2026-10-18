@@ -50,6 +50,13 @@ impl ClientContextMenuOverlay {
                 item("Rename", Action::Rename),
                 item("Close", Action::Close),
             ],
+            ClientContextMenuTarget::Agent { has_name, .. } => {
+                let mut items = vec![item("Rename agent", Action::RenameAgent)];
+                if *has_name {
+                    items.push(item("Clear agent name", Action::ClearAgentName));
+                }
+                items
+            }
             ClientContextMenuTarget::Pane {
                 source_pane_id,
                 has_manual_label,
@@ -167,6 +174,26 @@ impl ClientShellState {
         }));
     }
 
+    pub(super) fn open_agent_context_menu(&mut self, pane_id: String, x: u16, y: u16) {
+        let Some(agent) = self.snapshot.as_deref().and_then(|snapshot| {
+            snapshot
+                .agents
+                .iter()
+                .find(|agent| agent.pane_id == pane_id)
+        }) else {
+            return;
+        };
+        self.overlay = Some(ClientShellOverlay::ContextMenu(ClientContextMenuOverlay {
+            target: ClientContextMenuTarget::Agent {
+                has_name: agent.name.is_some(),
+                pane_id,
+            },
+            x,
+            y,
+            highlighted: 0,
+        }));
+    }
+
     pub(super) fn move_context_menu_selection(&mut self, delta: isize) {
         let Some(ClientShellOverlay::ContextMenu(menu)) = self.overlay.as_mut() else {
             return;
@@ -201,6 +228,21 @@ impl ClientShellState {
                 tab_id,
                 workspace_id,
             } => self.activate_tab_context_action(tab_id, workspace_id, action, outcome),
+            ClientContextMenuTarget::Agent { pane_id, .. } => match action {
+                ClientContextMenuAction::RenameAgent => {
+                    self.open_rename_agent_overlay(&pane_id);
+                }
+                ClientContextMenuAction::ClearAgentName => self.push_endpoint_method(
+                    crate::api::schema::Method::AgentRename(
+                        crate::api::schema::AgentRenameParams {
+                            target: pane_id,
+                            name: None,
+                        },
+                    ),
+                    outcome,
+                ),
+                _ => {}
+            },
             ClientContextMenuTarget::Pane {
                 pane_id,
                 workspace_id,

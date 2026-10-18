@@ -22,11 +22,9 @@ use std::time::{Duration, Instant};
 use interprocess::local_socket::traits::Stream as _;
 use serde::{Deserialize, Deserializer};
 
-const STABLE_UPDATE_MANIFEST_URL: &str =
-    "https://raw.githubusercontent.com/Rambarani/flockr/main/distribution/latest.json";
-const PREVIEW_UPDATE_MANIFEST_URL: &str =
-    "https://raw.githubusercontent.com/Rambarani/flockr/main/distribution/preview.json";
-const HOMEBREW_FORMULA_API_URL: &str = "https://formulae.brew.sh/api/formula/flockr.json";
+use crate::product::{
+    HOMEBREW_FORMULA_API_URL, PREVIEW_UPDATE_MANIFEST_URL, STABLE_UPDATE_MANIFEST_URL,
+};
 const FLOCKR_UPDATE_COMMAND: &str = "flockr update";
 const HOMEBREW_UPDATE_COMMAND: &str = "brew update && brew upgrade flockr";
 const MISE_UPDATE_COMMAND: &str = "mise upgrade flockr";
@@ -788,7 +786,9 @@ fn install_windows_update_with_installer(
 
 #[cfg(windows)]
 fn windows_installed_flockr_exe_path() -> Result<PathBuf, String> {
-    if let Some(install_dir) = env::var_os("FLOCKR_INSTALL_DIR").filter(|value| !value.is_empty()) {
+    if let Some(install_dir) =
+        crate::legacy_herdr::var_os("FLOCKR_INSTALL_DIR").filter(|value| !value.is_empty())
+    {
         return Ok(PathBuf::from(install_dir).join("flockr.exe"));
     }
 

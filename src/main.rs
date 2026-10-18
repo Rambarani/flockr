@@ -11,6 +11,8 @@ const NESTED_FLOCKR_MESSAGES: [&str; 6] = [
     "recursion detected. base case not found. aborting.",
 ];
 
+#[macro_use]
+mod product;
 mod agent_resume;
 mod agent_view_eval;
 mod api;
@@ -736,7 +738,7 @@ fn main() -> io::Result<()> {
         println!("Config: {}", config::config_path().display());
         println!("Logs:   {}", logging::help_log_paths_summary());
         println!("Env:    FLOCKR_CONFIG_PATH overrides config file path");
-        println!("Home:   https://github.com/Rambarani/flockr");
+        println!("Home:   {}", product::REPO_URL);
         println!();
         println!("{}", cli::AGENT_HELP_FOOTER);
         return Ok(());

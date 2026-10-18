@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use super::{agent_label, parse_agent_label, Agent};
 
 pub(crate) const MANIFEST_ENGINE_VERSION: u32 = 3;
-const DEFAULT_CATALOG_URL: &str = "https://raw.githubusercontent.com/Rambarani/flockr/main/distribution/agent-detection/index.toml";
+use crate::product::AGENT_DETECTION_CATALOG_URL as DEFAULT_CATALOG_URL;
 const CATALOG_URL_ENV: &str = "FLOCKR_AGENT_DETECTION_MANIFEST_CATALOG_URL";
 const MAX_FETCH_BYTES: usize = 256 * 1024;
 
@@ -499,7 +499,7 @@ fn state_root() -> PathBuf {
 }
 
 fn catalog_url() -> String {
-    std::env::var(CATALOG_URL_ENV)
+    crate::legacy_herdr::var(CATALOG_URL_ENV)
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())

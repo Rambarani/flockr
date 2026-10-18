@@ -30,10 +30,7 @@ const NONINTERACTIVE_SSH_STDERR_LIMIT: usize = 16 * 1024;
 const BRIDGE_FAILURE_REPORT_TIMEOUT: Duration = Duration::from_secs(1);
 const REMOTE_SERVER_SHUTDOWN_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const CURRENT_PROTOCOL: u32 = crate::protocol::PROTOCOL_VERSION;
-const STABLE_UPDATE_MANIFEST_URL: &str =
-    "https://raw.githubusercontent.com/Rambarani/flockr/main/distribution/latest.json";
-const PREVIEW_UPDATE_MANIFEST_URL: &str =
-    "https://raw.githubusercontent.com/Rambarani/flockr/main/distribution/preview.json";
+use crate::product::{PREVIEW_UPDATE_MANIFEST_URL, STABLE_UPDATE_MANIFEST_URL};
 const REMOTE_BINARY_ENV_VAR: &str = "FLOCKR_REMOTE_BINARY";
 const REMOTE_OUTPUT_READY_MARKER: &str = "flockr-remote-output-ready:1";
 const WINDOWS_REMOTE_PATH_MARKER: &str = "flockr-remote-path:1:";
@@ -1833,7 +1830,7 @@ fn remote_binary_exists(ssh: &RemoteSsh, remote_flockr: &RemoteFlockr) -> io::Re
 }
 
 fn remote_binary_override_path() -> io::Result<Option<PathBuf>> {
-    let Some(value) = std::env::var_os(REMOTE_BINARY_ENV_VAR) else {
+    let Some(value) = crate::legacy_herdr::var_os(REMOTE_BINARY_ENV_VAR) else {
         return Ok(None);
     };
     if value.is_empty() {

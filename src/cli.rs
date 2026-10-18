@@ -48,9 +48,9 @@ const TERMINAL_SESSION_CONTROL_USAGE: &str =
 pub(crate) const AGENT_HELP_FOOTER: &str = concat!(
     "Are you an AI? Use these resources ONLY IF your task specifically asks you to:\n",
     "  Help a human understand or set up Flockr for the first time:\n",
-    "    https://raw.githubusercontent.com/Rambarani/flockr/main/distribution/agent-guide.md\n",
+    concat!("    ", distribution_url!("agent-guide.md"), "\n"),
     "  Debug or investigate a problem with Flockr:\n",
-    "    https://github.com/Rambarani/flockr/llms.txt\n",
+    concat!("    ", docs_url!(), "\n"),
     "  Control Flockr panes, agents, or workspaces:\n",
     "    SKIP if a Flockr skill is already in your context. Otherwise run: flockr --skill",
 );

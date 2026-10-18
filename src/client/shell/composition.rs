@@ -725,7 +725,7 @@ impl ClientShellState {
                         offset: rendered.offset,
                     }
                 });
-                None
+                rendered.and_then(|rendered| rendered.cursor)
             } else if matches!(overlay, ClientShellOverlay::Feed(_)) {
                 let rendered = self.render_feed_overlay(&mut composed);
                 self.hits.feed_overlay =

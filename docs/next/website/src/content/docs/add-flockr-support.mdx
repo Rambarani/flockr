@@ -33,6 +33,10 @@ Your agent makes three kinds of reports through `"$FLOCKR_BIN_PATH"`:
 
 Only report when `FLOCKR_ENV=1` and the other variables are set. Outside Flockr, your integration should do nothing.
 
+### Legacy herdr names
+
+Flockr is a fork of herdr. For agents that already ship herdr support, every pane also exports `HERDR_ENV`, `HERDR_PANE_ID`, `HERDR_WORKSPACE_ID`, `HERDR_TAB_ID`, `HERDR_SOCKET_PATH`, `HERDR_CLIENT_SOCKET_PATH` and `HERDR_BIN_PATH` with the same values, and the server accepts `herdr:<id>` report sources as aliases of `flockr:<id>`. New integrations should use the `FLOCKR_*` names and must not use the reserved `flockr:` or `herdr:` source prefixes.
+
 ## Report state
 
 ```bash

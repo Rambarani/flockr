@@ -6,7 +6,7 @@ body:
       value: |
         **Before you start:** Read [CONTRIBUTING.md](https://github.com/Rambarani/flockr/blob/master/CONTRIBUTING.md).
 
-        Issues are only for reproducible bugs and maintainer-created or maintainer-converted work items. Feature requests, ideas, questions, contribution proposals, and direction checks belong in [Discussions](https://github.com/herdrdev/herdr/discussions).
+        Issues are only for reproducible bugs and maintainer-created or maintainer-converted work items. Feature requests, ideas, questions, contribution proposals, and direction checks belong in [Discussions](https://github.com/Rambarani/flockr/discussions).
 
         Flockr normally implements accepted reports through maintainer-controlled agents. Filing an issue does not reserve the work or authorize a pull request. Unsolicited implementation pull requests from people who are not listed in `.github/APPROVED_CONTRIBUTORS` are closed automatically.
 

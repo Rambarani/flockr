@@ -37,7 +37,7 @@ host_cursor = "native"
 | foot | 1.20.0 |
 | Alacritty | 0.15.0 |
 
-長期サポート版 Linux ディストリビューションの古いターミナルパッケージで特に発生します。確認済みの境界キャプチャと上流参照は [Flockr issue #1116](https://github.com/herdrdev/herdr/issues/1116) を参照してください。現在のターミナルでも発生する場合は、正確なバージョンと Flockr の外でも発生するかを報告してください。
+長期サポート版 Linux ディストリビューションの古いターミナルパッケージで特に発生します。確認済みの境界キャプチャと上流参照は [upstream herdr issue #1116](https://github.com/herdrdev/herdr/issues/1116) を参照してください。現在のターミナルでも発生する場合は、正確なバージョンと Flockr の外でも発生するかを報告してください。
 
 ## Option+Left または Option+Right を押すと `;3D` または `;3C` が入力される
 
@@ -57,7 +57,7 @@ map alt+left send_text all \x1bb
 map alt+right send_text all \x1bf
 ```
 
-ターミナルアプリケーションが Alt+Left と Alt+Right を直接使用する場合があるため、Flockr は修飾付き矢印を意図的に書き換えません。調査の詳細は [Flockr issue #1370](https://github.com/herdrdev/herdr/issues/1370) を参照してください。
+ターミナルアプリケーションが Alt+Left と Alt+Right を直接使用する場合があるため、Flockr は修飾付き矢印を意図的に書き換えません。調査の詳細は [upstream herdr issue #1370](https://github.com/herdrdev/herdr/issues/1370) を参照してください。
 
 ## Flockr を更新したのに実行中のセッションが古い
 
@@ -85,7 +85,7 @@ flockr server stop
 flockr
 ```
 
-サーバーを停止するとペインのプロセスも終了します。Flockr のペインは長時間動作するサーバーの macOS 起動コンテキストを継承するため、SSH やバックグラウンドジョブから起動されたサーバーは対話型 Keychain サービスにアクセスできないことがあります。詳細は [Flockr issue #966](https://github.com/herdrdev/herdr/issues/966) を参照してください。
+サーバーを停止するとペインのプロセスも終了します。Flockr のペインは長時間動作するサーバーの macOS 起動コンテキストを継承するため、SSH やバックグラウンドジョブから起動されたサーバーは対話型 Keychain サービスにアクセスできないことがあります。詳細は [upstream herdr issue #966](https://github.com/herdrdev/herdr/issues/966) を参照してください。
 
 ## macOS のログアウト後に SSH や DNS が失敗する
 
@@ -93,7 +93,7 @@ flockr
 
 古いサーバーはログアウト後も動作し続ける一方、ユーザー情報の検索や DNS が使えなくなることがあります。症状には `No user exists for uid 501`、`Could not get manager name.`、`curl: (6) Could not resolve host` などがあります。再ログインだけでは修復されません。対象セッションを停止し、新しいログインの GUI ターミナルから Flockr を起動してください。実行中のペインプロセスは終了しますが、保存されたセッション配置は復元されます。ライブハンドオフは元のサーバーのサービスコンテキストと既存のペインプロセスを維持します。そのため、古いサーバーにこの修正を適用するにはセッションの完全な再起動が必要です。ハンドオフでは継承したコンテキストを修復できません。
 
-新しく起動したサーバーでも問題が起きる場合は、`flockr-server.log` の `could not select persistent user service context` を確認してください。必要な macOS API が利用できない場合、Flockr は継承したコンテキストを維持します。[Flockr issue #4100](https://github.com/herdrdev/herdr/issues/4100) を参照してください。
+新しく起動したサーバーでも問題が起きる場合は、`flockr-server.log` の `could not select persistent user service context` を確認してください。必要な macOS API が利用できない場合、Flockr は継承したコンテキストを維持します。[upstream herdr issue #4100](https://github.com/herdrdev/herdr/issues/4100) を参照してください。
 
 ## `flockr` コマンドが見つからない
 

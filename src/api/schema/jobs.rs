@@ -146,3 +146,24 @@ pub struct JobLogsParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lines: Option<u32>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct JobSetScheduleParams {
+    pub job_id: String,
+    /// `every 2h` (or a bare `2h`), or a 5-field cron expression such as
+    /// `0 9 * * 1-5`. Intervals are at least one minute.
+    pub schedule: String,
+}
+
+/// Where a changed schedule was stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum JobScheduleStore {
+    /// `[jobs.system.<name>]` in config.toml (system jobs).
+    Config,
+    /// The `schedule` or `every` key of the job's `job.toml`.
+    JobFile,
+    /// An override in the job's state file, because the job's own file could
+    /// not be edited safely (plugin jobs always use this).
+    State,
+}

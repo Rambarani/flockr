@@ -161,6 +161,9 @@ impl ActiveSubscription {
             Subscription::LayoutUpdated {} => Ok(event_subscription(EventKind::LayoutUpdated)),
             Subscription::JobRunFinished {} => Ok(event_subscription(EventKind::JobRunFinished)),
             Subscription::FeedUpdated {} => Ok(event_subscription(EventKind::FeedUpdated)),
+            Subscription::DecisionCreated {} => {
+                Ok(event_subscription(EventKind::DecisionCreated))
+            }
             Subscription::PaneOutputMatched {
                 pane_id,
                 source,

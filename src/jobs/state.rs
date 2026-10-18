@@ -26,11 +26,14 @@ pub(crate) struct RunRecord {
     pub(crate) stdout_truncated: bool,
     #[serde(default)]
     pub(crate) stderr_truncated: bool,
-    /// The JSON of a stdout line `{"flockr_handoff": {...}}`, kept verbatim
-    /// for the later decision flow. Nothing acts on it yet.
+    /// The JSON of a stdout line `{"flockr_handoff": {...}}`, kept verbatim;
+    /// the handoff evaluation (`super::handoff`) reads it after the run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) handoff: Option<serde_json::Value>,
 }
+
+/// A stdout line that starts with this is a dynamic handoff.
+pub(crate) const HANDOFF_MARKER: &str = "{\"flockr_handoff\":";
 
 /// Find the last stdout line that starts with `{"flockr_handoff":` and parses.
 pub(crate) fn find_handoff_line(stdout: &str) -> Option<serde_json::Value> {
@@ -38,7 +41,7 @@ pub(crate) fn find_handoff_line(stdout: &str) -> Option<serde_json::Value> {
         .lines()
         .rev()
         .map(str::trim)
-        .filter(|line| line.starts_with("{\"flockr_handoff\":"))
+        .filter(|line| line.starts_with(HANDOFF_MARKER))
         .find_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
         .and_then(|value| value.get("flockr_handoff").cloned())
 }
@@ -75,6 +78,16 @@ pub(crate) struct JobStateFile {
     /// Set by `flockr job enable/disable`; wins over the job file's `enabled`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) enabled_override: Option<bool>,
+    /// Set by `flockr job schedule` when the schedule could not be written to
+    /// the job's own file (a plugin job, or a `job.toml` that cannot be edited
+    /// safely). The text is what the user typed: `every 2h` or a cron
+    /// expression. Wins over the job file's schedule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) schedule_override: Option<String>,
+    /// Fingerprint of the previous run's output and feed, for
+    /// `[handoff] when = "on_change"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) handoff_fingerprint: Option<String>,
     /// The last run id handed out.
     #[serde(default)]
     pub(crate) last_run_id: u64,
@@ -88,6 +101,8 @@ impl Default for JobStateFile {
         Self {
             version: STATE_VERSION,
             enabled_override: None,
+            schedule_override: None,
+            handoff_fingerprint: None,
             last_run_id: 0,
             history: Vec::new(),
         }

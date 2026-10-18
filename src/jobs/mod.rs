@@ -9,11 +9,14 @@
 //! report through `AppEvent::JobRunFinished`.
 
 pub(crate) mod cron;
+pub(crate) mod decisions;
 pub(crate) mod definition;
 pub(crate) mod display;
 pub(crate) mod env;
+pub(crate) mod handoff;
 pub(crate) mod manager;
 pub(crate) mod runner;
+pub(crate) mod schedule_edit;
 pub(crate) mod state;
 
 pub(crate) use manager::{now_unix_ms, BeginError, JobsManager, JobsPaths, PluginJobSource};

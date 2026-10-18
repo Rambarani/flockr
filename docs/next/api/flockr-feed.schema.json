@@ -1,0 +1,128 @@
+{
+  "$defs": {
+    "item": {
+      "description": "One row. Unknown fields are ignored. A bad item or action is dropped with a diagnostic instead of failing the feed.",
+      "properties": {
+        "actions": {
+          "description": "Commands run from the Feed overlay with the job's environment; the feed refreshes afterwards.",
+          "items": {
+            "properties": {
+              "command": {
+                "description": "argv array; the first element is the program.",
+                "items": {
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                "maxItems": 64,
+                "minItems": 1,
+                "type": "array"
+              },
+              "key": {
+                "description": "One visible character, unique per item. Reserved for the overlay: 'j' 'k' 'q' 'g' 'G' 'R' '/' and these key names: enter, return, esc, escape, up, down, left, right, tab, backtab, pageup, pagedown, home, end, backspace, delete, space.",
+                "maxLength": 1,
+                "minLength": 1,
+                "not": {
+                  "enum": [
+                    "j",
+                    "k",
+                    "q",
+                    "g",
+                    "G",
+                    "R",
+                    "/"
+                  ]
+                },
+                "type": "string"
+              },
+              "title": {
+                "description": "Menu text; defaults to the key.",
+                "maxLength": 40,
+                "type": "string"
+              }
+            },
+            "required": [
+              "key",
+              "command"
+            ],
+            "type": "object"
+          },
+          "maxItems": 8,
+          "type": "array"
+        },
+        "badge": {
+          "description": "Short tag such as a ticket key.",
+          "maxLength": 40,
+          "type": "string"
+        },
+        "id": {
+          "description": "Unique within the feed (a repeated id keeps the first).",
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        },
+        "state": {
+          "default": "read",
+          "description": "unread shows a dot and counts as unread; an unknown value becomes read.",
+          "enum": [
+            "unread",
+            "read",
+            "done",
+            "warn",
+            "error"
+          ]
+        },
+        "subtitle": {
+          "description": "Dimmed second line.",
+          "maxLength": 300,
+          "type": "string"
+        },
+        "title": {
+          "description": "Row text; defaults to the id.",
+          "maxLength": 200,
+          "type": "string"
+        },
+        "updated_at": {
+          "description": "The item's own timestamp, RFC 3339.",
+          "maxLength": 40,
+          "type": "string"
+        },
+        "url": {
+          "description": "Opened by enter or a click; http or https only.",
+          "maxLength": 2048,
+          "pattern": "^https?://",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "What a job's feed command prints on stdout: ONE JSON object and nothing else, at most 4096 KiB. Longer strings are cut, items beyond 500 are dropped.",
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/item"
+      },
+      "maxItems": 500,
+      "type": "array"
+    },
+    "title": {
+      "description": "Section title; the job's feed.title wins.",
+      "maxLength": 120,
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "description": "A missing version is read as 1 with a diagnostic; any other value is rejected."
+    }
+  },
+  "required": [
+    "version",
+    "items"
+  ],
+  "title": "flockr feed v1",
+  "type": "object"
+}

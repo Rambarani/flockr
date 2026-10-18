@@ -15,6 +15,7 @@ A job can also publish a [feed](#feeds): a list of items, such as what needs you
 - If Flockr was not running when a job was due, the job runs once when the server starts.
 - Flockr ships a few jobs of its own, the [system jobs](#system-jobs). They sit in the same list with source `system`.
 - A job can [ask you](#handoff-ask-then-start-an-agent) whether to start an agent after a run. Nothing starts until you say so.
+- `flockr job new`, `validate` and `run --dry-run` create, check and try a job without a server; see [Authoring jobs](#authoring-jobs). A skill teaches Claude the same workflow: [Authoring with Claude](#authoring-with-claude).
 
 ## Define a job
 
@@ -49,6 +50,77 @@ broken   invalid   -   -   schedule: invalid cron "0 10 * *": expected 5 fields 
 ```
 
 Edits are picked up within about 30 seconds, or at once by `flockr server reload-config`.
+
+## Authoring jobs
+
+Three commands take a job from nothing to enabled. They read and write job files directly and work without a running server.
+
+```sh
+flockr job new nightly --template shell --every 1h --feed --handoff
+flockr job validate nightly --run-feed
+flockr job run nightly --dry-run
+flockr job enable nightly
+```
+
+### Create: `flockr job new`
+
+`flockr job new <id> [--template shell|python|rust|workbox] [--every 1h | --schedule "CRON"] [--feed] [--handoff]` writes `~/.config/flockr/jobs/<id>/` (the `flockr-dev` directory in debug builds). It refuses to touch an id that already exists, and the job is always written with `enabled = false`.
+
+| Template | Files | Command |
+| --- | --- | --- |
+| `shell` (default) | `job.toml`, `run.sh` | `["sh", "run.sh"]` |
+| `python` | `job.toml`, `run.py` | `["python3", "run.py"]` |
+| `rust` | `job.toml`, `job.rs` | `["rust-script", "job.rs"]` |
+| `workbox` | `job.toml`, `prompt.md`: the [workbox-sync example](https://github.com/Rambarani/flockr/tree/master/examples/jobs/workbox-sync), with a feed and a handoff | `["workbox", "sync"]` |
+
+- `--every` takes an interval and `--schedule` a five-field cron expression (one of them, default `every = "1h"`).
+- `--feed` adds a feed stub that prints a valid [feed](#feed-format-version-1) and a `[feed]` table. `--handoff` adds a `[handoff]` table and a `prompt.md` template. The generated `job.toml` explains every key in comments, and keys you did not use are present as comments.
+- The `rust` template is a single file run by [`rust-script`](https://rust-script.org), which compiles it on first use. `job new` tells you how to install it (`cargo install rust-script`) when it is missing. `flockr job build <id>` compiles ahead of time with `rust-script --build-only`, so the first scheduled run is not slow.
+
+### Check: `flockr job validate`
+
+`flockr job validate [<id>|<path>] [--run-feed] [--json]` checks one job, a job directory or `job.toml` by path, or every job when given nothing. It exits non-zero when any job has an error.
+
+- Everything the server's own parser reports (unknown keys, bad schedules, bad `handoff.when`).
+- The command resolves on the job's `PATH`, using the job's environment mode: `login-shell` captures your login shell here, the way the server does; if that fails the report says it fell back to the server environment. Scripts such as `run.sh` and the `prompt_file` exist, `cwd` and `env_file` exist, and a cron expression that never fires is an error.
+- Handoff templates use only [known variables](#templates) (`{{context.*}}` draws a warning, since it only has a value with a dynamic handoff), `{prompt_file}` has a prompt, and `{{count}}` or `{{feed_json}}` without a `[feed]` draw a warning.
+- The next three run times in local time, and a warning when `timeout` is not shorter than `every`.
+- With `--run-feed`, the feed command runs and its output is checked: stdout must be one JSON object, and the parser's diagnostics (cut text, dropped actions, reserved keys) are listed as warnings. Without it the feed command is not executed.
+
+`--json` prints `{"ok": bool, "jobs": [...]}` for tools.
+
+### Try: `flockr job run <id> --dry-run`
+
+A dry run executes the job once in the foreground, with the job's real environment, working directory and `timeout`, and prints what the server would have done with the result. **It runs the real command**, so a job that changes data changes it. Use `--no-exec` for a run that executes nothing.
+
+- The exit code, duration, stdout and stderr, and the feed command's parsed summary (items, unread count, diagnostics), when the job succeeded.
+- The evaluated [handoff](#handoff-ask-then-start-an-agent): the question, tab title, directory, the agent command that would be typed, and the rendered prompt, with warnings for variables that had no value. A first run counts as a change for `when = "on_change"`.
+- Nothing is recorded: no run in the history, no feed stored, no toast, no decision. `FLOCKR_JOB_STATE_DIR` points at a scratch directory that is deleted afterwards.
+- `--no-exec` skips the command and the feed and renders the handoff for a successful run with empty stdout.
+- The exit code is non-zero when the command fails, the feed is unusable or the handoff cannot be built.
+
+### Schemas
+
+`flockr job schema` prints a JSON Schema for `job.toml` (including `[handoff]`, `[env]`, the feed table and, under `$defs.jobsConfig`, the `[jobs.system.*]` section of `config.toml`); `flockr job schema --feed` prints the one for feed output. Both are generated from the constants the parsers use and checked by tests, and committed as [`docs/next/api/flockr-job.schema.json`](https://github.com/Rambarani/flockr/blob/master/docs/next/api/flockr-job.schema.json) and [`flockr-feed.schema.json`](https://github.com/Rambarani/flockr/blob/master/docs/next/api/flockr-feed.schema.json). Editors that understand JSON Schema for TOML can use them for completion.
+
+## Authoring with Claude
+
+Flockr ships a skill, `flockr-jobs`, that teaches Claude (or another coding agent) this workflow: the concepts, the `job new`, `validate`, `run --dry-run` and `enable` loop, the `job.toml` reference, the feed contract (stdout must be only the JSON object, single-character action keys, reserved keys, caps), handoff templates, environment rules, debugging with `flockr job logs` and `flockr decision list`, and two worked examples. Once it is installed, ask for what you want in plain words ("check my open PR count every 30 minutes and tell me when it changes") and the agent writes, validates and dry-runs the job for you. It does not enable a job without asking.
+
+The skill is separate from the [`flockr` skill](/docs/agent-skill/) that controls panes. Install it with `npx skills`, as for that one:
+
+```sh
+npx skills add Rambarani/flockr --skill flockr-jobs -g
+```
+
+Or copy the copy that is bundled with your binary into a Claude Code skills directory:
+
+```sh
+mkdir -p ~/.claude/skills/flockr-jobs
+flockr job skill > ~/.claude/skills/flockr-jobs/SKILL.md
+```
+
+`flockr job skill` prints the file that matches your installed Flockr. For agents without a skill system, paste its output into the project or user instructions. Flockr does not install the skill for you.
 
 ## Schedules
 
@@ -264,7 +336,7 @@ command = ["sh", "-c", "workbox list --json | flockr feed adapt workbox --title 
 title = "Today (workbox)"          # optional; wins over the title the command prints
 ```
 
-A complete example, with a stub to try it without the real tool, is in `docs/flockr/examples/workbox-sync/` in the Flockr repository.
+A complete example, with a stub to try it without the real tool, is in `examples/jobs/workbox-sync/` in the Flockr repository; `flockr job new workbox-sync --template workbox` writes it for you.
 
 ### When the feed refreshes
 
@@ -383,7 +455,15 @@ flockr job enable <id>
 flockr job disable <id>
 flockr job schedule <id> <every 2h|CRON>   # change timing; see "Change when a job runs"
 flockr job env refresh            # capture the login-shell environment again
+flockr job new <id> [--template T] [--every I | --schedule C] [--feed] [--handoff]   # scaffold a disabled job
+flockr job validate [<id>|<path>] [--run-feed] [--json]   # check a job without waiting for its schedule
+flockr job run <id> --dry-run [--no-exec]   # run once here, record nothing, show the feed and handoff
+flockr job build <id>             # pre-compile a rust-script job
+flockr job schema [--feed]        # JSON Schema for job.toml, or for feed output
+flockr job skill                  # print the authoring skill for Claude
 ```
+
+`new`, `validate`, `run --dry-run`, `build`, `schema` and `skill` need no server; see [Authoring jobs](#authoring-jobs).
 
 Decisions: `flockr decision list|start|snooze|dismiss`, see [Decisions](#decisions).
 

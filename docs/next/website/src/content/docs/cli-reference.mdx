@@ -443,7 +443,15 @@ flockr job enable <id>            # overrides `enabled` in job.toml
 flockr job disable <id>
 flockr job schedule <id> <every 2h|CRON>   # change when a job runs (system jobs write config.toml)
 flockr job env refresh            # capture the login-shell environment again
+flockr job new <id> [--template shell|python|rust|workbox] [--every 1h | --schedule "CRON"] [--feed] [--handoff]
+flockr job validate [<id>|<path>] [--run-feed] [--json]   # check a job; exits non-zero on errors
+flockr job run <id> --dry-run [--no-exec]   # run once here without recording anything
+flockr job build <id>             # pre-compile a rust-script job
+flockr job schema [--feed]        # JSON Schema for job.toml, or for feed output
+flockr job skill                  # print the Claude skill for authoring jobs
 ```
+
+`new`, `validate`, `run --dry-run`, `build`, `schema` and `skill` work on the job files directly and need no running server. `new` writes a disabled job and refuses to overwrite one. A dry run executes the real command but records no run, feed, toast or decision. See [Jobs: Authoring jobs](/docs/jobs/#authoring-jobs) and [Authoring with Claude](/docs/jobs/#authoring-with-claude).
 
 `list` has a SOURCE column: `user`, `system` (built into Flockr, such as `system.upstream-herdr`) or `plugin`. `schedule` takes an interval (`every 2h` or `2h`, at least a minute) or a five-field cron expression, quoted or as separate words. See [Jobs](/docs/jobs/) for the job file format.
 

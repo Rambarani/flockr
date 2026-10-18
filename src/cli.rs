@@ -29,6 +29,7 @@ mod decision;
 mod feed;
 mod integration;
 mod job;
+mod job_authoring;
 mod machine;
 mod notification;
 mod pane;

@@ -33,9 +33,25 @@ pub(crate) const MAX_FEED_JSON_CHARS: usize = 48_000;
 pub(crate) const MAX_CONTEXT_VALUE_CHARS: usize = 8_000;
 /// Characters of the rendered prompt.
 pub(crate) const MAX_PROMPT_CHARS: usize = 200_000;
-const MAX_ASK_CHARS: usize = 200;
-const MAX_TAB_TITLE_CHARS: usize = 60;
+pub(crate) const MAX_ASK_CHARS: usize = 200;
+pub(crate) const MAX_TAB_TITLE_CHARS: usize = 60;
 const TRUNCATED_NOTE: &str = "\n… (truncated)";
+
+/// The `{{name}}` variables every handoff template can use. `context.<path>`
+/// is also available, from a dynamic handoff's `context` object.
+pub(crate) const TEMPLATE_VARIABLES: &[&str] = &[
+    "stdout",
+    "stderr_tail",
+    "exit_code",
+    "feed_json",
+    "count",
+    "date",
+    "job.id",
+    "job.title",
+    "run.id",
+];
+/// Prefix of the variables that come from a dynamic handoff's `context`.
+pub(crate) const CONTEXT_VARIABLE_PREFIX: &str = "context.";
 
 pub(crate) const DEFAULT_AGENT_COMMAND: &str = "claude";
 const DEFAULT_ASK: &str = "{{job.title}} has something for you. Start an agent?";
@@ -246,11 +262,30 @@ struct Rendered {
     missing: Vec<String>,
 }
 
-fn valid_placeholder_name(name: &str) -> bool {
+pub(crate) fn valid_placeholder_name(name: &str) -> bool {
     !name.is_empty()
         && name
             .chars()
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '-'))
+}
+
+/// The `{{name}}` placeholders in `template`, in order of appearance and
+/// without repeats, found the way `render` finds them.
+pub(crate) fn placeholders(template: &str) -> Vec<String> {
+    let mut found: Vec<String> = Vec::new();
+    let mut rest = template;
+    while let Some(start) = rest.find("{{") {
+        let after = &rest[start + 2..];
+        let Some(end) = after.find("}}") else {
+            break;
+        };
+        let name = after[..end].trim();
+        if valid_placeholder_name(name) && !found.iter().any(|existing| existing == name) {
+            found.push(name.to_owned());
+        }
+        rest = &after[end + 2..];
+    }
+    found
 }
 
 fn render(template: &str, vars: &Vars, mode: RenderMode) -> Rendered {
@@ -1155,11 +1190,10 @@ mod tests {
 
     #[test]
     fn the_workbox_example_parses_and_renders() {
-        // docs/flockr is a local, git-ignored area; skip on a checkout without it.
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/flockr/examples/workbox-sync");
-        let Ok(text) = std::fs::read_to_string(dir.join("job.toml")) else {
-            return;
-        };
+        // The example is tracked, so a missing file is a failure, not a skip.
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/jobs/workbox-sync");
+        let text = std::fs::read_to_string(dir.join("job.toml"))
+            .expect("examples/jobs/workbox-sync/job.toml is tracked");
         let job = parse_job_toml(&text, "workbox-sync", &dir).expect("the example job is valid");
         let handoff = job.handoff.as_ref().expect("the example has a [handoff]");
         assert_eq!(handoff.when, "on_change");

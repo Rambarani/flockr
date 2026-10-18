@@ -593,7 +593,7 @@ fn cross_area_agent_process_survives_detach_and_reattach() {
         .to_string();
 
     // Ensure detected agent surface is populated by running fake `pi`.
-    pane_send_text(&api_socket, &pane_id, "pi");
+    pane_send_text(&api_socket, &pane_id, &fake_pi.display().to_string());
     pane_send_input(&api_socket, &pane_id, "");
     let detected_before_hook = {
         let deadline = Instant::now() + Duration::from_secs(5);

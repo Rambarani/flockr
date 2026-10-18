@@ -1525,8 +1525,9 @@ fn events_subscribe_streams_workspace_tab_and_agent_events() {
     let send_pi = send_request(
         &socket_path,
         &format!(
-            r#"{{"id":"req_l2","method":"pane.send_text","params":{{"pane_id":"{}","text":"pi"}}}}"#,
-            pane_id
+            r#"{{"id":"req_l2","method":"pane.send_text","params":{{"pane_id":"{}","text":"{}/pi"}}}}"#,
+            pane_id,
+            bin_dir.display()
         ),
     );
     assert_eq!(send_pi["result"]["type"], "ok");
@@ -1789,8 +1790,9 @@ fn pane_report_agent_updates_effective_state() {
     let send_pi = send_request(
         &socket_path,
         &format!(
-            r#"{{"id":"req_hook_2","method":"pane.send_text","params":{{"pane_id":"{}","text":"pi"}}}}"#,
-            pane_id
+            r#"{{"id":"req_hook_2","method":"pane.send_text","params":{{"pane_id":"{}","text":"{}/pi"}}}}"#,
+            pane_id,
+            bin_dir.display()
         ),
     );
     assert_eq!(send_pi["result"]["type"], "ok");
@@ -2060,8 +2062,9 @@ fn official_release_waits_for_confirmed_process_exit() {
     let send_pi = send_request(
         &socket_path,
         &format!(
-            r#"{{"id":"req_release_2","method":"pane.send_text","params":{{"pane_id":"{}","text":"pi"}}}}"#,
-            pane_id
+            r#"{{"id":"req_release_2","method":"pane.send_text","params":{{"pane_id":"{}","text":"{}/pi"}}}}"#,
+            pane_id,
+            bin_dir.display()
         ),
     );
     assert_eq!(send_pi["result"]["type"], "ok");
@@ -2211,8 +2214,9 @@ fn pane_clear_agent_authority_restores_fallback_state() {
     let send_pi = send_request(
         &socket_path,
         &format!(
-            r#"{{"id":"req_clear_2","method":"pane.send_text","params":{{"pane_id":"{}","text":"pi"}}}}"#,
-            pane_id
+            r#"{{"id":"req_clear_2","method":"pane.send_text","params":{{"pane_id":"{}","text":"{}/pi"}}}}"#,
+            pane_id,
+            bin_dir.display()
         ),
     );
     assert_eq!(send_pi["result"]["type"], "ok");
@@ -2388,8 +2392,9 @@ fn events_subscribe_streams_output_and_agent_status_events() {
     let send_pi = send_request(
         &socket_path,
         &format!(
-            r#"{{"id":"req_24","method":"pane.send_text","params":{{"pane_id":"{}","text":"pi"}}}}"#,
-            pane_id
+            r#"{{"id":"req_24","method":"pane.send_text","params":{{"pane_id":"{}","text":"{}/pi"}}}}"#,
+            pane_id,
+            bin_dir.display()
         ),
     );
     assert_eq!(send_pi["result"]["type"], "ok");
@@ -2488,8 +2493,9 @@ fn pane_info_and_subscriptions_expose_done_agent_status() {
     let send_pi = send_request(
         &socket_path,
         &format!(
-            r#"{{"id":"req_status_3","method":"pane.send_text","params":{{"pane_id":"{}","text":"pi"}}}}"#,
-            background_pane_id
+            r#"{{"id":"req_status_3","method":"pane.send_text","params":{{"pane_id":"{}","text":"{}/pi"}}}}"#,
+            background_pane_id,
+            bin_dir.display()
         ),
     );
     assert_eq!(send_pi["result"]["type"], "ok");

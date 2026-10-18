@@ -2325,6 +2325,7 @@ async fn run_client_loop(
                         outcome.repaint |= shell.tick_agent_preview(now, &mut outcome);
                         outcome.repaint |= shell.tick_agent_dashboard(now, &mut outcome);
                         outcome.repaint |= shell.tick_jobs(now, &mut outcome);
+                        outcome.repaint |= shell.tick_feeds(now, &mut outcome);
                         outcome.repaint |= notification_repaint
                             | shell.tick_copy_feedback(now)
                             | shell.tick_workspace_highlight(now)

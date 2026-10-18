@@ -385,6 +385,7 @@ pub struct Keybinds {
     pub rename_agent: ActionKeybinds,
     pub agent_dashboard: ActionKeybinds,
     pub jobs: ActionKeybinds,
+    pub feed: ActionKeybinds,
     pub preview_agent: ActionKeybinds,
     pub command_palette: ActionKeybinds,
     pub edit_scrollback: ActionKeybinds,
@@ -576,6 +577,7 @@ impl Config {
             rename_agent: empty_action!(),
             agent_dashboard: empty_action!(),
             jobs: empty_action!(),
+            feed: empty_action!(),
             preview_agent: empty_action!(),
             command_palette: empty_action!(),
             edit_scrollback: empty_action!(),
@@ -736,6 +738,7 @@ impl Config {
             apply_action!(keybinds.rename_agent, rename_agent, source);
             apply_action!(keybinds.agent_dashboard, agent_dashboard, source);
             apply_action!(keybinds.jobs, jobs, source);
+            apply_action!(keybinds.feed, feed, source);
             apply_action!(keybinds.preview_agent, preview_agent, source);
             apply_action!(keybinds.command_palette, command_palette, source);
             apply_action!(keybinds.edit_scrollback, edit_scrollback, source);

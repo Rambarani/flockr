@@ -222,4 +222,6 @@ pub enum AppEvent {
     WorktreeReadFinished(Box<WorktreeReadResult>),
     /// A scheduled job's command finished (or failed to start).
     JobRunFinished(Box<crate::jobs::JobRunResult>),
+    /// A job feed refresh, or an item action and its refresh, finished.
+    FeedTaskFinished(Box<crate::feed::manager::TaskResult>),
 }

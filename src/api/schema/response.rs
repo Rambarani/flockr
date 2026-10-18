@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use super::agents::AgentInfo;
 use super::common::{ClientWindowTitleReason, NotificationShowReason};
 use super::events::EventEnvelope;
+use super::feed::{FeedItemInfo, FeedSummary};
 use super::integrations::{
     IntegrationInstallResult, IntegrationTarget, IntegrationUninstallResult,
 };
@@ -307,6 +308,39 @@ pub enum ResponseResult {
     },
     JobEnvRefreshing {
         env: JobEnvStatus,
+    },
+    FeedList {
+        /// Advances whenever any feed's visible state changes.
+        revision: u64,
+        /// The request's `since_revision` is current; `feeds` is empty.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        unchanged: bool,
+        #[serde(default)]
+        feeds: Vec<FeedSummary>,
+    },
+    FeedDetail {
+        feed: FeedSummary,
+        /// The request's `since_revision` is current; `items` is empty.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        unchanged: bool,
+        #[serde(default)]
+        items: Vec<FeedItemInfo>,
+    },
+    FeedRefreshRequested {
+        job_id: String,
+        /// False when a refresh or action was already running, or the job is.
+        started: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
+    FeedActionRequested {
+        job_id: String,
+        item_id: String,
+        key: String,
+        /// False when the feed was busy.
+        started: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
     },
     ConfigReload {
         status: crate::config::ConfigReloadStatus,

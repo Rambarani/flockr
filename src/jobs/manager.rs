@@ -113,6 +113,16 @@ pub(crate) struct Notice {
     pub(crate) failed: bool,
 }
 
+/// A job that has a feed, for the feed API.
+#[derive(Debug, Clone)]
+pub(crate) struct FeedJobRef {
+    pub(crate) job_id: String,
+    pub(crate) job_title: String,
+    pub(crate) feed_title: Option<String>,
+    pub(crate) enabled: bool,
+    pub(crate) running: bool,
+}
+
 pub(crate) struct FinishedRun {
     pub(crate) job_id: String,
     pub(crate) title: String,
@@ -700,11 +710,33 @@ impl JobsManager {
         }
     }
 
+    /// The definition of a valid job.
+    pub(crate) fn job_def(&self, job_id: &str) -> Option<&JobDef> {
+        self.entries.get(job_id).and_then(Entry::def)
+    }
+
+    /// The valid jobs that declare a feed, in id order.
+    pub(crate) fn feed_jobs(&self) -> Vec<FeedJobRef> {
+        self.entries
+            .iter()
+            .filter_map(|(id, entry)| {
+                let def = entry.def()?;
+                let feed = def.feed.as_ref()?;
+                Some(FeedJobRef {
+                    job_id: id.clone(),
+                    job_title: def.title.clone(),
+                    feed_title: feed.title.clone(),
+                    enabled: entry.enabled(),
+                    running: entry.running.is_some(),
+                })
+            })
+            .collect()
+    }
+
     pub(crate) fn has_job(&self, job_id: &str) -> bool {
         self.entries.contains_key(job_id)
     }
 
-    #[cfg(test)]
     pub(crate) fn is_running(&self, job_id: &str) -> bool {
         self.entries
             .get(job_id)

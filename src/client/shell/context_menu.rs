@@ -4,7 +4,14 @@ impl ClientContextMenuOverlay {
     pub(super) fn items(&self) -> Vec<ClientContextMenuItem> {
         use ClientContextMenuAction as Action;
 
-        let item = |label, action| ClientContextMenuItem { label, action };
+        let item = |label: &'static str, action| ClientContextMenuItem {
+            label: label.into(),
+            action,
+        };
+        let item_for = |label: String, action| ClientContextMenuItem {
+            label: label.into(),
+            action,
+        };
         match &self.target {
             ClientContextMenuTarget::Workspace { is_git: false, .. } => {
                 vec![item("Rename", Action::Rename), item("Close", Action::Close)]
@@ -66,6 +73,33 @@ impl ClientContextMenuOverlay {
                     ),
                     item("Collapse all", Action::CollapseAgentGroups),
                     item("Expand all", Action::ExpandAgentGroups),
+                ]);
+                items
+            }
+            ClientContextMenuTarget::Feed {
+                item: feed_item,
+                collapsed,
+                ..
+            } => {
+                let mut items = Vec::new();
+                if let Some(feed_item) = feed_item {
+                    if feed_item.url.is_some() {
+                        items.push(item("Open link", Action::FeedOpenUrl));
+                    }
+                    for (index, (key, title)) in feed_item.actions.iter().enumerate() {
+                        items.push(item_for(
+                            format!("{title} ({key})"),
+                            Action::FeedRunAction(index),
+                        ));
+                    }
+                }
+                items.extend([
+                    item("Refresh feed", Action::FeedRefresh),
+                    item("Open feed", Action::FeedOpenOverlay),
+                    item(
+                        if *collapsed { "Expand" } else { "Collapse" },
+                        Action::FeedToggle,
+                    ),
                 ]);
                 items
             }
@@ -266,6 +300,9 @@ impl ClientShellState {
                 }
                 _ => {}
             },
+            ClientContextMenuTarget::Feed { job_id, item, .. } => {
+                self.activate_feed_context_action(job_id, item, action, outcome)
+            }
             ClientContextMenuTarget::Agent { pane_id, .. } => match action {
                 ClientContextMenuAction::RenameAgent => {
                     self.open_rename_agent_overlay(&pane_id);

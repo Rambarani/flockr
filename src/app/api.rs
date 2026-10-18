@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 mod agent_view;
 mod agents;
 mod env;
+mod feed;
 mod integrations;
 mod jobs;
 mod layouts;
@@ -197,6 +198,11 @@ impl App {
 
         if let AppEvent::JobRunFinished(result) = ev {
             self.finish_job_run(*result);
+            return Vec::new();
+        }
+
+        if let AppEvent::FeedTaskFinished(result) = ev {
+            self.finish_feed_task(*result);
             return Vec::new();
         }
 
@@ -1286,6 +1292,12 @@ impl App {
             }
             Method::JobLogs(params) => return self.handle_job_logs(request.id, params),
             Method::JobEnvRefresh(_) => return self.handle_job_env_refresh(request.id),
+            Method::FeedList(params) => return self.handle_feed_list(request.id, params),
+            Method::FeedGet(params) => return self.handle_feed_get(request.id, params),
+            Method::FeedRefresh(params) => return self.handle_feed_refresh(request.id, params),
+            Method::FeedRunAction(params) => {
+                return self.handle_feed_run_action(request.id, params);
+            }
             _ => {
                 return responses::encode_error(
                     request.id,

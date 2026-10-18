@@ -553,6 +553,10 @@ pub(super) fn render_expanded(
             }),
         );
     }
+    let feed_plan = state
+        .feeds
+        .and_then(|feeds| super::feed_sidebar::plan(feeds, detail_area.height));
+    let (detail_area, feed_area) = super::sidebar::split_feed_area(detail_area, feed_plan.as_ref());
     super::endpoint_agents::render_expanded(
         buffer,
         detail_area,
@@ -567,6 +571,9 @@ pub(super) fn render_expanded(
         state.agent_scroll,
         hits,
     );
+    if let Some(plan) = &feed_plan {
+        super::feed_sidebar::render(buffer, feed_area, plan, config, &mut hits.feed);
+    }
     hits.sidebar_toggle = Rect::new(
         area.right().saturating_sub(2),
         area.bottom().saturating_sub(1),

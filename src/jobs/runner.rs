@@ -29,6 +29,8 @@ pub(crate) struct ExecSpec {
     pub(crate) env_clear: bool,
     pub(crate) env: Vec<(String, String)>,
     pub(crate) terminate_grace: Duration,
+    /// Bytes of stdout kept; a feed needs far more than a job's log tail.
+    pub(crate) stdout_limit: usize,
 }
 
 pub(crate) struct ExecResult {
@@ -64,8 +66,12 @@ struct Stream {
     done: Arc<AtomicBool>,
 }
 
-fn spawn_reader(name: &str, mut source: impl Read + Send + 'static) -> std::io::Result<Stream> {
-    let tail = Arc::new(Mutex::new(TailBuffer::new(OUTPUT_TAIL_BYTES)));
+fn spawn_reader(
+    name: &str,
+    mut source: impl Read + Send + 'static,
+    limit: usize,
+) -> std::io::Result<Stream> {
+    let tail = Arc::new(Mutex::new(TailBuffer::new(limit)));
     let done = Arc::new(AtomicBool::new(false));
     let worker_tail = Arc::clone(&tail);
     let worker_done = Arc::clone(&done);
@@ -123,11 +129,11 @@ pub(crate) fn execute(spec: &ExecSpec) -> ExecResult {
     let stdout = child
         .stdout
         .take()
-        .map(|pipe| spawn_reader("flockr-job-stdout", pipe));
+        .map(|pipe| spawn_reader("flockr-job-stdout", pipe, spec.stdout_limit));
     let stderr = child
         .stderr
         .take()
-        .map(|pipe| spawn_reader("flockr-job-stderr", pipe));
+        .map(|pipe| spawn_reader("flockr-job-stderr", pipe, OUTPUT_TAIL_BYTES));
     let (stdout, stderr) = match (stdout.transpose(), stderr.transpose()) {
         (Ok(stdout), Ok(stderr)) => (stdout, stderr),
         (Err(err), _) | (_, Err(err)) => {
@@ -288,6 +294,7 @@ pub(crate) fn run_plan(plan: &RunPlan, cache: &LoginEnvCache) -> JobRunResult {
                 env_clear: clear,
                 env: vars,
                 terminate_grace: TERMINATE_GRACE,
+                stdout_limit: OUTPUT_TAIL_BYTES,
             });
             record(result, Some(note))
         }
@@ -325,6 +332,7 @@ mod tests {
             env_clear: false,
             env: Vec::new(),
             terminate_grace: Duration::from_millis(300),
+            stdout_limit: OUTPUT_TAIL_BYTES,
         }
     }
 

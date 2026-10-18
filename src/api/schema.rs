@@ -4,6 +4,7 @@ pub mod agents;
 pub mod commands;
 pub mod common;
 pub mod events;
+pub mod feed;
 pub mod integrations;
 pub mod jobs;
 pub mod panes;
@@ -19,6 +20,7 @@ pub use agents::*;
 pub use commands::*;
 pub use common::*;
 pub use events::*;
+pub use feed::*;
 pub use integrations::*;
 pub use jobs::*;
 pub use panes::*;
@@ -263,6 +265,14 @@ pub enum Method {
     JobLogs(JobLogsParams),
     #[serde(rename = "job.env_refresh")]
     JobEnvRefresh(EmptyParams),
+    #[serde(rename = "feed.list")]
+    FeedList(FeedListParams),
+    #[serde(rename = "feed.get")]
+    FeedGet(FeedGetParams),
+    #[serde(rename = "feed.refresh")]
+    FeedRefresh(FeedTarget),
+    #[serde(rename = "feed.run_action")]
+    FeedRunAction(FeedRunActionParams),
 }
 
 #[cfg(test)]

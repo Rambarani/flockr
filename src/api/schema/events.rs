@@ -85,6 +85,8 @@ pub enum Subscription {
     LayoutUpdated {},
     #[serde(rename = "job.run_finished")]
     JobRunFinished {},
+    #[serde(rename = "feed.updated")]
+    FeedUpdated {},
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -222,6 +224,7 @@ pub enum EventKind {
     PaneAgentStatusChanged,
     LayoutUpdated,
     JobRunFinished,
+    FeedUpdated,
 }
 
 impl EventKind {
@@ -254,6 +257,7 @@ impl EventKind {
             EventKind::PaneAgentStatusChanged => "pane.agent_status_changed",
             EventKind::LayoutUpdated => "layout.updated",
             EventKind::JobRunFinished => "job.run_finished",
+            EventKind::FeedUpdated => "feed.updated",
         }
     }
 }
@@ -287,6 +291,7 @@ pub const KNOWN_EVENT_KINDS: &[EventKind] = &[
     EventKind::PaneAgentStatusChanged,
     EventKind::LayoutUpdated,
     EventKind::JobRunFinished,
+    EventKind::FeedUpdated,
 ];
 
 pub const PLUGIN_HOOK_EVENT_KINDS: &[EventKind] = &[
@@ -563,5 +568,14 @@ pub enum EventData {
         job_id: String,
         title: String,
         run: JobRunInfo,
+    },
+    FeedUpdated {
+        job_id: String,
+        title: String,
+        revision: u64,
+        count: u32,
+        unread: u32,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        stale: bool,
     },
 }

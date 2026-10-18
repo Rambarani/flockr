@@ -25,6 +25,7 @@ pub(crate) struct ClientShellConfig {
     pub(super) agents: crate::config::AgentsSidebarConfig,
     pub(super) agent_panel_sort: crate::config::AgentPanelSortConfig,
     pub(super) group_agents_by_workspace: bool,
+    pub(super) feeds: crate::config::FeedsSidebarConfig,
     pub(super) status_indicators: crate::config::StatusIndicatorStyle,
     pub(super) sound_enabled: bool,
     pub(super) sound: crate::config::SoundConfig,
@@ -147,6 +148,8 @@ pub(super) struct ShellHitMap {
     pub(super) preview: super::agent_preview::PreviewHits,
     pub(super) dashboard: super::agent_dashboard::DashboardHits,
     pub(super) jobs: super::jobs_overlay::JobsHits,
+    pub(super) feed: super::feed_sidebar::FeedSidebarHits,
+    pub(super) feed_overlay: super::feed_overlay::FeedOverlayHits,
 }
 
 #[derive(Clone)]
@@ -309,6 +312,7 @@ pub(super) enum ClientShellOverlayKind {
     Palette,
     Dashboard,
     Jobs,
+    Feed,
 }
 
 #[derive(Debug)]
@@ -554,6 +558,21 @@ pub(super) enum ClientContextMenuAction {
     Zoom,
     ToggleRightClickPassthrough,
     ClosePane,
+    FeedOpenUrl,
+    /// Run the item's action at this index.
+    FeedRunAction(usize),
+    FeedRefresh,
+    FeedToggle,
+    FeedOpenOverlay,
+}
+
+/// The item a feed context menu was opened on.
+#[derive(Debug, Clone)]
+pub(super) struct ClientFeedMenuItem {
+    pub(super) item_id: String,
+    pub(super) url: Option<String>,
+    /// Key and title of each action, in the order the menu lists them.
+    pub(super) actions: Vec<(String, String)>,
 }
 
 #[derive(Debug)]
@@ -588,6 +607,12 @@ pub(super) enum ClientContextMenuTarget {
         /// Only the active endpoint can rename its workspaces.
         can_rename: bool,
     },
+    /// A feed section header, or one of its item rows.
+    Feed {
+        job_id: String,
+        item: Option<ClientFeedMenuItem>,
+        collapsed: bool,
+    },
 }
 
 #[derive(Debug)]
@@ -599,7 +624,7 @@ pub(super) struct ClientContextMenuOverlay {
 }
 
 pub(super) struct ClientContextMenuItem {
-    pub(super) label: &'static str,
+    pub(super) label: std::borrow::Cow<'static, str>,
     pub(super) action: ClientContextMenuAction,
 }
 
@@ -637,6 +662,7 @@ pub(super) enum ClientShellOverlay {
     Palette(super::palette::ClientPaletteOverlay),
     Dashboard(super::agent_dashboard::ClientDashboardOverlay),
     Jobs(super::jobs_overlay::ClientJobsOverlay),
+    Feed(super::feed_overlay::ClientFeedOverlay),
 }
 
 impl ClientShellOverlay {
@@ -658,6 +684,7 @@ impl ClientShellOverlay {
             Self::Palette(_) => ClientShellOverlayKind::Palette,
             Self::Dashboard(_) => ClientShellOverlayKind::Dashboard,
             Self::Jobs(_) => ClientShellOverlayKind::Jobs,
+            Self::Feed(_) => ClientShellOverlayKind::Feed,
         }
     }
 }
@@ -719,6 +746,10 @@ pub(super) enum PendingEndpointKind {
     /// Quiet `job.*` request for the Jobs overlay or a palette "run job" entry.
     Jobs {
         request: super::jobs_overlay::JobsRequest,
+    },
+    /// Quiet `feed.*` request for the sidebar section, the Feed overlay or the palette.
+    Feed {
+        request: super::feed_state::FeedRequest,
     },
     CopySearch {
         pane_id: String,
@@ -1044,6 +1075,7 @@ pub(crate) struct ClientShellState {
     pub(super) agent_preview: super::agent_preview::AgentPreviewState,
     pub(super) dashboard_sort: super::agent_dashboard::DashboardSort,
     pub(super) jobs: super::jobs_overlay::JobsClientState,
+    pub(super) feeds: super::feed_state::FeedClientState,
 }
 
 pub(super) fn product_announcement_state(
@@ -1219,6 +1251,7 @@ impl ClientShellState {
             agent_preview: Default::default(),
             dashboard_sort: Default::default(),
             jobs: Default::default(),
+            feeds: Default::default(),
         }
     }
 

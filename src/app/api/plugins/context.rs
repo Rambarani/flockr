@@ -140,7 +140,9 @@ impl App {
                     context
                 }),
             // Jobs are global, not tied to a workspace, and are not plugin hook events.
-            EventData::JobRunFinished { .. } => empty_plugin_context(correlation_id),
+            EventData::JobRunFinished { .. } | EventData::FeedUpdated { .. } => {
+                empty_plugin_context(correlation_id)
+            }
             EventData::PaneCreated { pane } | EventData::PaneUpdated { pane } => {
                 self.plugin_context_for_pane_info(pane, correlation_id)
             }

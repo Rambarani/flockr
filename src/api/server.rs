@@ -711,6 +711,10 @@ pub(crate) fn api_method_name(method: &Method) -> &'static str {
         Method::JobSetEnabled(_) => "job.set_enabled",
         Method::JobLogs(_) => "job.logs",
         Method::JobEnvRefresh(_) => "job.env_refresh",
+        Method::FeedList(_) => "feed.list",
+        Method::FeedGet(_) => "feed.get",
+        Method::FeedRefresh(_) => "feed.refresh",
+        Method::FeedRunAction(_) => "feed.run_action",
     }
 }
 

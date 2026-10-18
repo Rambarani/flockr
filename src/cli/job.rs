@@ -38,7 +38,7 @@ pub(super) fn run_job_command(args: &[String]) -> std::io::Result<i32> {
 }
 
 /// Send a request. On an error response, print it and return the exit code.
-fn call(id: &str, method: Method) -> std::io::Result<Result<ResponseResult, i32>> {
+pub(super) fn call(id: &str, method: Method) -> std::io::Result<Result<ResponseResult, i32>> {
     let response = super::send_request(&Request {
         id: id.into(),
         method,

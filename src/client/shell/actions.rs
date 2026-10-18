@@ -48,6 +48,11 @@ impl ClientShellState {
                     outcome.repaint = true;
                     return;
                 }
+                if action == crate::input::KeybindAction::AgentDashboard {
+                    self.open_agent_dashboard();
+                    outcome.repaint = true;
+                    return;
+                }
                 if action == crate::input::KeybindAction::PreviewAgent {
                     self.preview_agent_for_focused_pane(outcome);
                     return;

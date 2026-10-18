@@ -746,6 +746,12 @@
           "description": "Rename the agent in the focused pane. An empty name clears the alias."
         },
         {
+          "key": "keys.agent_dashboard",
+          "type": "keybinding",
+          "default": "\"prefix+d\"",
+          "description": "Open the agent dashboard: a full-screen table of every agent across machines with state, time in state and last output line."
+        },
+        {
           "key": "keys.preview_agent",
           "type": "keybinding",
           "default": "\"prefix+i\"",

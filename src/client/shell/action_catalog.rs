@@ -51,6 +51,12 @@ pub(super) fn action_specs(keybinds: &Keybinds) -> Vec<ActionSpec<'_>> {
     [
         (A::Help, "keybinds", Session, &k.help),
         (A::Settings, "settings", Session, &k.settings),
+        (
+            A::AgentDashboard,
+            "agent dashboard",
+            Agents,
+            &k.agent_dashboard,
+        ),
         (A::PreviewAgent, "preview agent", Agents, &k.preview_agent),
         (
             A::CommandPalette,

@@ -694,7 +694,7 @@ impl ClientShellState {
             self.navigate_workspace_id = None;
             outcome.repaint = true;
         }
-        if self.route_palette_mouse(mouse, outcome) {
+        if self.route_palette_mouse(mouse, outcome) || self.route_dashboard_mouse(mouse, outcome) {
             return;
         }
         if matches!(self.overlay, Some(ClientShellOverlay::Onboarding)) {

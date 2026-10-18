@@ -145,6 +145,7 @@ pub(super) struct ShellHitMap {
     pub(super) release_notes_max_scroll: usize,
     pub(super) palette: super::palette::PaletteHits,
     pub(super) preview: super::agent_preview::PreviewHits,
+    pub(super) dashboard: super::agent_dashboard::DashboardHits,
 }
 
 #[derive(Clone)]
@@ -305,6 +306,7 @@ pub(super) enum ClientShellOverlayKind {
     GlobalMenu,
     Settings,
     Palette,
+    Dashboard,
 }
 
 #[derive(Debug)]
@@ -631,6 +633,7 @@ pub(super) enum ClientShellOverlay {
     GlobalMenu(ClientGlobalMenuOverlay),
     Settings(ClientSettingsOverlay),
     Palette(super::palette::ClientPaletteOverlay),
+    Dashboard(super::agent_dashboard::ClientDashboardOverlay),
 }
 
 impl ClientShellOverlay {
@@ -650,6 +653,7 @@ impl ClientShellOverlay {
             Self::GlobalMenu(_) => ClientShellOverlayKind::GlobalMenu,
             Self::Settings(_) => ClientShellOverlayKind::Settings,
             Self::Palette(_) => ClientShellOverlayKind::Palette,
+            Self::Dashboard(_) => ClientShellOverlayKind::Dashboard,
         }
     }
 }
@@ -1030,6 +1034,7 @@ pub(crate) struct ClientShellState {
     pub(super) palette_recent: Vec<String>,
     pub(super) agent_clock: super::agent_activity::AgentClock,
     pub(super) agent_preview: super::agent_preview::AgentPreviewState,
+    pub(super) dashboard_sort: super::agent_dashboard::DashboardSort,
 }
 
 pub(super) fn product_announcement_state(
@@ -1203,6 +1208,7 @@ impl ClientShellState {
             palette_recent: preferences.palette_recent,
             agent_clock: Default::default(),
             agent_preview: Default::default(),
+            dashboard_sort: Default::default(),
         }
     }
 

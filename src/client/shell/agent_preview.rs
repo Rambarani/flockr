@@ -32,6 +32,7 @@ const CHROME_ROWS: u16 = 5;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum PaneReadPurpose {
     Preview,
+    Dashboard,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -493,6 +494,7 @@ impl ClientShellState {
     ) -> (bool, Vec<ClientShellAction>) {
         match purpose {
             PaneReadPurpose::Preview => self.complete_preview_read(pane_id, result),
+            PaneReadPurpose::Dashboard => self.complete_dashboard_read(pane_id, result),
         }
     }
 

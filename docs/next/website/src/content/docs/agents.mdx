@@ -152,6 +152,25 @@ hover_delay_ms = 600
 lines = 15
 ```
 
+## Agent dashboard
+
+Press `prefix+d` (`keys.agent_dashboard`), choose **dashboard** in the global menu, or run **agent dashboard** from the command palette for a full-screen table of every agent on every connected machine. Columns are the state marker, agent name or alias, machine and workspace, tab and pane, state, time in state, and the last output line. Narrow terminals drop the least important columns first.
+
+| Key | Action |
+| --- | --- |
+| `up` / `down`, `j` / `k`, `ctrl+n` / `ctrl+p`, `g` / `G` | Move the selection |
+| `s` | Cycle the sort: blocked first, longest idle, workspace, name |
+| `/` | Filter by typing; every word must match the name, machine, workspace, tab, pane, state or last line. `esc` leaves the filter, `ctrl+u` clears it |
+| `enter` | Jump to the agent's pane and close (on another machine this switches to it) |
+| `r` | Rename the agent, for agents on the machine you are using |
+| `esc` | Close |
+
+Mouse works too: click a row to jump, click the header to cycle the sort, use the wheel to move, click outside to close. The selection follows the agent, not the row, so live re-sorting never moves it onto a different agent.
+
+The last output line of a pane in the visible tab comes from the frame the client already has. Other panes on the machine you are using are read one at a time with the existing `pane.read` method while the dashboard is open, each at most every 3 seconds. Agents on other machines, and servers that do not advertise `pane.read`, show the agent's reported title in italics instead. Times in state follow the same rules as the agent preview: they are measured by the client and shown with a leading `≥` when the state was already running when it was first seen.
+
+There is no activity sparkline column. The snapshot carries a state change counter but no timestamps or output-rate series, and per-pane content revisions exist only for panes in the visible tab, so a chart would be invented rather than measured.
+
 ## Custom status labels
 
 Integrations report lifecycle state as semantic state only. Add display customization separately with pane metadata tokens.

@@ -419,8 +419,13 @@ fn global_menu_opens_from_sidebar_and_routes_client_actions() {
     assert!(help.actions.is_empty());
     assert!(matches!(state.overlay, Some(ClientShellOverlay::Help(_))));
 
+    // Detach stays the last entry however many entries precede it.
+    let detach_index =
+        crate::client::shell::global_menu::global_menu_items(state.snapshot.as_deref().unwrap())
+            .len()
+            - 1;
     state.overlay = Some(ClientShellOverlay::GlobalMenu(ClientGlobalMenuOverlay {
-        highlighted: 3,
+        highlighted: detach_index,
     }));
     let detach = state.handle_input_bytes(b"\r");
     assert!(detach.detach);

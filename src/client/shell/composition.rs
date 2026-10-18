@@ -689,6 +689,19 @@ impl ClientShellState {
                     }
                 });
                 rendered.and_then(|rendered| rendered.cursor)
+            } else if matches!(overlay, ClientShellOverlay::Dashboard(_)) {
+                let rendered = self.render_dashboard_overlay(&mut composed);
+                self.hits.dashboard = rendered.as_ref().map_or_else(Default::default, |rendered| {
+                    occlusion.cover(rendered.area);
+                    super::agent_dashboard::DashboardHits {
+                        popup: rendered.area,
+                        header: rendered.header,
+                        rows: rendered.rows.clone(),
+                        viewport_rows: rendered.viewport_rows,
+                        offset: rendered.offset,
+                    }
+                });
+                rendered.and_then(|rendered| rendered.cursor)
             } else if let ClientShellOverlay::GlobalMenu(menu) = overlay {
                 let rendered = render::render_global_menu(
                     &mut composed,

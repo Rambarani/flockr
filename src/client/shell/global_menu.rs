@@ -47,6 +47,10 @@ pub(super) fn global_menu_items(
         ));
     }
     items.push((
+        "dashboard",
+        ClientGlobalMenuAction::Binding(crate::input::KeybindAction::AgentDashboard),
+    ));
+    items.push((
         "detach",
         ClientGlobalMenuAction::Binding(crate::input::KeybindAction::Detach),
     ));

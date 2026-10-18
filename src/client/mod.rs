@@ -2323,6 +2323,7 @@ async fn run_client_loop(
                         }
                         let (effects, notification_repaint) = shell.tick_notifications(now);
                         outcome.repaint |= shell.tick_agent_preview(now, &mut outcome);
+                        outcome.repaint |= shell.tick_agent_dashboard(now, &mut outcome);
                         outcome.repaint |= notification_repaint
                             | shell.tick_copy_feedback(now)
                             | shell.tick_workspace_highlight(now)

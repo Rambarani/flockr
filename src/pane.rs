@@ -4472,6 +4472,36 @@ mod tests {
         }
     }
 
+    #[test]
+    fn pane_launch_env_mirrors_runtime_contract_to_legacy_herdr_names() {
+        let mut cmd = CommandBuilder::new("shell");
+        // An identity inherited from an upstream herdr pane must not leak.
+        cmd.env("HERDR_TAB_ID", "stale-herdr-tab");
+        cmd.env_remove("FLOCKR_TAB_ID");
+        apply_pane_launch_env(
+            &mut cmd,
+            &PaneLaunchEnv::default().with_identity("w1".into(), "w1:t1".into(), "w1:p1".into()),
+        );
+
+        for (primary, legacy) in [
+            ("FLOCKR_ENV", "HERDR_ENV"),
+            ("FLOCKR_PANE_ID", "HERDR_PANE_ID"),
+            ("FLOCKR_WORKSPACE_ID", "HERDR_WORKSPACE_ID"),
+            ("FLOCKR_TAB_ID", "HERDR_TAB_ID"),
+            ("FLOCKR_SOCKET_PATH", "HERDR_SOCKET_PATH"),
+        ] {
+            let value = cmd.get_env(primary).expect(primary);
+            assert_eq!(cmd.get_env(legacy), Some(value), "{legacy}");
+        }
+        assert_eq!(cmd.get_env("HERDR_TAB_ID"), Some(OsStr::new("w1:t1")));
+        assert!(cmd.get_env("HERDR_BIN_PATH").is_some());
+
+        let mut omit = CommandBuilder::new("shell");
+        omit.env("HERDR_PANE_ID", "stale-herdr-pane");
+        apply_pane_launch_env(&mut omit, &PaneLaunchEnv::default().without_pane_identity());
+        assert_eq!(omit.get_env("HERDR_PANE_ID"), None);
+    }
+
     #[tokio::test]
     async fn cwd_returns_accepted_report_without_rechecking_filesystem() {
         let stamp = std::time::SystemTime::now()

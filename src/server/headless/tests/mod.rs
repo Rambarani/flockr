@@ -7798,6 +7798,48 @@ fn completion_guard_api_report(server: &mut HeadlessServer, method: api::schema:
 }
 
 #[test]
+fn api_report_agent_treats_legacy_herdr_source_as_flockr_alias() {
+    let (writer, _control_rx, _render_rx) = test_client_writer();
+    let (mut server, pane_id) = completion_guard_server(writer);
+    let public_pane_id = server.app.public_pane_id(0, pane_id).unwrap();
+    let terminal_id = server.app.state.workspaces[0].tabs[0].panes[&pane_id]
+        .attached_terminal_id
+        .clone();
+    let report = |source: &str, resume_argv: Vec<&str>| {
+        api::schema::Method::PaneReportAgent(api::schema::PaneReportAgentParams {
+            pane_id: public_pane_id.clone(),
+            source: source.into(),
+            agent: "prime-agent".into(),
+            state: api::schema::PaneAgentState::Idle,
+            message: None,
+            seq: Some(1),
+            agent_session_id: None,
+            agent_session_path: None,
+            resume_argv: Some(resume_argv.into_iter().map(String::from).collect()),
+        })
+    };
+
+    completion_guard_api_report(
+        &mut server,
+        report("herdr:prime-agent", vec!["prime-agent", "a"]),
+    );
+    // Same sequence number under the canonical spelling is a duplicate of the
+    // legacy report, so it must not replace the stored resume command.
+    completion_guard_api_report(
+        &mut server,
+        report("flockr:prime-agent", vec!["prime-agent", "b"]),
+    );
+
+    assert_eq!(
+        server.app.state.terminals[&terminal_id]
+            .reported_resume()
+            .unwrap()
+            .argv,
+        vec!["prime-agent", "a"]
+    );
+}
+
+#[test]
 fn api_report_agent_stores_valid_resume_argv_and_rejects_invalid() {
     let (writer, _control_rx, _render_rx) = test_client_writer();
     let (mut server, pane_id) = completion_guard_server(writer);

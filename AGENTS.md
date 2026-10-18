@@ -15,7 +15,7 @@ These instructions are layered.
   authenticated account has write access to that repository. If any condition
   cannot be verified, skip maintainer workflow and follow the external
   contributor guardrail instead.
-- Local Can machine workflow applies only on Can's own workstation or Windows
+- Local Ram machine workflow applies only on Ram's own workstation or Windows
   VM setup, for example when `/home/can/Projects/flockr`, `FLOCKR_ENV=1`, or the
   `windows-wirt` SSH alias exists. If those facts are not true, skip local
   machine workflow.
@@ -115,19 +115,19 @@ Do all code edits, tests, and validation inside the task worktree.
 
 Commit on the task branch in that worktree.
 
-For substantive feature and bug-fix work, default to opening a pull request instead of pushing `master` directly. Small, low-risk changes and documentation-only updates can use a lighter workflow when Can prefers it.
+For substantive feature and bug-fix work, default to opening a pull request instead of pushing `master` directly. Small, low-risk changes and documentation-only updates can use a lighter workflow when Ram prefers it.
 
 Immediately before opening a pull request, fetch `origin` and make sure the task branch is based on the current `origin/master`; rebase it when behind, then rerun relevant validation before pushing. If `master` advances while the pull request is under review and GitHub marks it behind, update the branch and repeat checks and bot review on the new head.
 
 After opening or updating a pull request, monitor all checks to completion with `gh pr checks --watch` or an equivalent command. Treat Greptile and CodeRabbit as part of CI: wait for both to review the latest pushed commit, not only for the build and test jobs to pass. Evaluate every actionable finding. Fix findings you agree with and reply with the fix; reply inline with a concise technical reason when you disagree. After any fix, wait for CI and both review bots again on the new head.
 
-When the current pull request head is green and both bot reviews are complete, report that it is ready and stop. Never merge a pull request; Can performs the final merge.
+When the current pull request head is green and both bot reviews are complete, report that it is ready and stop. Never merge a pull request; Ram performs the final merge.
 
 If the current session is already inside an isolated task worktree, keep using it. Do not create nested worktrees.
 
 Before committing, propose the commit message and get alignment.
 
-After Can confirms the change is integrated, update the shared checkout, remove the task worktree, and delete the task branch locally and remotely.
+After Ram confirms the change is integrated, update the shared checkout, remove the task worktree, and delete the task branch locally and remotely.
 
 ## Testing
 
@@ -138,7 +138,7 @@ just test               # cargo nextest + maintenance script tests
 just check              # formatting check + cargo nextest + maintenance script tests
 ```
 
-Run `just check` before committing unless Can explicitly accepts narrower validation. Do not bypass failing checks; fix the failure or explain exactly why a narrower check is enough.
+Run `just check` before committing unless Ram explicitly accepts narrower validation. Do not bypass failing checks; fix the failure or explain exactly why a narrower check is enough.
 
 Windows MSVC cross-compilation from Unix requires SDK/CRT headers and libraries.
 Install `xwin` with `cargo install xwin --locked`, then run
@@ -165,10 +165,10 @@ server:
 env -u FLOCKR_SOCKET_PATH -u FLOCKR_CLIENT_SOCKET_PATH cargo run -- <command>
 ```
 
-## Local Can Machine Workflow
+## Local Ram Machine Workflow
 
-This section applies only on Can's workstation or Windows VM setup when the
-acting GitHub account is `ogulcancelik`. Other verified maintainers skip this
+This section applies only on Ram's workstation or Windows VM setup when the
+acting GitHub account is `Rambarani`. Other verified maintainers skip this
 local-machine section but continue following maintainer workflow. Everyone else
 follows the external contributor guardrail.
 
@@ -191,7 +191,7 @@ that build the vendored libghostty-vt.
 
 After validation, leave `C:\work\repo` clean. Remove temporary files and delete
 `C:\work\repo\target` when disk space is tight, but keep the shared Cargo and
-Rustup caches. Unless Can explicitly asks to keep the patched tree for more
+Rustup caches. Unless Ram explicitly asks to keep the patched tree for more
 manual testing, reset `C:\work\repo` back to a clean checkout before finishing.
 
 ## Agent Detection Updates

@@ -20,7 +20,7 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_METADATA = PROJECT_ROOT / "packaging" / "windows" / "conpty.json"
-MARKER_PATH = PurePosixPath("conpty/flockr-conpty.json")
+MARKER_PATH = PurePosixPath("conpty/herdr-conpty.json")
 DOWNLOAD_TIMEOUT_SECONDS = 60
 
 

@@ -392,7 +392,7 @@ function Test-FlockrReleaseComplete {
         -not (Test-RegularDirectory -Path (Join-Path $conptyRoot "arm64"))) {
         return $false
     }
-    $markerPath = Join-Path $conptyRoot "flockr-conpty.json"
+    $markerPath = Join-Path $conptyRoot "herdr-conpty.json"
     $required = @(
         "conpty/conpty.dll",
         "conpty/x64/OpenConsole.exe",
@@ -444,7 +444,7 @@ function Test-FlockrReleaseComplete {
         $actualBundleFiles = @($bundleEntries | Where-Object { -not $_.PSIsContainer } | ForEach-Object {
             $_.FullName.Substring($releaseRoot.Length + 1).Replace('\', '/')
         })
-        $expectedBundleFiles = @($expectedConptyFiles) + "conpty/flockr-conpty.json"
+        $expectedBundleFiles = @($expectedConptyFiles) + "conpty/herdr-conpty.json"
         if (@(Compare-Object $expectedBundleFiles $actualBundleFiles).Count -ne 0) {
             return $false
         }

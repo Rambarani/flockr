@@ -17,6 +17,7 @@ include = [
     "distribution/install.ps1",
     "README.md",
     "LICENSE",
+    "NOTICE",
     "Cargo.toml",
 ]
 

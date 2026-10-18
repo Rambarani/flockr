@@ -195,7 +195,7 @@ class WindowsConptyPackageTests(unittest.TestCase):
             package.install_local_bundle(metadata_path, "x86_64", nupkg, local_exe)
             self.assertEqual((local / "conpty" / "conpty.dll").read_bytes(), dll)
             self.assertEqual(
-                (local / "conpty" / "flockr-conpty.json").read_bytes(),
+                (local / "conpty" / "herdr-conpty.json").read_bytes(),
                 package.marker_data(package.load_metadata(metadata_path), "x86_64"),
             )
             for notice in notice_paths:

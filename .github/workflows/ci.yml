@@ -292,7 +292,7 @@ jobs:
           $exe = Join-Path $PWD "target\x86_64-pc-windows-msvc\debug\flockr.exe"
           $bundle = Join-Path (Split-Path -Parent $exe) "conpty"
           New-Item -ItemType Directory -Force -Path (Join-Path $bundle "x64"), (Join-Path $bundle "arm64") | Out-Null
-          Set-Content -LiteralPath (Join-Path $bundle "flockr-conpty.json") -Value "{}" -Encoding ascii
+          Set-Content -LiteralPath (Join-Path $bundle "herdr-conpty.json") -Value "{}" -Encoding ascii
           [System.IO.File]::WriteAllBytes((Join-Path $bundle "conpty.dll"), [byte[]](0x48, 0x45, 0x52, 0x44, 0x52))
           [System.IO.File]::WriteAllBytes((Join-Path $bundle "x64\OpenConsole.exe"), [byte[]](0x48, 0x45, 0x52, 0x44, 0x52))
           [System.IO.File]::WriteAllBytes((Join-Path $bundle "arm64\OpenConsole.exe"), [byte[]](0x48, 0x45, 0x52, 0x44, 0x52))
@@ -312,12 +312,12 @@ jobs:
               throw "Flockr accepted a tampered app-local ConPTY bundle"
             }
 
-            $env:FLOCKR_WINDOWS_CONPTY = "system"
+            $env:HERDR_WINDOWS_CONPTY = "system"
             .\scripts\windows_smoke_conpty_path.ps1 `
               -ExePath $exe `
               -Session "ci-conpty-system-windows-2022-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
           } finally {
-            Remove-Item Env:FLOCKR_WINDOWS_CONPTY -ErrorAction SilentlyContinue
+            Remove-Item Env:HERDR_WINDOWS_CONPTY -ErrorAction SilentlyContinue
             Remove-Item -LiteralPath $bundle -Recurse -Force -ErrorAction SilentlyContinue
           }
 

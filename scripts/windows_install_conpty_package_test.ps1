@@ -270,7 +270,7 @@ try {
 
     $required = @(
         "flockr.exe",
-        "conpty\flockr-conpty.json",
+        "conpty\herdr-conpty.json",
         "conpty\conpty.dll",
         "conpty\x64\OpenConsole.exe",
         "conpty\arm64\OpenConsole.exe",

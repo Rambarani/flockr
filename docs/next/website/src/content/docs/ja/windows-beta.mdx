@@ -118,7 +118,7 @@ host_cursor = "native"
 
 Windows のターミナルは、修飾キー付きのキーをすべて同じ形で報告するわけではありません。Flockr は Windows Terminal と Windows 上の Alacritty でマウス報告と `ctrl+j` を保持します。ネイティブ Windows の入力経路では、物理キーの押下、リピート、解放、単独の Escape、`shift+enter` もデフォルトの ConPTY ペインまで保持されます。ただし修飾キーは、外側のターミナルが区別可能なキーイベントとして報告する必要があります。`shift+enter` が通常の Enter として報告された場合、Flockr が転送できるのも通常の Enter だけです。
 
-古い Windows 10 ビルドのシステム ConPTY は、Kimi や Pi などのエージェントが使用する Kitty キーボードプロトコルのシーケンスを失うため、Windows パッケージには Microsoft の最新のアプリローカル ConPTY ランタイムが含まれます。バンドル版ランタイムとの互換性問題を診断する場合に限り、Flockr を起動する前に `FLOCKR_WINDOWS_CONPTY=system` を設定してください。
+古い Windows 10 ビルドのシステム ConPTY は、Kimi や Pi などのエージェントが使用する Kitty キーボードプロトコルのシーケンスを失うため、Windows パッケージには Microsoft の最新のアプリローカル ConPTY ランタイムが含まれます。バンドル版ランタイムとの互換性問題を診断する場合に限り、Flockr を起動する前に `HERDR_WINDOWS_CONPTY=system` を設定してください。
 
 ## コピーと貼り付け
 

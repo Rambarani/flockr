@@ -18,13 +18,10 @@
   <a href="https://github.com/Rambarani/flockr/releases"><img src="https://img.shields.io/github/downloads/Rambarani/flockr/total?labelColor=333333&color=666666" alt="total GitHub release downloads" /></a>
   <a href="https://github.com/Rambarani/flockr/stargazers"><img src="https://img.shields.io/github/stars/Rambarani/flockr?labelColor=333333&color=666666&logo=github" alt="GitHub stars" /></a>
   <a href="https://github.com/Rambarani/flockr/releases/latest"><img src="https://img.shields.io/github/v/release/Rambarani/flockr?label=release&labelColor=333333&color=666666" alt="latest stable release" /></a>
-  <a href="https://formulae.brew.sh/formula/flockr"><img src="https://img.shields.io/homebrew/v/flockr?label=homebrew&labelColor=333333&color=666666" alt="Homebrew version" /></a>
-  <a href="https://x.com/Rambarani"><img src="https://img.shields.io/badge/follow-%40Rambarani-000000?logo=x&logoColor=white" alt="follow @Rambarani on X" /></a>
 </p>
 
 ---
 
-https://github.com/user-attachments/assets/043ec09f-4bdd-41d5-aee0-8fda6b83e267
 
 **the runtime your coding agents live on.**
 
@@ -45,7 +42,7 @@ https://github.com/user-attachments/assets/043ec09f-4bdd-41d5-aee0-8fda6b83e267
 curl -fsSL https://raw.githubusercontent.com/Rambarani/flockr/main/distribution/install.sh | sh
 ```
 
-or `brew install flockr` · `mise use -g flockr` · windows: `powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/Rambarani/flockr/main/distribution/install.ps1 | iex"` · [endpoint-protected Windows](https://github.com/Rambarani/flockr/blob/main/docs/next/website/src/content/docs/windows-beta.mdx) · [binaries](https://github.com/Rambarani/flockr/releases)
+or windows: `powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/Rambarani/flockr/main/distribution/install.ps1 | iex"` · [endpoint-protected Windows](https://github.com/Rambarani/flockr/blob/main/docs/next/website/src/content/docs/windows-beta.mdx) · [binaries](https://github.com/Rambarani/flockr/releases)
 
 then start it where the work lives:
 
@@ -61,9 +58,8 @@ everything lives at [github.com/Rambarani/flockr (docs)](https://github.com/Ramb
 
 ## thanks
 
-every past sponsor and backer is listed in [SPONSORS.md](./SPONSORS.md) — thank you 🐑
+every past sponsor and backer of upstream herdr is listed in [SPONSORS.md](./SPONSORS.md) — thank you 🐑
 
-enterprise / partnership: github.com/Rambarani/flockr/issues
 
 ## agent instructions
 
@@ -79,6 +75,10 @@ cargo build --release
 just test        # unit tests
 just check       # formatting, tests, and maintenance checks
 ```
+
+## origin
+
+flockr is a derivative of [herdr](https://github.com/herdrdev/herdr) (Apache-2.0), forked from v0.9.5. it renames the product and adds sidebar workspace grouping and configurable notification sounds; see [NOTICE](./NOTICE) for the full list of modifications. herdr configs and agent integrations keep working through a small compatibility layer (`src/legacy_herdr.rs`): panes also export the `HERDR_*` environment variables, `herdr:<id>` report sources are accepted, and the old `"herdr"` config values are deprecated aliases. `~/.config/herdr` is not read or migrated.
 
 ## license
 

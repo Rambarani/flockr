@@ -1,0 +1,35 @@
+flockr
+
+flockr is a derivative work of herdr, which is licensed under the Apache License,
+Version 2.0 (see LICENSE, unchanged from upstream):
+
+    herdr - terminal workspace manager for AI coding agents
+    https://github.com/herdrdev/herdr
+    Forked at v0.9.5 (commit 2ecf19a9, "release: v0.9.5")
+
+Upstream copyright and license notices in source files, vendored code (vendor/)
+and the CHANGELOG history are retained as they were. Third-party components
+under vendor/ and crates/ghostty-vt keep their own licenses.
+
+Summary of modifications made in flockr (see `git log` for the exact changes):
+
+1. Rename. The product, crate, binary, config and state directories
+   (`~/.config/flockr`, `flockr-dev` for debug builds), socket and log file names,
+   CLI output and UI text, `TERM_PROGRAM`, `FLOCKR_*` environment variables,
+   `flockr:<id>` agent report sources, integration hook script names and markers,
+   plugin manifest (`flockr-plugin.toml`, `min_flockr_version`), remote bridge
+   markers, and config values (`ui.toast.delivery = "flockr"`,
+   `[ui.toast.flockr]`, `--right-click flockr`) were renamed from herdr.
+2. Compatibility layer (`src/legacy_herdr.rs`). Panes also export the legacy
+   `HERDR_*` variables; env vars read by the server and CLI fall back from
+   `FLOCKR_*` to `HERDR_*` (except instance identity variables); `herdr:<id>`
+   report sources are accepted as aliases of `flockr:<id>`; the old `"herdr"`
+   config and CLI values are accepted as deprecated aliases. `~/.config/herdr`
+   is never read or migrated.
+3. Hosting. Self-update, release notes, product announcements, remote installer
+   downloads and agent-detection manifest fetches point at
+   https://github.com/Rambarani/flockr (constants in `src/product.rs`) instead of
+   herdr.dev and the upstream GitHub repository.
+4. Feature: sidebar agents are grouped under workspace headers.
+5. Feature: configurable notification sounds with built-in tones and a settings
+   picker.

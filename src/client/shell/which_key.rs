@@ -537,13 +537,16 @@ description = "direct only"
     #[test]
     fn popup_uses_more_columns_on_wide_terminals() {
         let groups = which_key_groups(&live_keybinds(""));
-        let height = |width: u16, rows: u16| {
+        let size = |width: u16, rows: u16| {
             render(width, rows, &groups)
                 .1
-                .map(|rect| rect.height)
-                .unwrap_or_default()
+                .map(|rect| (rect.width, rect.height))
+                .expect("popup")
         };
-        assert!(height(160, 50) < height(60, 50));
+        let (wide_width, wide_height) = size(200, 50);
+        let (narrow_width, narrow_height) = size(60, 50);
+        assert!(wide_width > narrow_width);
+        assert!(wide_height <= narrow_height);
     }
 
     #[test]

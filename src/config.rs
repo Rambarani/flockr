@@ -36,7 +36,7 @@ pub use self::{
     sound::SoundConfig,
     tab_bar::TabBarRightEntryConfig,
     theme::{parse_color, CustomThemeColors, ModeThemeColors, ThemeConfig, THEME_NAMES},
-    ui_popups::WhichKeyConfig,
+    ui_popups::{AgentPreviewConfig, WhichKeyConfig},
     window_title::{WindowTitlePart, WindowTitleTemplate, WindowTitleToken},
 };
 
@@ -122,6 +122,7 @@ impl Config {
             .chain(self.theme.diagnostics())
             .chain(self.ui.sound.diagnostics())
             .chain(self.ui.which_key.diagnostics())
+            .chain(self.ui.agent_preview.diagnostics())
             .chain(tab_bar_right_diagnostics(&self.ui.tab_bar_right))
             .chain(window_title_diagnostics(&self.ui.window_title))
             .chain(self.invalid_sidebar_bounds_diagnostic())

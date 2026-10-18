@@ -85,6 +85,7 @@ pub(crate) fn keybind_help_groups(
                 entry(binding_label(&keybinds.settings), "settings"),
                 entry(binding_label(&keybinds.detach), "detach"),
                 entry(binding_label(&keybinds.reload_config), "reload config"),
+                entry(binding_label(&keybinds.preview_agent), "preview agent"),
                 entry(binding_label(&keybinds.command_palette), "command palette"),
                 entry(
                     binding_label(&keybinds.open_notification_target),

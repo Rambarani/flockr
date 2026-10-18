@@ -643,6 +643,9 @@ impl ClientShellState {
         if matches!(key.code, KeyCode::Modifier(_)) {
             return None;
         }
+        if self.dismiss_agent_preview_for_key(key, outcome) {
+            return None;
+        }
         self.word_selection_gesture = None;
         if self.mode != ClientShellMode::Copy
             && self.copy_or_terminal_mode() != ClientShellMode::Copy

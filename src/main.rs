@@ -205,6 +205,7 @@ const DEFAULT_CONFIG: &str = r##"# flockr configuration
 # collapse_agent_groups = ""   # optional, unset by default
 # expand_agent_groups = ""     # optional, unset by default
 # rename_agent = "prefix+shift+a"
+# preview_agent = "prefix+i"
 # command_palette = "prefix+:"
 # edit_scrollback = "prefix+e"
 # clear_pane = ""                  # unbound; e.g. "prefix+ctrl+k"
@@ -424,6 +425,15 @@ const DEFAULT_CONFIG: &str = r##"# flockr configuration
 # enabled = true
 # Milliseconds to wait after the prefix key before showing the popup (0-10000).
 # delay_ms = 400
+
+# Agent preview popup: hover an agent row, or press keys.preview_agent, to see
+# its recent screen lines, state and time in state.
+[ui.agent_preview]
+# enabled = true
+# Milliseconds the mouse must rest on an agent row before the preview opens.
+# hover_delay_ms = 600
+# Screen lines shown (1-40).
+# lines = 15
 
 # Play sounds when agents change state in background workspaces
 [ui.sound]

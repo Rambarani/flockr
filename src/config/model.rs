@@ -4,8 +4,8 @@ use crossterm::event::KeyModifiers;
 use serde::{de, Deserialize, Deserializer, Serialize};
 
 use super::{
-    ActionKeybinds, BindingConfig, CommandKeybindConfig, IndexedKeybind, Keybinds, SidebarConfig,
-    SoundConfig, TabBarRightEntryConfig, ThemeConfig, WhichKeyConfig,
+    ActionKeybinds, AgentPreviewConfig, BindingConfig, CommandKeybindConfig, IndexedKeybind,
+    Keybinds, SidebarConfig, SoundConfig, TabBarRightEntryConfig, ThemeConfig, WhichKeyConfig,
     DEFAULT_MOBILE_WIDTH_THRESHOLD, DEFAULT_MOUSE_SCROLL_LINES, DEFAULT_SCROLLBACK_LIMIT_BYTES,
 };
 
@@ -469,6 +469,8 @@ pub struct KeysConfig {
     pub toggle_agent_group: BindingConfig,
     /// Rename the focused agent. Default: "prefix+shift+a".
     pub rename_agent: BindingConfig,
+    /// Preview the agent in the focused pane in a popup with its recent screen lines, state and time in state. Default: "prefix+i".
+    pub preview_agent: BindingConfig,
     /// Open the command palette, a fuzzy-searchable list of actions, workspaces, agents, tabs, panes, settings and custom commands. Default: "prefix+:".
     pub command_palette: BindingConfig,
     /// Open the focused pane scrollback in $EDITOR. Default: "prefix+e".
@@ -617,6 +619,8 @@ pub(crate) struct KeysConfigOverlay {
     #[serde(skip_serializing_if = "Option::is_none")]
     rename_agent: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    preview_agent: Option<BindingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     command_palette: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     edit_scrollback: Option<BindingConfig>,
@@ -757,6 +761,7 @@ impl<'de> Deserialize<'de> for KeysConfig {
         apply_field!(collapse_agent_groups);
         apply_field!(toggle_agent_group);
         apply_field!(rename_agent);
+        apply_field!(preview_agent);
         apply_field!(command_palette);
         apply_field!(edit_scrollback);
         apply_field!(clear_pane);
@@ -867,6 +872,7 @@ impl KeysConfig {
         copy_effective_action_field!(collapse_agent_groups, keybinds.collapse_agent_groups);
         copy_effective_action_field!(toggle_agent_group, keybinds.toggle_agent_group);
         copy_effective_action_field!(rename_agent, keybinds.rename_agent);
+        copy_effective_action_field!(preview_agent, keybinds.preview_agent);
         copy_effective_action_field!(command_palette, keybinds.command_palette);
         copy_effective_action_field!(edit_scrollback, keybinds.edit_scrollback);
         copy_effective_action_field!(clear_pane, keybinds.clear_pane);
@@ -1093,6 +1099,8 @@ pub struct UiConfig {
     pub sound: SoundConfig,
     /// Hint popup listing the available keys while prefix mode waits.
     pub which_key: WhichKeyConfig,
+    /// Popup with the recent screen of an agent, opened by hover or `keys.preview_agent`.
+    pub agent_preview: AgentPreviewConfig,
 }
 
 /// Cursor shape (DECSCUSR) used for the forced IME anchor.
@@ -1246,6 +1254,7 @@ impl Default for KeysConfig {
             collapse_agent_groups: BindingConfig::empty(),
             toggle_agent_group: BindingConfig::one("prefix+shift+e"),
             rename_agent: BindingConfig::one("prefix+shift+a"),
+            preview_agent: BindingConfig::one("prefix+i"),
             command_palette: BindingConfig::one("prefix+:"),
             edit_scrollback: BindingConfig::one("prefix+e"),
             clear_pane: BindingConfig::default(),
@@ -1322,6 +1331,7 @@ impl Default for UiConfig {
             toast: ToastConfig::default(),
             sound: SoundConfig::default(),
             which_key: WhichKeyConfig::default(),
+            agent_preview: AgentPreviewConfig::default(),
         }
     }
 }

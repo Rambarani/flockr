@@ -746,6 +746,12 @@
           "description": "Rename the agent in the focused pane. An empty name clears the alias."
         },
         {
+          "key": "keys.preview_agent",
+          "type": "keybinding",
+          "default": "\"prefix+i\"",
+          "description": "Preview the agent in the focused pane: its last screen lines, state, workspace and time in state. Press esc to close."
+        },
+        {
           "key": "keys.command_palette",
           "type": "keybinding",
           "default": "\"prefix+:\"",
@@ -1247,6 +1253,24 @@
           "type": "integer",
           "default": "400",
           "description": "Milliseconds to wait after the prefix key before showing the which-key popup. Values above 10000 are clamped with a config diagnostic."
+        },
+        {
+          "key": "ui.agent_preview.enabled",
+          "type": "boolean",
+          "default": "true",
+          "description": "Allow the agent preview popup, opened by hovering an agent row in the sidebar or with keys.preview_agent."
+        },
+        {
+          "key": "ui.agent_preview.hover_delay_ms",
+          "type": "integer",
+          "default": "600",
+          "description": "Milliseconds the mouse must rest on an agent row before the preview opens. Values above 10000 are clamped with a config diagnostic."
+        },
+        {
+          "key": "ui.agent_preview.lines",
+          "type": "integer",
+          "default": "15",
+          "description": "Screen lines shown in the agent preview, between 1 and 40. Other values are clamped with a config diagnostic."
         }
       ]
     },

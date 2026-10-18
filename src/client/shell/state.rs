@@ -44,6 +44,7 @@ pub(crate) struct ClientShellConfig {
     pub(super) prompt_new_workspace_name: bool,
     pub(super) confirm_close: bool,
     pub(super) which_key: crate::config::WhichKeyConfig,
+    pub(super) agent_preview: crate::config::AgentPreviewConfig,
     pub(super) mouse_capture: bool,
     pub(super) mouse_scroll_lines: usize,
     pub(super) right_click_passthrough_modifiers: Option<crossterm::event::KeyModifiers>,
@@ -143,6 +144,7 @@ pub(super) struct ShellHitMap {
     pub(super) release_notes_scroll_metrics: Option<crate::pane::ScrollMetrics>,
     pub(super) release_notes_max_scroll: usize,
     pub(super) palette: super::palette::PaletteHits,
+    pub(super) preview: super::agent_preview::PreviewHits,
 }
 
 #[derive(Clone)]
@@ -701,6 +703,11 @@ pub(super) enum PendingEndpointKind {
         origin: crate::api::schema::PaneTextPoint,
         session_generation: u64,
     },
+    /// Quiet background `pane.read` for a popup (agent preview or dashboard).
+    PaneRead {
+        pane_id: String,
+        purpose: super::agent_preview::PaneReadPurpose,
+    },
     CopySearch {
         pane_id: String,
         origin: crate::api::schema::PaneTextPoint,
@@ -1021,6 +1028,8 @@ pub(crate) struct ClientShellState {
     pub(super) dismissed_product_announcement: Option<(String, String)>,
     pub(super) which_key: super::which_key::WhichKeyState,
     pub(super) palette_recent: Vec<String>,
+    pub(super) agent_clock: super::agent_activity::AgentClock,
+    pub(super) agent_preview: super::agent_preview::AgentPreviewState,
 }
 
 pub(super) fn product_announcement_state(
@@ -1192,6 +1201,8 @@ impl ClientShellState {
             dismissed_product_announcement: None,
             which_key: Default::default(),
             palette_recent: preferences.palette_recent,
+            agent_clock: Default::default(),
+            agent_preview: Default::default(),
         }
     }
 
@@ -1949,6 +1960,7 @@ impl ClientShellState {
             .into_iter()
             .chain(self.selection_repaint_deadline)
             .chain(self.which_key_deadline())
+            .chain(self.next_agent_preview_deadline())
             .min()
             .map(|deadline| deadline.saturating_duration_since(now).min(default))
             .unwrap_or(default)

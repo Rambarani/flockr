@@ -2,7 +2,9 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 mod action_catalog;
 mod actions;
+mod agent_activity;
 mod agent_groups;
+mod agent_preview;
 mod agent_sidebar;
 mod aggregate_navigation;
 mod machine_diagnostics;

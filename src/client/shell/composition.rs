@@ -653,6 +653,22 @@ impl ClientShellState {
                 frame.replace_from_ratatui_buffer_preserving_effects(&composed, cursor);
             }
         }
+        if self.agent_preview_open() {
+            let cursor = frame.cursor.clone();
+            let mut composed = frame.to_ratatui_buffer()?;
+            let preview = self.render_agent_preview_popup(
+                &mut composed,
+                Rect::new(0, 0, cols, rows),
+                layout.sidebar,
+                std::time::Instant::now(),
+            );
+            if let Some(rect) = preview {
+                occlusion.cover(rect);
+                self.hits.preview.popup = rect;
+                let cursor = cursor.filter(|cursor| !contains(rect, (cursor.x, cursor.y)));
+                frame.replace_from_ratatui_buffer_preserving_effects(&composed, cursor);
+            }
+        }
         if let Some(overlay) = self.overlay.as_ref() {
             let mut composed = frame.to_ratatui_buffer()?;
             let cursor = if let ClientShellOverlay::ContextMenu(menu) = overlay {

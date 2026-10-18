@@ -137,6 +137,21 @@ Targets accept a unique live agent name or the pane ID that currently hosts the 
 
 You can also rename from the sidebar without the CLI. Double-click an agent row, right-click it and choose **Rename agent**, or press `prefix+shift+a` (`keys.rename_agent`) to rename the agent in the focused pane. The prompt follows the `agent.rename` rules: names match `[a-z][a-z0-9_-]{0,31}`, must be unique among live agents, and an empty name clears the alias. A renamed agent shows its alias in the sidebar instead of the reported display name. Like the CLI alias, it is kept across detach and reattach but is cleared when that agent exits or is replaced.
 
+## Previewing an agent
+
+Rest the mouse on an agent row in the sidebar, or press `prefix+i` (`keys.preview_agent`) for the agent in the focused pane, to see a popup with the last 15 lines of that agent's screen, its state, machine, workspace, tab and pane, and how long it has been in that state. It updates while it is open. Press `esc` (consumed), press any other key, click, or move the mouse off the row to close it.
+
+Panes in the visible tab are read straight from the frame the client already has. Other panes on the machine you are using are fetched with the existing `pane.read` method over the client command lane every 750 ms while the preview is open. A server that does not advertise `pane.read` (an older flockr or herdr) shows "Preview unavailable" in the popup instead of failing. Agents on other connected machines show their cached state, and the popup asks you to select that machine to read its screen, because only the active machine has a command lane.
+
+The time in state is measured by your client: the server's snapshot has a state change counter but no timestamps, so the clock starts when the client first sees the state. A state that was already running when the client attached (or when a machine first connected) is shown with a leading `≥`, for example `≥2m 05s`.
+
+```toml
+[ui.agent_preview]
+enabled = true
+hover_delay_ms = 600
+lines = 15
+```
+
 ## Custom status labels
 
 Integrations report lifecycle state as semantic state only. Add display customization separately with pane metadata tokens.

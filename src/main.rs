@@ -1,8 +1,8 @@
 use std::io;
 
-pub(crate) const HERDR_ENV_VAR: &str = "HERDR_ENV";
-pub(crate) const HERDR_ENV_VALUE: &str = "1";
-const NESTED_HERDR_MESSAGES: [&str; 6] = [
+pub(crate) const FLOCKR_ENV_VAR: &str = "FLOCKR_ENV";
+pub(crate) const FLOCKR_ENV_VALUE: &str = "1";
+const NESTED_FLOCKR_MESSAGES: [&str; 6] = [
     "inception detected. we need to go deeper... said no one ever.",
     "recursion is a pathway to many abilities some consider to be... unnatural.",
     "you were so preoccupied with whether you could, you didn't stop to think if you should. — dr. malcolm",
@@ -467,11 +467,11 @@ pane_history = false
 const SKILL: &str = include_str!("../skills/herdr/SKILL.md");
 
 fn should_block_nested(config: &config::Config) -> bool {
-    should_block_nested_for_env(config, std::env::var(HERDR_ENV_VAR).ok().as_deref())
+    should_block_nested_for_env(config, std::env::var(FLOCKR_ENV_VAR).ok().as_deref())
 }
 
 fn should_block_nested_for_env(config: &config::Config, herdr_env: Option<&str>) -> bool {
-    !config.experimental.allow_nested && herdr_env == Some(HERDR_ENV_VALUE)
+    !config.experimental.allow_nested && herdr_env == Some(FLOCKR_ENV_VALUE)
 }
 
 fn random_nested_message() -> &'static str {
@@ -481,8 +481,8 @@ fn random_nested_message() -> &'static str {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.subsec_nanos() as usize)
         .unwrap_or(0);
-    let index = (nanos ^ (std::process::id() as usize)) % NESTED_HERDR_MESSAGES.len();
-    NESTED_HERDR_MESSAGES[index]
+    let index = (nanos ^ (std::process::id() as usize)) % NESTED_FLOCKR_MESSAGES.len();
+    NESTED_FLOCKR_MESSAGES[index]
 }
 
 fn exit_if_nested_disabled(config: &config::Config) {
@@ -732,7 +732,7 @@ fn main() -> io::Result<()> {
         println!();
         println!("Config: {}", config::config_path().display());
         println!("Logs:   {}", logging::help_log_paths_summary());
-        println!("Env:    HERDR_CONFIG_PATH overrides config file path");
+        println!("Env:    FLOCKR_CONFIG_PATH overrides config file path");
         println!("Home:   https://herdr.dev");
         println!();
         println!("{}", cli::AGENT_HELP_FOOTER);
@@ -841,14 +841,14 @@ mod tests {
     #[test]
     fn nested_herdr_blocks_when_env_is_set() {
         let config = config::Config::default();
-        assert!(should_block_nested_for_env(&config, Some(HERDR_ENV_VALUE)));
+        assert!(should_block_nested_for_env(&config, Some(FLOCKR_ENV_VALUE)));
     }
 
     #[test]
     fn nested_herdr_does_not_block_when_allowed() {
         let config: config::Config =
             toml::from_str("[experimental]\nallow_nested = true\n").unwrap();
-        assert!(!should_block_nested_for_env(&config, Some(HERDR_ENV_VALUE)));
+        assert!(!should_block_nested_for_env(&config, Some(FLOCKR_ENV_VALUE)));
     }
 
     #[test]
@@ -860,12 +860,12 @@ mod tests {
     #[test]
     fn random_nested_message_comes_from_known_set() {
         let message = random_nested_message();
-        assert!(NESTED_HERDR_MESSAGES.contains(&message));
+        assert!(NESTED_FLOCKR_MESSAGES.contains(&message));
     }
 
     #[test]
     fn nested_message_strings_no_longer_repeat_herdr_prefix() {
-        assert!(NESTED_HERDR_MESSAGES
+        assert!(NESTED_FLOCKR_MESSAGES
             .iter()
             .all(|message| !message.starts_with("herdr:")));
     }

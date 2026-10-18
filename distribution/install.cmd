@@ -3,8 +3,8 @@ setlocal
 
 set "INSTALLER_URL=https://herdr.dev/install.ps1"
 set "CURL_PROTOCOL=--proto =https --tlsv1.2"
-if defined HERDR_INSTALLER_URL (
-    set "INSTALLER_URL=%HERDR_INSTALLER_URL%"
+if defined FLOCKR_INSTALLER_URL (
+    set "INSTALLER_URL=%FLOCKR_INSTALLER_URL%"
     set "CURL_PROTOCOL=--proto =http,https"
 )
 set "INSTALLER_PATH=%TEMP%\herdr-install-%RANDOM%-%RANDOM%.ps1"

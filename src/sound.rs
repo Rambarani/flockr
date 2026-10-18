@@ -19,11 +19,11 @@ use std::time::{Duration, Instant};
 
 use tracing::warn;
 
-const DISABLE_SOUND_ENV: &str = "HERDR_DISABLE_SOUND";
+const DISABLE_SOUND_ENV: &str = "FLOCKR_DISABLE_SOUND";
 #[cfg(any(windows, test))]
-const WINDOWS_SOUND_PATH_ENV: &str = "HERDR_SOUND_PATH";
+const WINDOWS_SOUND_PATH_ENV: &str = "FLOCKR_SOUND_PATH";
 #[cfg(any(windows, test))]
-const WINDOWS_SOUND_VOLUME_ENV: &str = "HERDR_SOUND_VOLUME";
+const WINDOWS_SOUND_VOLUME_ENV: &str = "FLOCKR_SOUND_VOLUME";
 #[cfg(not(any(windows, target_os = "macos")))]
 const AUDIO_PLAYER_TIMEOUT: Duration = Duration::from_secs(15);
 #[cfg(not(any(windows, target_os = "macos")))]
@@ -266,13 +266,13 @@ fn afplay_args(path: &Path, volume: f32) -> Vec<std::ffi::OsString> {
 fn windows_media_player_script() -> &'static str {
     r#"
 $ErrorActionPreference = 'Stop'
-$Path = [Environment]::GetEnvironmentVariable('HERDR_SOUND_PATH', 'Process')
-if ([string]::IsNullOrWhiteSpace($Path)) { throw 'HERDR_SOUND_PATH is not set' }
+$Path = [Environment]::GetEnvironmentVariable('FLOCKR_SOUND_PATH', 'Process')
+if ([string]::IsNullOrWhiteSpace($Path)) { throw 'FLOCKR_SOUND_PATH is not set' }
 Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase
 $resolved = (Resolve-Path -LiteralPath $Path).ProviderPath
 $volume = 1.0
-$volumeText = [Environment]::GetEnvironmentVariable('HERDR_SOUND_VOLUME', 'Process')
+$volumeText = [Environment]::GetEnvironmentVariable('FLOCKR_SOUND_VOLUME', 'Process')
 if (-not [string]::IsNullOrWhiteSpace($volumeText)) {
     $volume = [double]::Parse($volumeText, [System.Globalization.CultureInfo]::InvariantCulture)
 }
@@ -717,7 +717,7 @@ mod tests {
                 .flatten()
         });
 
-        assert!(script.contains("GetEnvironmentVariable('HERDR_SOUND_PATH', 'Process')"));
+        assert!(script.contains("GetEnvironmentVariable('FLOCKR_SOUND_PATH', 'Process')"));
         assert!(!script.contains("param([string]$Path)"));
         assert!(script.contains("Resolve-Path -LiteralPath $Path"));
         assert!(script.contains("Dispatcher]::PushFrame"));

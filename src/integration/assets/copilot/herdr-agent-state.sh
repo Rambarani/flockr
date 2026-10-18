@@ -2,8 +2,8 @@
 # installed by herdr
 # managed by herdr; reinstalling or updating the integration overwrites this file.
 # add custom hooks beside this file instead of editing it.
-# HERDR_INTEGRATION_ID=copilot
-# HERDR_INTEGRATION_VERSION=4
+# FLOCKR_INTEGRATION_ID=copilot
+# FLOCKR_INTEGRATION_VERSION=4
 
 set -eu
 
@@ -11,12 +11,12 @@ hook_input_file="$(mktemp "${TMPDIR:-/tmp}/herdr-copilot-hook.XXXXXX")" || exit 
 trap 'rm -f "$hook_input_file"' EXIT HUP INT TERM
 cat >"$hook_input_file" 2>/dev/null || true
 
-[ "${HERDR_ENV:-}" = "1" ] || exit 0
-[ -n "${HERDR_SOCKET_PATH:-}" ] || exit 0
-[ -n "${HERDR_PANE_ID:-}" ] || exit 0
+[ "${FLOCKR_ENV:-}" = "1" ] || exit 0
+[ -n "${FLOCKR_SOCKET_PATH:-}" ] || exit 0
+[ -n "${FLOCKR_PANE_ID:-}" ] || exit 0
 command -v python3 >/dev/null 2>&1 || exit 0
 
-HERDR_HOOK_INPUT_FILE="$hook_input_file" python3 - <<'PY'
+FLOCKR_HOOK_INPUT_FILE="$hook_input_file" python3 - <<'PY'
 import json
 import os
 import random
@@ -24,9 +24,9 @@ import socket
 import time
 
 source = "herdr:copilot"
-pane_id = os.environ.get("HERDR_PANE_ID")
-socket_path = os.environ.get("HERDR_SOCKET_PATH")
-hook_input_file = os.environ.get("HERDR_HOOK_INPUT_FILE")
+pane_id = os.environ.get("FLOCKR_PANE_ID")
+socket_path = os.environ.get("FLOCKR_SOCKET_PATH")
+hook_input_file = os.environ.get("FLOCKR_HOOK_INPUT_FILE")
 
 if not pane_id or not socket_path:
     raise SystemExit(0)

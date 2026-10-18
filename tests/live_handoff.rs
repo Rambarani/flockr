@@ -82,9 +82,9 @@ fn spawn_server_with_env(
     cmd.arg("server");
     cmd.env("XDG_CONFIG_HOME", config_home);
     cmd.env("XDG_RUNTIME_DIR", runtime_dir);
-    cmd.env("HERDR_SOCKET_PATH", api_socket);
+    cmd.env("FLOCKR_SOCKET_PATH", api_socket);
     cmd.env(
-        "HERDR_CLIENT_SOCKET_PATH",
+        "FLOCKR_CLIENT_SOCKET_PATH",
         runtime_dir.join("herdr-client.sock"),
     );
     cmd.env("SHELL", "/bin/sh");
@@ -126,9 +126,9 @@ fn spawn_named_session_server(
     cmd.arg("server");
     cmd.env("XDG_CONFIG_HOME", config_home);
     cmd.env("XDG_RUNTIME_DIR", runtime_dir);
-    cmd.env("HERDR_SESSION", session_name);
-    cmd.env_remove("HERDR_SOCKET_PATH");
-    cmd.env_remove("HERDR_CLIENT_SOCKET_PATH");
+    cmd.env("FLOCKR_SESSION", session_name);
+    cmd.env_remove("FLOCKR_SOCKET_PATH");
+    cmd.env_remove("FLOCKR_CLIENT_SOCKET_PATH");
     cmd.env("SHELL", "/bin/sh");
 
     let child = pair.slave.spawn_command(cmd).unwrap();
@@ -162,9 +162,9 @@ fn spawn_default_session_server(config_home: &Path, runtime_dir: &Path) -> Spawn
     cmd.env("XDG_CONFIG_HOME", config_home);
     cmd.env("XDG_RUNTIME_DIR", runtime_dir);
     cmd.env("XDG_STATE_HOME", runtime_dir.join("state"));
-    cmd.env_remove("HERDR_SESSION");
-    cmd.env_remove("HERDR_SOCKET_PATH");
-    cmd.env_remove("HERDR_CLIENT_SOCKET_PATH");
+    cmd.env_remove("FLOCKR_SESSION");
+    cmd.env_remove("FLOCKR_SOCKET_PATH");
+    cmd.env_remove("FLOCKR_CLIENT_SOCKET_PATH");
     cmd.env("SHELL", "/bin/sh");
 
     let child = pair.slave.spawn_command(cmd).unwrap();
@@ -207,16 +207,16 @@ fn spawn_server_with_args_and_socket_env(
     cmd.arg("server");
     cmd.env("XDG_CONFIG_HOME", config_home);
     cmd.env("XDG_RUNTIME_DIR", runtime_dir);
-    cmd.env_remove("HERDR_SESSION");
+    cmd.env_remove("FLOCKR_SESSION");
     if let Some(api_socket_env) = api_socket_env {
-        cmd.env("HERDR_SOCKET_PATH", api_socket_env);
+        cmd.env("FLOCKR_SOCKET_PATH", api_socket_env);
     } else {
-        cmd.env_remove("HERDR_SOCKET_PATH");
+        cmd.env_remove("FLOCKR_SOCKET_PATH");
     }
     if let Some(client_socket_env) = client_socket_env {
-        cmd.env("HERDR_CLIENT_SOCKET_PATH", client_socket_env);
+        cmd.env("FLOCKR_CLIENT_SOCKET_PATH", client_socket_env);
     } else {
-        cmd.env_remove("HERDR_CLIENT_SOCKET_PATH");
+        cmd.env_remove("FLOCKR_CLIENT_SOCKET_PATH");
     }
     cmd.env("SHELL", "/bin/sh");
 
@@ -1401,7 +1401,7 @@ fn live_handoff_accepts_canonical_pane_id_from_child_env() {
         serde_json::json!({
             "id": "test:pane:print-id",
             "method": "pane.send_input",
-            "params": {"pane_id": pane_id, "text": format!("printf '%s' \"$HERDR_PANE_ID\" > {}", pane_id_marker.display()), "keys": ["Enter"]}
+            "params": {"pane_id": pane_id, "text": format!("printf '%s' \"$FLOCKR_PANE_ID\" > {}", pane_id_marker.display()), "keys": ["Enter"]}
         }),
     ));
     let old_pane_id = wait_for_file_contains(&pane_id_marker, &pane_id, Duration::from_secs(5));
@@ -1471,7 +1471,7 @@ fn live_handoff_keeps_unmanaged_agent_name_bound_to_saved_session() {
     fs::write(
         &fake_pi,
         format!(
-            "#!/bin/sh\nexport HERDR_AGENT=pi\necho started > {}\n/bin/sleep 30\n:\n",
+            "#!/bin/sh\nexport FLOCKR_AGENT=pi\necho started > {}\n/bin/sleep 30\n:\n",
             started_marker.display()
         ),
     )
@@ -1631,7 +1631,7 @@ fn live_handoff_keeps_agent_started_pane_after_agent_exits() {
     fs::write(
         &fake_pi,
         format!(
-            "#!/bin/sh\nexport HERDR_AGENT=pi\necho started > {}\n/bin/sleep 1\necho exited > {}\n",
+            "#!/bin/sh\nexport FLOCKR_AGENT=pi\necho started > {}\n/bin/sleep 1\necho exited > {}\n",
             started_marker.display(),
             exited_marker.display()
         ),
@@ -2048,7 +2048,7 @@ fn live_handoff_import_failure_rolls_back_old_server_at(failure_point: &str) {
         &config_home,
         &runtime_dir,
         &api_socket,
-        &[("HERDR_TEST_HANDOFF_IMPORT_FAIL", failure_point)],
+        &[("FLOCKR_TEST_HANDOFF_IMPORT_FAIL", failure_point)],
     );
     wait_for_socket(&api_socket, Duration::from_secs(10));
     register_runtime_dir(&runtime_dir);

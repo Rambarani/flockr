@@ -49,9 +49,9 @@ impl SessionConfig {
         Command::new(env!("CARGO_BIN_EXE_herdr"))
             .args(["session", "delete", name, "--json"])
             .env("XDG_CONFIG_HOME", &self.root)
-            .env_remove("HERDR_SESSION")
-            .env_remove("HERDR_SOCKET_PATH")
-            .env_remove("HERDR_CLIENT_SOCKET_PATH")
+            .env_remove("FLOCKR_SESSION")
+            .env_remove("FLOCKR_SOCKET_PATH")
+            .env_remove("FLOCKR_CLIENT_SOCKET_PATH")
             .output()
             .unwrap()
     }

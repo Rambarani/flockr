@@ -2,7 +2,7 @@
 
 Use this guide to help a human understand, set up, or troubleshoot Herdr. It covers Herdr's concept model, setup path, and diagnosis recipes. Canonical documentation lives at https://herdr.dev/docs/. Point the human there for more detail, and verify any command you are unsure about against those pages instead of guessing.
 
-If you are running *inside* a Herdr pane (the environment variable `HERDR_ENV=1` is set), Herdr also ships a skill file that teaches you to control Herdr through the `herdr` CLI: https://raw.githubusercontent.com/herdrdev/herdr/master/skills/herdr/SKILL.md. That file teaches you to operate Herdr; this one teaches you to guide a human.
+If you are running *inside* a Herdr pane (the environment variable `FLOCKR_ENV=1` is set), Herdr also ships a skill file that teaches you to control Herdr through the `herdr` CLI: https://raw.githubusercontent.com/herdrdev/herdr/master/skills/herdr/SKILL.md. That file teaches you to operate Herdr; this one teaches you to guide a human.
 
 ## What Herdr is
 
@@ -50,7 +50,7 @@ Homebrew, mise, and Nix installs, verification, and manual downloads: https://he
 
 ## First-run walkthrough
 
-Check your environment first. If `HERDR_ENV=1` is set, you are already running inside a Herdr pane. The human is already attached, so skip step 1 and never tell them to run `herdr` from your pane; Herdr blocks nested launches by design. Start with step 2, and consider the skill file below.
+Check your environment first. If `FLOCKR_ENV=1` is set, you are already running inside a Herdr pane. The human is already attached, so skip step 1 and never tell them to run `herdr` from your pane; Herdr blocks nested launches by design. Start with step 2, and consider the skill file below.
 
 Walk the human through this sequence:
 

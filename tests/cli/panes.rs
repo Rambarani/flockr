@@ -539,7 +539,7 @@ fn pane_shell_gets_herdr_socket_and_pane_env() {
             "run",
             "1-1",
             &format!(
-                "printf '%s\\n%s\\n' \"$HERDR_SOCKET_PATH\" \"$HERDR_PANE_ID\" > {}",
+                "printf '%s\\n%s\\n' \"$FLOCKR_SOCKET_PATH\" \"$FLOCKR_PANE_ID\" > {}",
                 env_capture.display()
             ),
         ],

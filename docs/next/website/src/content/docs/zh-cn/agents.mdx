@@ -67,9 +67,9 @@ Herdr 能识别这些智能体,并从它们在屏幕上绘制的内容读取状�
 
 ## 虚拟机与沙箱包装器
 
-在 Linux 和 macOS 上,宿主可见的包装器可能会向 Herdr 隐藏真实的智能体进程。在包装器命令上设置 `HERDR_AGENT=<agent>`,告诉 Herdr 应使用哪个已有智能体的屏幕清单。例如,在 Linux 上运行 `HERDR_AGENT=claude fence -- claude`,或在 macOS 上运行 `HERDR_AGENT=claude nono run --profile claude-code -- claude`。这个提示的作用范围只限于该前台进程;仅在 VM 或容器内部设置时 Herdr 无法看到它,而且除非所有继承的前台进程都应被视为该智能体,否则不要全局 export。
+在 Linux 和 macOS 上,宿主可见的包装器可能会向 Herdr 隐藏真实的智能体进程。在包装器命令上设置 `FLOCKR_AGENT=<agent>`,告诉 Herdr 应使用哪个已有智能体的屏幕清单。例如,在 Linux 上运行 `FLOCKR_AGENT=claude fence -- claude`,或在 macOS 上运行 `FLOCKR_AGENT=claude nono run --profile claude-code -- claude`。这个提示的作用范围只限于该前台进程;仅在 VM 或容器内部设置时 Herdr 无法看到它,而且除非所有继承的前台进程都应被视为该智能体,否则不要全局 export。
 
-某些受限的 Linux 运行环境不会公开终端前台进程组。原生检测不可用时,以 `HERDR_PROCESS_DETECTION=child-groups` 启动 Herdr 服务器,即可选择启用直接子进程组推断。原生检测仍然优先,默认的 `native` 模式不会执行此推断。这个选择加入模式属于尽力而为,较新的后台任务可能会被误判为前台任务。该变量由服务器读取且需要重启;请在远程服务器环境中设置,而不是在连接客户端上设置。
+某些受限的 Linux 运行环境不会公开终端前台进程组。原生检测不可用时,以 `FLOCKR_PROCESS_DETECTION=child-groups` 启动 Herdr 服务器,即可选择启用直接子进程组推断。原生检测仍然优先,默认的 `native` 模式不会执行此推断。这个选择加入模式属于尽力而为,较新的后台任务可能会被误判为前台任务。该变量由服务器读取且需要重启;请在远程服务器环境中设置,而不是在连接客户端上设置。
 
 ## blocked 状态
 
@@ -108,10 +108,10 @@ herdr agent explain --file screen.txt --agent codex --json
 
 Herdr 可以在 tmux 作为外层终端环境时运行。智能体检测不会检查在 Herdr 窗格内启动的 tmux 会话。如果某个 shell 框架在 Herdr 内自动进入 tmux,Herdr 看到的窗格进程就是 `tmux`,而不是它背后的智能体。
 
-如果你的 shell 在 `TMUX` 未设置时自动连接 tmux,请更新 shell 启动条件以排除 Herdr 窗格。从 Herdr 窗格内重新连接外层 tmux 会话可能导致终端尺寸递归缩小、画面闪烁。在现有条件中加入 `HERDR_ENV` 检查,并确保它在运行 tmux 之前生效:
+如果你的 shell 在 `TMUX` 未设置时自动连接 tmux,请更新 shell 启动条件以排除 Herdr 窗格。从 Herdr 窗格内重新连接外层 tmux 会话可能导致终端尺寸递归缩小、画面闪烁。在现有条件中加入 `FLOCKR_ENV` 检查,并确保它在运行 tmux 之前生效:
 
 ```zsh
-if [[ -z ${TMUX:-} && ${HERDR_ENV:-} != 1 ]]; then
+if [[ -z ${TMUX:-} && ${FLOCKR_ENV:-} != 1 ]]; then
   tmux new-session -A -s my-session
 fi
 ```

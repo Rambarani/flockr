@@ -20,7 +20,7 @@ pub(crate) fn init_file_logging(file_name: &str) {
     };
 
     let filter =
-        EnvFilter::try_from_env("HERDR_LOG").unwrap_or_else(|_| EnvFilter::new("herdr=info"));
+        EnvFilter::try_from_env("FLOCKR_LOG").unwrap_or_else(|_| EnvFilter::new("herdr=info"));
 
     let _ = tracing_subscriber::fmt()
         .with_env_filter(filter)

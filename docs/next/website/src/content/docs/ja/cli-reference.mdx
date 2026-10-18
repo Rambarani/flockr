@@ -221,9 +221,9 @@ herdr pane move <pane_id> --new-workspace [--label TEXT] [--tab-label TEXT] [--f
 herdr pane close <pane_id>
 ```
 
-`--current` を受け付けるペインコマンドは、Herdr ペイン内から実行した場合、呼び出し元の `HERDR_PANE_ID` を使います。`pane split` では、明示したペイン ID または `--pane ID` がそのペインを分割します。対象を省略すると `HERDR_PANE_ID` があれば呼び出し元ペインを、なければフォーカス中のペインを使います。`--current` は呼び出し元ペインを必須とし、`HERDR_PANE_ID` がない場合はエラーになります。分割レスポンスでは、新しいペイン ID は `.result.pane.pane_id` にあります。
+`--current` を受け付けるペインコマンドは、Herdr ペイン内から実行した場合、呼び出し元の `FLOCKR_PANE_ID` を使います。`pane split` では、明示したペイン ID または `--pane ID` がそのペインを分割します。対象を省略すると `FLOCKR_PANE_ID` があれば呼び出し元ペインを、なければフォーカス中のペインを使います。`--current` は呼び出し元ペインを必須とし、`FLOCKR_PANE_ID` がない場合はエラーになります。分割レスポンスでは、新しいペイン ID は `.result.pane.pane_id` にあります。
 
-`pane move` の後続コマンドには `.result.move_result.pane.pane_id` を使います。別ワークスペースへの移動ではワークスペース修飾付きのペイン ID が変わり、以前の値は `.result.move_result.previous_pane_id` に残ります。実行中プロセスの `HERDR_PANE_ID`、`HERDR_TAB_ID`、`HERDR_WORKSPACE_ID` は起動時の値のままですが、Herdr は以前のペイン ID をそのターミナルの別名として保持するため、`--current` を使うペインコマンドは引き続き解決できます。ライブエージェント名もターミナルに追従します。
+`pane move` の後続コマンドには `.result.move_result.pane.pane_id` を使います。別ワークスペースへの移動ではワークスペース修飾付きのペイン ID が変わり、以前の値は `.result.move_result.previous_pane_id` に残ります。実行中プロセスの `FLOCKR_PANE_ID`、`FLOCKR_TAB_ID`、`FLOCKR_WORKSPACE_ID` は起動時の値のままですが、Herdr は以前のペイン ID をそのターミナルの別名として保持するため、`--current` を使うペインコマンドは引き続き解決できます。ライブエージェント名もターミナルに追従します。
 
 出力を読む:
 
@@ -473,11 +473,11 @@ herdr plugin pane focus <pane_id>
 herdr plugin pane close <pane_id>
 ```
 
-`plugin pane open` は、プラグインがリンクされ、有効で、現在のプラットフォームと互換であることを要求します。マニフェストで宣言された `[[panes]]` コマンドを Herdr 管理のターミナルペインとして起動します。マニフェストのデフォルトは `overlay` で、アクティブなペインの上に一時的なズームオーバーレイを開きます。分割、新しいタブ、ズームされたペイン、またはタブレイアウトを変更しないセッションモーダルな `popup` として開くこともできます。`--width` と `--height` は、外側のポップアップ寸法をターミナルセル数または `80%` のような割合で指定します。省略した寸法はデフォルトでターミナルの半分になり、小さすぎる値はポップアップの最小サイズに制限されます。ポップアップは Herdr ペインではなく、`HERDR_PANE_ID` を受け取らず、pane API やエージェント API に参加しません。ターミナル以外のネイティブなプラグインペインは今後の対応面です。
+`plugin pane open` は、プラグインがリンクされ、有効で、現在のプラットフォームと互換であることを要求します。マニフェストで宣言された `[[panes]]` コマンドを Herdr 管理のターミナルペインとして起動します。マニフェストのデフォルトは `overlay` で、アクティブなペインの上に一時的なズームオーバーレイを開きます。分割、新しいタブ、ズームされたペイン、またはタブレイアウトを変更しないセッションモーダルな `popup` として開くこともできます。`--width` と `--height` は、外側のポップアップ寸法をターミナルセル数または `80%` のような割合で指定します。省略した寸法はデフォルトでターミナルの半分になり、小さすぎる値はポップアップの最小サイズに制限されます。ポップアップは Herdr ペインではなく、`FLOCKR_PANE_ID` を受け取らず、pane API やエージェント API に参加しません。ターミナル以外のネイティブなプラグインペインは今後の対応面です。
 
 新しいペインでは `TERM_PROGRAM=herdr` として識別され、`TERM_PROGRAM_VERSION` には Herdr のバージョンが設定されます。`TERM=xterm-256color` と `COLORTERM=truecolor` は維持されます。リサイズ時に Herdr がテキストを折り返し直すため、`fish_handle_reflow=0` も設定します。継承した値や明示的な `fish_handle_reflow` の指定は優先されます。Herdr は、明示的な起動環境の値を適用する前に、継承した外側のターミナルのセッションマーカー（iTerm2、WezTerm、Kitty、Windows Terminal、tmux、screen、Zellij）、iTerm2 の `LC_TERMINAL` 識別子、既知の Claude Code、Codex、OMP セッションマーカーを削除します。これにより、新しいペインがサーバーを最初に起動したターミナルやエージェントのセッションを名乗ることを防ぎます。API キーやディスプレイ設定を含む通常の環境変数は、アタッチ中クライアントの環境に置き換えられず、引き続き継承されます。SSH エージェント転送には独自の再接続処理があります。このクリーンアップによって既存ペインのプロセスは変更されません。
 
-`--env KEY=VALUE` はプロセスを起動するコマンドで繰り返し指定できます。新しく起動されるプロセスにのみ適用されます。`HERDR_SOCKET_PATH`、`HERDR_BIN_PATH`、`HERDR_ENV`、`HERDR_WORKSPACE_ID`、`HERDR_TAB_ID`、`HERDR_PANE_ID`、`HERDR_PLUGIN_ID`、`HERDR_PLUGIN_ROOT`、`HERDR_PLUGIN_CONFIG_DIR`、`HERDR_PLUGIN_STATE_DIR`、`HERDR_PLUGIN_ENTRYPOINT_ID`、`HERDR_PLUGIN_CONTEXT_JSON` のような Herdr 管理の変数は、呼び出し側が与えた環境変数と衝突した場合も権威を保ちます。
+`--env KEY=VALUE` はプロセスを起動するコマンドで繰り返し指定できます。新しく起動されるプロセスにのみ適用されます。`FLOCKR_SOCKET_PATH`、`FLOCKR_BIN_PATH`、`FLOCKR_ENV`、`FLOCKR_WORKSPACE_ID`、`FLOCKR_TAB_ID`、`FLOCKR_PANE_ID`、`FLOCKR_PLUGIN_ID`、`FLOCKR_PLUGIN_ROOT`、`FLOCKR_PLUGIN_CONFIG_DIR`、`FLOCKR_PLUGIN_STATE_DIR`、`FLOCKR_PLUGIN_ENTRYPOINT_ID`、`FLOCKR_PLUGIN_CONTEXT_JSON` のような Herdr 管理の変数は、呼び出し側が与えた環境変数と衝突した場合も権威を保ちます。
 
 ## 読み取りソース
 
@@ -494,12 +494,12 @@ herdr plugin pane close <pane_id>
 
 | 変数 | 目的 |
 | --- | --- |
-| `HERDR_CONFIG_PATH` | 設定ファイルパスを上書きする。 |
-| `HERDR_SESSION` | CLI コマンドの名前付きセッションを選択する。 |
-| `HERDR_SOCKET_PATH` | 低レベルなソケットパスの上書き。 |
-| `HERDR_ENV` | Herdr 管理のペインプロセス内で `1` に設定される。 |
-| `HERDR_PANE_ID` | 実行中ペインプロセスの公開ペイン id。 |
-| `HERDR_TAB_ID` | 実行中ペインプロセスの公開タブ id。 |
-| `HERDR_WORKSPACE_ID` | 実行中ペインプロセスの公開ワークスペース id。 |
-| `HERDR_LOG` | ログフィルターを設定する。例: `HERDR_LOG=herdr=debug`。 |
-| `HERDR_DISABLE_SOUND` | サウンド通知が有効でも音の再生を無効にする。 |
+| `FLOCKR_CONFIG_PATH` | 設定ファイルパスを上書きする。 |
+| `FLOCKR_SESSION` | CLI コマンドの名前付きセッションを選択する。 |
+| `FLOCKR_SOCKET_PATH` | 低レベルなソケットパスの上書き。 |
+| `FLOCKR_ENV` | Herdr 管理のペインプロセス内で `1` に設定される。 |
+| `FLOCKR_PANE_ID` | 実行中ペインプロセスの公開ペイン id。 |
+| `FLOCKR_TAB_ID` | 実行中ペインプロセスの公開タブ id。 |
+| `FLOCKR_WORKSPACE_ID` | 実行中ペインプロセスの公開ワークスペース id。 |
+| `FLOCKR_LOG` | ログフィルターを設定する。例: `FLOCKR_LOG=herdr=debug`。 |
+| `FLOCKR_DISABLE_SOUND` | サウンド通知が有効でも音の再生を無効にする。 |

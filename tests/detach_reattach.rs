@@ -125,11 +125,11 @@ fn spawn_server_with_config(
     cmd.arg("server");
     cmd.env("XDG_CONFIG_HOME", config_home);
     cmd.env("XDG_RUNTIME_DIR", runtime_dir);
-    cmd.env("HERDR_SOCKET_PATH", api_socket_path);
-    cmd.env_remove("HERDR_CLIENT_SOCKET_PATH");
-    cmd.env("HERDR_CONFIG_PATH", config_home.join("herdr/config.toml"));
+    cmd.env("FLOCKR_SOCKET_PATH", api_socket_path);
+    cmd.env_remove("FLOCKR_CLIENT_SOCKET_PATH");
+    cmd.env("FLOCKR_CONFIG_PATH", config_home.join("herdr/config.toml"));
     cmd.env("SHELL", "/bin/sh");
-    cmd.env_remove("HERDR_ENV");
+    cmd.env_remove("FLOCKR_ENV");
 
     let child = pair.slave.spawn_command(cmd).unwrap();
     register_spawned_herdr_pid(child.process_id());

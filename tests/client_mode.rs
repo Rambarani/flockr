@@ -127,14 +127,14 @@ fn spawn_client_process_with_args_and_env(
     let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_herdr"));
     support::isolate_herdr_test_process(&mut cmd);
     cmd.args(args);
-    cmd.env("HERDR_DISABLE_SOUND", "1");
+    cmd.env("FLOCKR_DISABLE_SOUND", "1");
     cmd.env("XDG_STATE_HOME", runtime_dir.join("state"));
     cmd.env("XDG_CONFIG_HOME", config_home);
     cmd.env("XDG_RUNTIME_DIR", runtime_dir);
-    cmd.env("HERDR_SOCKET_PATH", api_socket_path);
-    cmd.env_remove("HERDR_CLIENT_SOCKET_PATH");
+    cmd.env("FLOCKR_SOCKET_PATH", api_socket_path);
+    cmd.env_remove("FLOCKR_CLIENT_SOCKET_PATH");
     cmd.env("SHELL", "/bin/sh");
-    cmd.env_remove("HERDR_ENV");
+    cmd.env_remove("FLOCKR_ENV");
     for (key, value) in extra_env {
         cmd.env(key, value);
     }
@@ -190,10 +190,10 @@ fn spawn_server_with_config(
     cmd.arg("server");
     cmd.env("XDG_CONFIG_HOME", config_home);
     cmd.env("XDG_RUNTIME_DIR", runtime_dir);
-    cmd.env("HERDR_SOCKET_PATH", api_socket_path);
-    cmd.env_remove("HERDR_CLIENT_SOCKET_PATH");
+    cmd.env("FLOCKR_SOCKET_PATH", api_socket_path);
+    cmd.env_remove("FLOCKR_CLIENT_SOCKET_PATH");
     cmd.env("SHELL", "/bin/sh");
-    cmd.env_remove("HERDR_ENV");
+    cmd.env_remove("FLOCKR_ENV");
 
     let child = pair.slave.spawn_command(cmd).unwrap();
     register_spawned_herdr_pid(child.process_id());
@@ -441,10 +441,10 @@ fn client_sees_headless_startup_config_diagnostic() {
     cmd.arg("server");
     cmd.env("XDG_CONFIG_HOME", &config_home);
     cmd.env("XDG_RUNTIME_DIR", &runtime_dir);
-    cmd.env("HERDR_SOCKET_PATH", &api_socket);
-    cmd.env_remove("HERDR_CLIENT_SOCKET_PATH");
+    cmd.env("FLOCKR_SOCKET_PATH", &api_socket);
+    cmd.env_remove("FLOCKR_CLIENT_SOCKET_PATH");
     cmd.env("SHELL", "/bin/sh");
-    cmd.env_remove("HERDR_ENV");
+    cmd.env_remove("FLOCKR_ENV");
 
     let child = pair.slave.spawn_command(cmd).unwrap();
     register_spawned_herdr_pid(child.process_id());
@@ -500,13 +500,13 @@ fn server_unreachable_shows_clear_error() {
 
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_herdr"))
         .arg("client")
-        .env("HERDR_DISABLE_SOUND", "1")
+        .env("FLOCKR_DISABLE_SOUND", "1")
         .env("XDG_CONFIG_HOME", &config_home)
         .env("XDG_RUNTIME_DIR", &runtime_dir)
         .env("XDG_STATE_HOME", runtime_dir.join("state"))
-        .env("HERDR_SOCKET_PATH", &api_socket)
-        .env_remove("HERDR_CLIENT_SOCKET_PATH")
-        .env_remove("HERDR_ENV")
+        .env("FLOCKR_SOCKET_PATH", &api_socket)
+        .env_remove("FLOCKR_CLIENT_SOCKET_PATH")
+        .env_remove("FLOCKR_ENV")
         .output()
         .expect("client command should run");
 
@@ -1041,7 +1041,7 @@ fn federated_client_starts_without_local_and_survives_its_restart() {
     let ssh_commands = base.join("ssh-commands");
     let bridge_pid = base.join("bridge-pid");
     fs::write(bin.join("ssh"), format!(
-        "#!/bin/sh\nexport HOME={} XDG_CONFIG_HOME={} XDG_RUNTIME_DIR={} HERDR_SOCKET_PATH={}\nunset HERDR_CLIENT_SOCKET_PATH HERDR_SESSION\nfor arg do last=\"$arg\"; done\nprintf '%s\\n' \"$last\" >> {}\ncase \"$last\" in *remote-client-bridge*) printf '%s\\n' \"$$\" > {};; esac\nexec /bin/sh -c \"$last\"\n",
+        "#!/bin/sh\nexport HOME={} XDG_CONFIG_HOME={} XDG_RUNTIME_DIR={} FLOCKR_SOCKET_PATH={}\nunset FLOCKR_CLIENT_SOCKET_PATH FLOCKR_SESSION\nfor arg do last=\"$arg\"; done\nprintf '%s\\n' \"$last\" >> {}\ncase \"$last\" in *remote-client-bridge*) printf '%s\\n' \"$$\" > {};; esac\nexec /bin/sh -c \"$last\"\n",
         quote(&base.join("home")), quote(&remote_config), quote(&remote_runtime), quote(&remote_api), quote(&ssh_commands), quote(&bridge_pid),
     )).unwrap();
     fs::set_permissions(bin.join("ssh"), fs::Permissions::from_mode(0o700)).unwrap();
@@ -2075,10 +2075,10 @@ fn client_receives_notify_on_agent_state_change() {
     cmd.arg("server");
     cmd.env("XDG_CONFIG_HOME", &config_home);
     cmd.env("XDG_RUNTIME_DIR", &runtime_dir);
-    cmd.env("HERDR_SOCKET_PATH", &api_socket);
-    cmd.env_remove("HERDR_CLIENT_SOCKET_PATH");
+    cmd.env("FLOCKR_SOCKET_PATH", &api_socket);
+    cmd.env_remove("FLOCKR_CLIENT_SOCKET_PATH");
     cmd.env("SHELL", "/bin/sh");
-    cmd.env_remove("HERDR_ENV");
+    cmd.env_remove("FLOCKR_ENV");
 
     let child = pair.slave.spawn_command(cmd).unwrap();
     register_spawned_herdr_pid(child.process_id());

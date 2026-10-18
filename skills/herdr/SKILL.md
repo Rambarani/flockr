@@ -1,6 +1,6 @@
 ---
 name: herdr
-description: "Control Herdr, a terminal multiplexer for coding agents. Use only when the user explicitly mentions Herdr or asks to use Herdr to inspect or control panes, tabs, workspaces, commands, or another agent. Do not use merely because a task could benefit from a background terminal, delegation, or parallel work. Requires HERDR_ENV=1."
+description: "Control Herdr, a terminal multiplexer for coding agents. Use only when the user explicitly mentions Herdr or asks to use Herdr to inspect or control panes, tabs, workspaces, commands, or another agent. Do not use merely because a task could benefit from a background terminal, delegation, or parallel work. Requires FLOCKR_ENV=1."
 ---
 
 # Herdr
@@ -10,7 +10,7 @@ Herdr organizes terminals into workspaces, tabs, and panes, recognizes coding ag
 Before issuing any control command, verify that this agent is running inside a Herdr-managed pane:
 
 ```bash
-test "${HERDR_ENV:-}" = 1
+test "${FLOCKR_ENV:-}" = 1
 ```
 
 If the check fails, say that you are not running inside Herdr and stop. Do not inspect or control the focused Herdr session from outside Herdr.
@@ -71,18 +71,18 @@ Closed tab and pane IDs are not reused. A pane moved into another workspace rece
 Herdr injects the caller's context into each managed pane:
 
 ```bash
-printf '%s\n' "$HERDR_WORKSPACE_ID" "$HERDR_TAB_ID" "$HERDR_PANE_ID"
+printf '%s\n' "$FLOCKR_WORKSPACE_ID" "$FLOCKR_TAB_ID" "$FLOCKR_PANE_ID"
 ```
 
-Prefer `--current` when a pane command should target the calling pane. An omitted `pane split` target uses the calling pane when `HERDR_PANE_ID` is available, otherwise the focused pane. Other commands may use the UI-focused pane, which can belong to the user or another client.
+Prefer `--current` when a pane command should target the calling pane. An omitted `pane split` target uses the calling pane when `FLOCKR_PANE_ID` is available, otherwise the focused pane. Other commands may use the UI-focused pane, which can belong to the user or another client.
 
 Discover live state with:
 
 ```bash
 herdr workspace list
-herdr tab list --workspace "$HERDR_WORKSPACE_ID"
+herdr tab list --workspace "$FLOCKR_WORKSPACE_ID"
 herdr pane current --current
-herdr pane list --workspace "$HERDR_WORKSPACE_ID"
+herdr pane list --workspace "$FLOCKR_WORKSPACE_ID"
 herdr agent list
 ```
 
@@ -111,7 +111,7 @@ Default to a sibling pane in the current tab and the current working directory. 
 Honor a direction requested by the user. Otherwise inspect the caller pane:
 
 ```bash
-herdr pane layout --pane "$HERDR_PANE_ID"
+herdr pane layout --pane "$FLOCKR_PANE_ID"
 ```
 
 Split a wide pane to the right and a narrow or tall pane down. Avoid repeated same-direction splits that create unusably narrow columns or short rows. Keep the user's focus in the calling pane and explicitly preserve the caller's working directory:

@@ -205,7 +205,7 @@ height = "80%"
 弹窗会接收包括 Escape 在内的所有终端输入,直到命令退出。
 `width` 和 `height` 是可选的;省略时默认为终端大小的一半,数字表示终端单元格数,`"80%"` 这样的字符串表示终端区域的百分比。
 尺寸包含弹窗边框,过小的值会限制为弹窗最小尺寸。
-弹窗命令不会收到 `HERDR_PANE_ID`;可使用 `HERDR_ACTIVE_PANE_ID` 引用底层平铺窗格。
+弹窗命令不会收到 `FLOCKR_PANE_ID`;可使用 `FLOCKR_ACTIVE_PANE_ID` 引用底层平铺窗格。
 
 在 Unix 和 macOS 上,还可以打开一个临时终端,而无需添加分割或标签页:
 
@@ -238,9 +238,9 @@ description = "apply layout"
 
 可以提供可选的 `description`。指定后，该描述会在按键绑定帮助面板（通过 `prefix+?` 打开）中显示，替代默认的 `'custom command'` 标签。
 
-在相应值可用时，自定义命令会收到 `HERDR_SOCKET_PATH`、`HERDR_BIN_PATH`、`HERDR_ACTIVE_WORKSPACE_ID`、`HERDR_ACTIVE_TAB_ID`、`HERDR_ACTIVE_PANE_ID` 和 `HERDR_ACTIVE_PANE_CWD`。当 Herdr 能检测到聚焦窗格的工作目录时，shell 命令会从该目录运行。
+在相应值可用时，自定义命令会收到 `FLOCKR_SOCKET_PATH`、`FLOCKR_BIN_PATH`、`FLOCKR_ACTIVE_WORKSPACE_ID`、`FLOCKR_ACTIVE_TAB_ID`、`FLOCKR_ACTIVE_PANE_ID` 和 `FLOCKR_ACTIVE_PANE_CWD`。当 Herdr 能检测到聚焦窗格的工作目录时，shell 命令会从该目录运行。
 
-在 Windows 上，自定义命令字符串使用 `cmd.exe /d /c`，因此环境变量应采用 `%HERDR_BIN_PATH%` 语法。若要运行 PowerShell 语法，请显式调用它，例如 `powershell.exe -NoProfile -Command "..."`。
+在 Windows 上，自定义命令字符串使用 `cmd.exe /d /c`，因此环境变量应采用 `%FLOCKR_BIN_PATH%` 语法。若要运行 PowerShell 语法，请显式调用它，例如 `powershell.exe -NoProfile -Command "..."`。
 
 ## 主题
 
@@ -589,11 +589,11 @@ switch_ascii_input_source_in_prefix = true
 
 | 变量 | 用途 |
 | --- | --- |
-| `HERDR_CONFIG_PATH` | 覆盖配置文件路径。 |
-| `HERDR_SESSION` | 为 CLI 命令选择命名会话。 |
-| `HERDR_SOCKET_PATH` | 覆盖底层 socket 路径。 |
-| `HERDR_LOG` | 设置日志过滤，例如 `HERDR_LOG=herdr=debug`。 |
-| `HERDR_DISABLE_SOUND` | 即使 `[ui.sound] enabled = true` 也禁用声音播放。 |
+| `FLOCKR_CONFIG_PATH` | 覆盖配置文件路径。 |
+| `FLOCKR_SESSION` | 为 CLI 命令选择命名会话。 |
+| `FLOCKR_SOCKET_PATH` | 覆盖底层 socket 路径。 |
+| `FLOCKR_LOG` | 设置日志过滤，例如 `FLOCKR_LOG=herdr=debug`。 |
+| `FLOCKR_DISABLE_SOUND` | 即使 `[ui.sound] enabled = true` 也禁用声音播放。 |
 
 ## 日志
 

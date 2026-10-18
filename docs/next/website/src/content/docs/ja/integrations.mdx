@@ -345,7 +345,7 @@ herdr pane report-agent w1:p1 \
 Herdr 管理のインテグレーションと並走するユーザーフックは、`report-agent` ではなくメタデータを使うべきです。メタデータは、インテグレーションの `idle`、`working`、`blocked` やセッション復元の権威を奪わずに表示を変えます。`--agent` と `--applies-to-source` は表示フィールド (`--title`、`--display-agent`、`--state-label`) だけを保護します。トークンパッチは常に適用され、クリアまたは TTL の更新は報告側が管理します。`--display-agent` は表示名を変更します。
 
 ```bash
-herdr pane report-metadata "$HERDR_PANE_ID" \
+herdr pane report-metadata "$FLOCKR_PANE_ID" \
   --source user:claude-title \
   --agent claude \
   --title "Refactor auth middleware" \

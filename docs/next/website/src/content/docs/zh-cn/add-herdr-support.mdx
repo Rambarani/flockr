@@ -20,23 +20,23 @@ Herdr 窗格中的每个进程都会继承这些环境变量:
 
 | 变量 | 含义 |
 | --- | --- |
-| `HERDR_ENV` | 在 Herdr 中为 `1` |
-| `HERDR_PANE_ID` | 智能体所在的窗格 |
-| `HERDR_BIN_PATH` | 管理这个窗格的 Herdr 可执行文件 |
-| `HERDR_SOCKET_PATH` | Herdr 的 API 套接字 |
+| `FLOCKR_ENV` | 在 Herdr 中为 `1` |
+| `FLOCKR_PANE_ID` | 智能体所在的窗格 |
+| `FLOCKR_BIN_PATH` | 管理这个窗格的 Herdr 可执行文件 |
+| `FLOCKR_SOCKET_PATH` | Herdr 的 API 套接字 |
 
-你的智能体通过 `"$HERDR_BIN_PATH"` 发送三类上报:
+你的智能体通过 `"$FLOCKR_BIN_PATH"` 发送三类上报:
 
 1. **状态。** 每当 `idle`、`working` 或 `blocked` 发生变化时上报。
 2. **恢复命令。** 上报重新打开当前会话的命令。
 3. **释放。** 智能体退出时释放窗格。
 
-仅在 `HERDR_ENV=1` 且其他变量都存在时上报。在 Herdr 之外,集成不应执行任何操作。
+仅在 `FLOCKR_ENV=1` 且其他变量都存在时上报。在 Herdr 之外,集成不应执行任何操作。
 
 ## 上报状态
 
 ```bash
-"$HERDR_BIN_PATH" pane report-agent "$HERDR_PANE_ID" \
+"$FLOCKR_BIN_PATH" pane report-agent "$FLOCKR_PANE_ID" \
   --source my-agent \
   --agent my-agent \
   --state working \
@@ -55,7 +55,7 @@ Herdr 窗格中的每个进程都会继承这些环境变量:
 把恢复当前会话的命令放在 `--` 之后。带上该会话需要的选项,例如模型或权限模式,这样恢复后的会话行为一致:
 
 ```bash
-"$HERDR_BIN_PATH" pane report-agent "$HERDR_PANE_ID" \
+"$FLOCKR_BIN_PATH" pane report-agent "$FLOCKR_PANE_ID" \
   --source my-agent \
   --agent my-agent \
   --state idle \
@@ -78,7 +78,7 @@ Herdr 服务器重启后,Herdr 会在同一目录中打开该窗格并在其中�
 ## 退出时释放
 
 ```bash
-"$HERDR_BIN_PATH" pane release-agent "$HERDR_PANE_ID" \
+"$FLOCKR_BIN_PATH" pane release-agent "$FLOCKR_PANE_ID" \
   --source my-agent \
   --agent my-agent \
   --seq 3
@@ -96,14 +96,14 @@ Herdr 服务器重启后,Herdr 会在同一目录中打开该窗格并在其中�
 
 ## 直接使用套接字
 
-`HERDR_BIN_PATH` 和 CLI 是可移植的选择,包括在 Windows 上。如果你的智能体需要直接 IPC,可以发送 [Socket API](/zh-cn/docs/socket-api/) 中说明的等效 `pane.report_agent`、`pane.report_agent_session` 和 `pane.release_agent` 请求。恢复命令放在 `resume_argv` 数组中。
+`FLOCKR_BIN_PATH` 和 CLI 是可移植的选择,包括在 Windows 上。如果你的智能体需要直接 IPC,可以发送 [Socket API](/zh-cn/docs/socket-api/) 中说明的等效 `pane.report_agent`、`pane.report_agent_session` 和 `pane.release_agent` 请求。恢复命令放在 `resume_argv` 数组中。
 
 ## 检查你的集成
 
 在 Herdr 窗格中启动你的智能体,然后查看 Herdr 看到了什么:
 
 ```bash
-herdr pane get "$HERDR_PANE_ID"
+herdr pane get "$FLOCKR_PANE_ID"
 herdr agent list
 ```
 

@@ -188,7 +188,7 @@ fn generated_protocol_schema_artifact_is_current() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("docs/next/api/herdr-api.schema.json");
 
-    if std::env::var_os("HERDR_UPDATE_API_SCHEMA").is_some() {
+    if std::env::var_os("FLOCKR_UPDATE_API_SCHEMA").is_some() {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, &actual).unwrap();
         return;
@@ -196,13 +196,13 @@ fn generated_protocol_schema_artifact_is_current() {
 
     let expected = std::fs::read_to_string(&path).unwrap_or_else(|err| {
         panic!(
-            "failed to read {}; run `HERDR_UPDATE_API_SCHEMA=1 just test-one generated_protocol_schema_artifact_is_current`: {err}",
+            "failed to read {}; run `FLOCKR_UPDATE_API_SCHEMA=1 just test-one generated_protocol_schema_artifact_is_current`: {err}",
             path.display()
         )
     });
     assert_eq!(
         expected, actual,
-        "generated API schema artifact is stale; run `HERDR_UPDATE_API_SCHEMA=1 just test-one generated_protocol_schema_artifact_is_current`"
+        "generated API schema artifact is stale; run `FLOCKR_UPDATE_API_SCHEMA=1 just test-one generated_protocol_schema_artifact_is_current`"
     );
 }
 
@@ -1078,7 +1078,7 @@ fn layout_export_apply_round_trip() {
             pane: LayoutPane {
                 label: Some("tests".into()),
                 command: Some(vec!["sh".into(), "-c".into(), "just test".into()]),
-                env: HashMap::from([("HERDR_ROLE".into(), "tests".into())]),
+                env: HashMap::from([("FLOCKR_ROLE".into(), "tests".into())]),
                 ..Default::default()
             },
         }),
@@ -1409,7 +1409,7 @@ fn plugin_pane_open_request_round_trips() {
             direction: None,
             cwd: Some("/tmp".into()),
             focus: true,
-            env: [("HERDR_ROLE".to_string(), "board".to_string())].into(),
+            env: [("FLOCKR_ROLE".to_string(), "board".to_string())].into(),
         }),
     };
 
@@ -1418,7 +1418,7 @@ fn plugin_pane_open_request_round_trips() {
     assert_eq!(json["params"]["placement"], "popup");
     assert_eq!(json["params"]["width"], 90);
     assert_eq!(json["params"]["height"], "80%");
-    assert_eq!(json["params"]["env"]["HERDR_ROLE"], "board");
+    assert_eq!(json["params"]["env"]["FLOCKR_ROLE"], "board");
     let restored: Request = serde_json::from_value(json).unwrap();
     assert_eq!(restored, request);
 }

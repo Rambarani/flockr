@@ -25,13 +25,13 @@ use serde::{Deserialize, Deserializer};
 const STABLE_UPDATE_MANIFEST_URL: &str = "https://herdr.dev/latest.json";
 const PREVIEW_UPDATE_MANIFEST_URL: &str = "https://herdr.dev/preview.json";
 const HOMEBREW_FORMULA_API_URL: &str = "https://formulae.brew.sh/api/formula/herdr.json";
-const HERDR_UPDATE_COMMAND: &str = "herdr update";
+const FLOCKR_UPDATE_COMMAND: &str = "herdr update";
 const HOMEBREW_UPDATE_COMMAND: &str = "brew update && brew upgrade herdr";
 const MISE_UPDATE_COMMAND: &str = "mise upgrade herdr";
 const NIX_UPDATE_COMMAND: &str = "update through Nix";
 const MISE_INSTALLS_DIR_ENV: &str = "MISE_INSTALLS_DIR";
-const FAKE_UPDATE_VERSION_ENV: &str = "HERDR_FAKE_UPDATE_VERSION";
-const FAKE_UPDATE_NOTES_VERSION_ENV: &str = "HERDR_FAKE_UPDATE_NOTES_VERSION";
+const FAKE_UPDATE_VERSION_ENV: &str = "FLOCKR_FAKE_UPDATE_VERSION";
+const FAKE_UPDATE_NOTES_VERSION_ENV: &str = "FLOCKR_FAKE_UPDATE_NOTES_VERSION";
 const DEFAULT_FAKE_UPDATE_NOTES_VERSION: &str = "0.3.0";
 #[cfg(not(windows))]
 const SERVER_STOP_RESPONSE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -786,7 +786,7 @@ fn install_windows_update_with_installer(
 
 #[cfg(windows)]
 fn windows_installed_herdr_exe_path() -> Result<PathBuf, String> {
-    if let Some(install_dir) = env::var_os("HERDR_INSTALL_DIR").filter(|value| !value.is_empty()) {
+    if let Some(install_dir) = env::var_os("FLOCKR_INSTALL_DIR").filter(|value| !value.is_empty()) {
         return Ok(PathBuf::from(install_dir).join("herdr.exe"));
     }
 
@@ -804,11 +804,11 @@ fn windows_installed_herdr_exe_path() -> Result<PathBuf, String> {
 // ---------------------------------------------------------------------------
 
 fn running_inside_herdr_env(herdr_env: Option<&str>) -> bool {
-    herdr_env == Some(crate::HERDR_ENV_VALUE)
+    herdr_env == Some(crate::FLOCKR_ENV_VALUE)
 }
 
 fn running_inside_herdr() -> bool {
-    running_inside_herdr_env(env::var(crate::HERDR_ENV_VAR).ok().as_deref())
+    running_inside_herdr_env(env::var(crate::FLOCKR_ENV_VAR).ok().as_deref())
 }
 
 #[cfg(not(windows))]
@@ -1889,13 +1889,13 @@ pub(crate) fn update_install_command() -> &'static str {
     } else if is_nix_managed_install() {
         NIX_UPDATE_COMMAND
     } else {
-        HERDR_UPDATE_COMMAND
+        FLOCKR_UPDATE_COMMAND
     }
 }
 
 pub(crate) fn update_install_instruction(install_command: &str) -> String {
     match install_command {
-        HERDR_UPDATE_COMMAND => {
+        FLOCKR_UPDATE_COMMAND => {
             "detach, run `herdr update`, then run Herdr again to reconnect".to_string()
         }
         HOMEBREW_UPDATE_COMMAND => {
@@ -2955,7 +2955,7 @@ mod tests {
     #[test]
     fn update_install_instruction_distinguishes_install_from_restart() {
         assert_eq!(
-            update_install_instruction(HERDR_UPDATE_COMMAND),
+            update_install_instruction(FLOCKR_UPDATE_COMMAND),
             "detach, run `herdr update`, then run Herdr again to reconnect"
         );
         assert_eq!(
@@ -2993,7 +2993,7 @@ mod tests {
 
     #[test]
     fn running_inside_herdr_env_requires_marker() {
-        assert!(running_inside_herdr_env(Some(crate::HERDR_ENV_VALUE)));
+        assert!(running_inside_herdr_env(Some(crate::FLOCKR_ENV_VALUE)));
         assert!(!running_inside_herdr_env(None));
         assert!(!running_inside_herdr_env(Some("0")));
     }

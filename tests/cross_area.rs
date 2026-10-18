@@ -123,10 +123,10 @@ fn spawn_server_with_path(
     cmd.env("XDG_STATE_HOME", runtime_dir.join("state"));
     cmd.env("XDG_CONFIG_HOME", config_home);
     cmd.env("XDG_RUNTIME_DIR", runtime_dir);
-    cmd.env("HERDR_SOCKET_PATH", api_socket_path);
-    cmd.env_remove("HERDR_CLIENT_SOCKET_PATH");
+    cmd.env("FLOCKR_SOCKET_PATH", api_socket_path);
+    cmd.env_remove("FLOCKR_CLIENT_SOCKET_PATH");
     cmd.env("SHELL", "/bin/sh");
-    cmd.env_remove("HERDR_ENV");
+    cmd.env_remove("FLOCKR_ENV");
     if let Some(path) = path_override {
         cmd.env("PATH", path);
     }
@@ -159,14 +159,14 @@ fn spawn_client_process(
     let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_herdr"));
     support::isolate_herdr_test_process(&mut cmd);
     cmd.arg("client");
-    cmd.env("HERDR_DISABLE_SOUND", "1");
+    cmd.env("FLOCKR_DISABLE_SOUND", "1");
     cmd.env("XDG_STATE_HOME", runtime_dir.join("state"));
     cmd.env("XDG_CONFIG_HOME", config_home);
     cmd.env("XDG_RUNTIME_DIR", runtime_dir);
-    cmd.env("HERDR_SOCKET_PATH", api_socket_path);
-    cmd.env_remove("HERDR_CLIENT_SOCKET_PATH");
+    cmd.env("FLOCKR_SOCKET_PATH", api_socket_path);
+    cmd.env_remove("FLOCKR_CLIENT_SOCKET_PATH");
     cmd.env("SHELL", "/bin/sh");
-    cmd.env_remove("HERDR_ENV");
+    cmd.env_remove("FLOCKR_ENV");
 
     let child = pair.slave.spawn_command(cmd).unwrap();
     register_spawned_herdr_pid(child.process_id());

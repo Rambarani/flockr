@@ -29,7 +29,7 @@ review_pane=$(printf '%s\n' "$split" | jq -r '.result.pane.pane_id')
 
 `workspace create` 返回 `.result.workspace`、`.result.tab` 和 `.result.root_pane`;`tab create` 返回 `.result.tab` 和 `.result.root_pane`;`pane split` 把新窗格返回为 `.result.pane`。
 
-把窗格移动到另一个工作区会改变带工作区前缀的窗格 ID。执行 `pane move` 后,请继续使用 `.result.move_result.pane.pane_id`;旧值保留在 `.result.move_result.previous_pane_id`。运行中的进程会保留启动时的 Herdr 环境,但旧的 `HERDR_PANE_ID` 会继续作为该终端的别名,所以 `--current` 仍可安全使用。移动后发起的新命令仍可通过智能体名称解析,但已经进行中的等待会以 `agent_not_running` 结束。
+把窗格移动到另一个工作区会改变带工作区前缀的窗格 ID。执行 `pane move` 后,请继续使用 `.result.move_result.pane.pane_id`;旧值保留在 `.result.move_result.previous_pane_id`。运行中的进程会保留启动时的 Herdr 环境,但旧的 `FLOCKR_PANE_ID` 会继续作为该终端的别名,所以 `--current` 仍可安全使用。移动后发起的新命令仍可通过智能体名称解析,但已经进行中的等待会以 `agent_not_running` 结束。
 
 对于 shell、测试、服务器、CI 监视器和其他普通终端进程,使用窗格命令。当 Herdr 需要理解正在运行的是哪个智能体,或它处于 `working`、`blocked`、`done`、`idle`、`unknown` 中的哪个状态时,使用智能体命令。
 

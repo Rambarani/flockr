@@ -129,7 +129,7 @@ macOS では、`pane.send_input`（`pane run` が使用）と `agent.start` は�
 {"id":"req_focus","method":"pane.focus_direction","params":{"direction":"right"}}
 {"id":"req_resize","method":"pane.resize","params":{"pane_id":"w1:p1","direction":"right","amount":0.1}}
 {"id":"req_zoom","method":"pane.zoom","params":{"pane_id":"w1:p1","mode":"toggle"}}
-{"id":"req_split","method":"pane.split","params":{"direction":"right","ratio":0.333,"env":{"HERDR_ROLE":"tests"}}}
+{"id":"req_split","method":"pane.split","params":{"direction":"right","ratio":0.333,"env":{"FLOCKR_ROLE":"tests"}}}
 {"id":"req_process","method":"pane.process_info","params":{"pane_id":"w1:p1"}}
 ```
 
@@ -189,7 +189,7 @@ macOS では、`pane.send_input`（`pane run` が使用）と `agent.start` は�
         "label": "tests",
         "cwd": "/repo",
         "command": ["sh", "-c", "just test"],
-        "env": { "HERDR_ROLE": "tests" }
+        "env": { "FLOCKR_ROLE": "tests" }
       }
     }
   }
@@ -202,7 +202,7 @@ macOS では、`pane.send_input`（`pane run` が使用）と `agent.start` は�
 {"id":"req_ratio","method":"layout.set_split_ratio","params":{"tab_id":"w1:t1","path":[],"ratio":0.6}}
 ```
 
-プロセスを起動するメソッドは `env` オブジェクトを受け付けます。Herdr はそのキー/値ペアを新しく起動されるプロセスにのみ適用します。Herdr は管理下のペインプロセスに `HERDR_SOCKET_PATH`、`HERDR_ENV=1`、`HERDR_WORKSPACE_ID`、`HERDR_TAB_ID`、`HERDR_PANE_ID` も注入します。呼び出し側が与えた環境変数と衝突した場合、Herdr 管理の変数が権威を持ちます。
+プロセスを起動するメソッドは `env` オブジェクトを受け付けます。Herdr はそのキー/値ペアを新しく起動されるプロセスにのみ適用します。Herdr は管理下のペインプロセスに `FLOCKR_SOCKET_PATH`、`FLOCKR_ENV=1`、`FLOCKR_WORKSPACE_ID`、`FLOCKR_TAB_ID`、`FLOCKR_PANE_ID` も注入します。呼び出し側が与えた環境変数と衝突した場合、Herdr 管理の変数が権威を持ちます。
 
 `pane.swap` は方向指定と明示指定の両方の形式をサポートします:
 
@@ -349,12 +349,12 @@ worktree コマンドはライフサイクルイベントも発行します。`w
 `ui.agent_panel_sort` ポリシーが有効です。カスタムソートは設定を書き換えず、一時的に
 そのポリシーを置き換えます。
 
-`source` は所有者を識別します。プラグインは `plugin:<HERDR_PLUGIN_ID>` を使います。
+`source` は所有者を識別します。プラグインは `plugin:<FLOCKR_PLUGIN_ID>` を使います。
 所有元のプラグインが存在しないか無効な場合、Herdr は設定を拒否します。他の呼び出し元は
 独自の非 `plugin:` source を使えます。設定に成功すると以前のビューはアトミックに
 置き換えられます。ビューは clear または置換されるか、所有プラグインが disable、unlink、
 uninstall されるか、サーバーが終了するまで有効です。永続的な動作が必要なプラグインは、
-クエリを `HERDR_PLUGIN_STATE_DIR` に保存し、`[[startup]]` フックから再適用してください。
+クエリを `FLOCKR_PLUGIN_STATE_DIR` に保存し、`[[startup]]` フックから再適用してください。
 
 無条件で clear するか、指定した source がまだ所有している場合だけ clear できます:
 
@@ -452,7 +452,7 @@ action = "bootstrap"
 
 `plugin.action.invoke` はマニフェストのアクションを解決し、マニフェストのコマンドを起動し、Herdr が構築した呼び出しコンテキストと、開始されたコマンドのログレコードを返します。欠けているコンテキストフィールドは、アクティブなワークスペース、タブ、フォーカス中のペイン、worktree の出自情報、リクエスト id から補完されます。無効化されたプラグインのアクションの呼び出しは `plugin_disabled` エラーを返します。
 
-Herdr は `HERDR_SOCKET_PATH`、`HERDR_BIN_PATH`、`HERDR_ENV=1`、`HERDR_PLUGIN_ID`、`HERDR_PLUGIN_ROOT`、`HERDR_PLUGIN_CONFIG_DIR`、`HERDR_PLUGIN_STATE_DIR`、`HERDR_PLUGIN_CONTEXT_JSON`、そして利用可能な `HERDR_WORKSPACE_ID`、`HERDR_TAB_ID`、`HERDR_PANE_ID` の値を注入します。アクションコマンドは加えて `HERDR_PLUGIN_ACTION_ID` を受け取ります。イベントフックは `HERDR_PLUGIN_EVENT` と `HERDR_PLUGIN_EVENT_JSON` を、ペインコマンドは `HERDR_PLUGIN_ENTRYPOINT_ID` を受け取ります。
+Herdr は `FLOCKR_SOCKET_PATH`、`FLOCKR_BIN_PATH`、`FLOCKR_ENV=1`、`FLOCKR_PLUGIN_ID`、`FLOCKR_PLUGIN_ROOT`、`FLOCKR_PLUGIN_CONFIG_DIR`、`FLOCKR_PLUGIN_STATE_DIR`、`FLOCKR_PLUGIN_CONTEXT_JSON`、そして利用可能な `FLOCKR_WORKSPACE_ID`、`FLOCKR_TAB_ID`、`FLOCKR_PANE_ID` の値を注入します。アクションコマンドは加えて `FLOCKR_PLUGIN_ACTION_ID` を受け取ります。イベントフックは `FLOCKR_PLUGIN_EVENT` と `FLOCKR_PLUGIN_EVENT_JSON` を、ペインコマンドは `FLOCKR_PLUGIN_ENTRYPOINT_ID` を受け取ります。
 
 直近のアクションおよびイベントコマンドのログを一覧する:
 
@@ -462,15 +462,15 @@ Herdr は `HERDR_SOCKET_PATH`、`HERDR_BIN_PATH`、`HERDR_ENV=1`、`HERDR_PLUGIN
 
 イベントフックは、Herdr が `worktree.created` のような一致するイベント名を発行したときに、有効なインストール済みプラグインに対して実行されます。
 
-v1 には Herdr が管理するプラグインストレージ API はありません。`HERDR_PLUGIN_CONFIG_DIR` と `HERDR_PLUGIN_STATE_DIR` はパスの発見だけを提供します。ファイル、スキーマ、マイグレーション、クリーンアップはプラグインが所有します。
+v1 には Herdr が管理するプラグインストレージ API はありません。`FLOCKR_PLUGIN_CONFIG_DIR` と `FLOCKR_PLUGIN_STATE_DIR` はパスの発見だけを提供します。ファイル、スキーマ、マイグレーション、クリーンアップはプラグインが所有します。
 
 管理されたターミナル UI を開く:
 
 ```json
-{"id":"req_plugin_pane","method":"plugin.pane.open","params":{"plugin_id":"example.board","entrypoint":"board","placement":"zoomed","target_pane_id":"w1:p1","env":{"HERDR_ROLE":"board"},"focus":true}}
+{"id":"req_plugin_pane","method":"plugin.pane.open","params":{"plugin_id":"example.board","entrypoint":"board","placement":"zoomed","target_pane_id":"w1:p1","env":{"FLOCKR_ROLE":"board"},"focus":true}}
 ```
 
-`plugin.pane.open` は、インストール済みで有効かつプラットフォーム互換のプラグインを要求し、要求されたマニフェストの `[[panes]]` エントリーポイントを argv ベースのターミナルペインとして起動します。マニフェストのペイン `placement` のデフォルトは `overlay` です。リクエストの `placement` は `overlay`、`popup`、`split`、`tab`、`zoomed` でマニフェストを上書きできます。overlay と popup はアクティブなタイルペインを起動コンテキストとして使います。ポップアップターミナルはセッションモーダルで、タブレイアウトを変更しません。任意の `width` と `height` は、外側のサイズをターミナルセル数または `"80%"` のような割合で指定します。省略した寸法はデフォルトでターミナルの半分になり、小さすぎる値は最小サイズに制限されます。ポップアップはペイン id を持たず、`pane.*` とエージェント API の対象外で、ペインのライフサイクルイベントを発行せず、プラグインのフォーカスコンテキストを背後のタイルペインに維持し、そのプロセスへ `HERDR_PANE_ID` を渡しません。起動は `ok` を返し、`popup.close` はアクティブなポップアップを閉じ、ポップアップがない場合は `popup_not_open` を返します。split と zoomed は既存のペインを対象とし、tab はワークスペースを対象にできます。split、tab、zoomed、overlay は通常の Herdr ペインとして振る舞い、`plugin.pane.focus` と `plugin.pane.close` は引き続きそれらのペインに作用します。
+`plugin.pane.open` は、インストール済みで有効かつプラットフォーム互換のプラグインを要求し、要求されたマニフェストの `[[panes]]` エントリーポイントを argv ベースのターミナルペインとして起動します。マニフェストのペイン `placement` のデフォルトは `overlay` です。リクエストの `placement` は `overlay`、`popup`、`split`、`tab`、`zoomed` でマニフェストを上書きできます。overlay と popup はアクティブなタイルペインを起動コンテキストとして使います。ポップアップターミナルはセッションモーダルで、タブレイアウトを変更しません。任意の `width` と `height` は、外側のサイズをターミナルセル数または `"80%"` のような割合で指定します。省略した寸法はデフォルトでターミナルの半分になり、小さすぎる値は最小サイズに制限されます。ポップアップはペイン id を持たず、`pane.*` とエージェント API の対象外で、ペインのライフサイクルイベントを発行せず、プラグインのフォーカスコンテキストを背後のタイルペインに維持し、そのプロセスへ `FLOCKR_PANE_ID` を渡しません。起動は `ok` を返し、`popup.close` はアクティブなポップアップを閉じ、ポップアップがない場合は `popup_not_open` を返します。split と zoomed は既存のペインを対象とし、tab はワークスペースを対象にできます。split、tab、zoomed、overlay は通常の Herdr ペインとして振る舞い、`plugin.pane.focus` と `plugin.pane.close` は引き続きそれらのペインに作用します。
 
 ## ソケットトランスポート
 
@@ -506,13 +506,13 @@ JSON のデコードまで到達したリクエスト行では、メソッドや
 解決順:
 
 1. 明示的な CLI の `--session <name>`
-2. `HERDR_SOCKET_PATH`
-3. `HERDR_SESSION=<name>`
+2. `FLOCKR_SOCKET_PATH`
+3. `FLOCKR_SESSION=<name>`
 4. デフォルトセッションのソケット
 
-`HERDR_SOCKET_PATH` は低レベルな上書きにのみ使ってください。
+`FLOCKR_SOCKET_PATH` は低レベルな上書きにのみ使ってください。
 
-プラグインでは、移植性のある Windows の挙動が必要なときは `HERDR_BIN_PATH` と CLI ラッパーの呼び出しを推奨します。生のソケットクライアントは、プラットフォームネイティブのローカルソケット形式を使う責任を負います。
+プラグインでは、移植性のある Windows の挙動が必要なときは `FLOCKR_BIN_PATH` と CLI ラッパーの呼び出しを推奨します。生のソケットクライアントは、プラットフォームネイティブのローカルソケット形式を使う責任を負います。
 
 ## エージェント状態の報告
 

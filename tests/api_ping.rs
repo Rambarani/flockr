@@ -145,10 +145,10 @@ fn spawn_herdr_with_options(
     cmd.arg("server");
     cmd.env("XDG_CONFIG_HOME", config_home);
     cmd.env("XDG_RUNTIME_DIR", runtime_dir);
-    cmd.env("HERDR_SOCKET_PATH", socket_path);
-    cmd.env_remove("HERDR_CLIENT_SOCKET_PATH");
+    cmd.env("FLOCKR_SOCKET_PATH", socket_path);
+    cmd.env_remove("FLOCKR_CLIENT_SOCKET_PATH");
     cmd.env("SHELL", shell);
-    cmd.env_remove("HERDR_ENV");
+    cmd.env_remove("FLOCKR_ENV");
     if let Some(path) = path_override {
         cmd.env("PATH", path);
     }
@@ -323,12 +323,12 @@ fn spawned_server_ignores_inherited_pane_env() {
     fs::create_dir_all(&startup_cwd).unwrap();
 
     // A shell inside a herdr pane passes these to every process it starts.
-    let saved: Vec<_> = ["HERDR_STARTUP_CWD", "HERDR_SESSION"]
+    let saved: Vec<_> = ["FLOCKR_STARTUP_CWD", "FLOCKR_SESSION"]
         .into_iter()
         .map(|name| (name, std::env::var_os(name)))
         .collect();
-    std::env::set_var("HERDR_STARTUP_CWD", &startup_cwd);
-    std::env::set_var("HERDR_SESSION", "inherited");
+    std::env::set_var("FLOCKR_STARTUP_CWD", &startup_cwd);
+    std::env::set_var("FLOCKR_SESSION", "inherited");
     let child = spawn_herdr(&config_home, &runtime_dir, &socket_path);
     for (name, value) in saved {
         match value {
@@ -1140,7 +1140,7 @@ fn agent_start_targets_existing_pane_over_socket() {
     let bin = base.join("bin");
     fs::create_dir_all(&bin).unwrap();
     let fake_pi = bin.join("pi");
-    fs::write(&fake_pi, "#!/bin/sh\nHERDR_AGENT=pi exec /bin/sleep 20\n").unwrap();
+    fs::write(&fake_pi, "#!/bin/sh\nFLOCKR_AGENT=pi exec /bin/sleep 20\n").unwrap();
     fs::set_permissions(&fake_pi, fs::Permissions::from_mode(0o755)).unwrap();
 
     let child = spawn_herdr_with_path(&config_home, &runtime_dir, &socket_path, Some(&bin));

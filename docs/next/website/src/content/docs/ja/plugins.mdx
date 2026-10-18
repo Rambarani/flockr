@@ -25,7 +25,7 @@ Herdr を呼び出します。
 プラグイン API です: [CLI リファレンス](/ja/docs/cli-reference/)のすべてのコマンドを
 プラグインから使えます。自分で `herdr ...` として実行できるものは、プラグインも
 実行できます。ほとんどのプラグインは、実行中の Herdr バイナリを指す
-`HERDR_BIN_PATH` を通じて Herdr を呼び出すべきです。これにより、Unix ソケットと
+`FLOCKR_BIN_PATH` を通じて Herdr を呼び出すべきです。これにより、Unix ソケットと
 Windows 名前付きパイプの両方でプラグインの移植性が保たれます。生の JSON リクエストを
 自分で送りたいときは[ソケット API](/ja/docs/socket-api/)を使ってください。
 
@@ -148,12 +148,12 @@ contexts = ["workspace"]
 command = ["node", "index.js"]
 ```
 
-コマンドの中からは `HERDR_BIN_PATH` で Herdr を呼び出します:
+コマンドの中からは `FLOCKR_BIN_PATH` で Herdr を呼び出します:
 
 ```js
 const { spawnSync } = require("node:child_process");
 
-const herdr = process.env.HERDR_BIN_PATH ?? "herdr";
+const herdr = process.env.FLOCKR_BIN_PATH ?? "herdr";
 const result = spawnSync(herdr, ["workspace", "list"], {
   encoding: "utf8",
   stdio: ["ignore", "pipe", "pipe"],
@@ -253,43 +253,43 @@ enable では実行されません。Herdr はこれらを非同期で開始し�
 
 スタートアップフックは一度限りの初期化コマンドであり、監視されるデーモンではありません。
 フックはプラグインが所有する状態を復元し、必要な Herdr API を呼び出して終了してください。
-たとえば宣言型の Agent ビューを `HERDR_PLUGIN_STATE_DIR` に保存し、スタートアップフックで
+たとえば宣言型の Agent ビューを `FLOCKR_PLUGIN_STATE_DIR` に保存し、スタートアップフックで
 読み込んで再適用できます。
 
 スタートアップフックは通常のランタイムプラグイン環境と
-`HERDR_PLUGIN_EVENT=startup` を受け取ります。インストールプレビューには、自動実行される
+`FLOCKR_PLUGIN_EVENT=startup` を受け取ります。インストールプレビューには、自動実行される
 コードを確認できるよう、すべてのスタートアップコマンドが表示されます。
 
 ## コマンドと環境
 
 ランタイムコマンドは、プラグインディレクトリを作業ディレクトリとして実行されます。
-Herdr は `HERDR_SOCKET_PATH`、`HERDR_BIN_PATH`、`HERDR_ENV=1`、
-`HERDR_PLUGIN_ID`、`HERDR_PLUGIN_ROOT`、`HERDR_PLUGIN_CONFIG_DIR`、
-`HERDR_PLUGIN_STATE_DIR`、`HERDR_PLUGIN_CONTEXT_JSON`、そして利用可能なら
-`HERDR_WORKSPACE_ID`、`HERDR_TAB_ID`、`HERDR_PANE_ID` を注入します。アクション
-コマンドは加えて `HERDR_PLUGIN_ACTION_ID` を受け取ります。スタートアップフックと
-イベントフックは `HERDR_PLUGIN_EVENT`（スタートアップフックでは `startup`）を受け取り、
-イベントフックはさらに `HERDR_PLUGIN_EVENT_JSON` を、ペインコマンドは
-`HERDR_PLUGIN_ENTRYPOINT_ID` を受け取ります。
+Herdr は `FLOCKR_SOCKET_PATH`、`FLOCKR_BIN_PATH`、`FLOCKR_ENV=1`、
+`FLOCKR_PLUGIN_ID`、`FLOCKR_PLUGIN_ROOT`、`FLOCKR_PLUGIN_CONFIG_DIR`、
+`FLOCKR_PLUGIN_STATE_DIR`、`FLOCKR_PLUGIN_CONTEXT_JSON`、そして利用可能なら
+`FLOCKR_WORKSPACE_ID`、`FLOCKR_TAB_ID`、`FLOCKR_PANE_ID` を注入します。アクション
+コマンドは加えて `FLOCKR_PLUGIN_ACTION_ID` を受け取ります。スタートアップフックと
+イベントフックは `FLOCKR_PLUGIN_EVENT`（スタートアップフックでは `startup`）を受け取り、
+イベントフックはさらに `FLOCKR_PLUGIN_EVENT_JSON` を、ペインコマンドは
+`FLOCKR_PLUGIN_ENTRYPOINT_ID` を受け取ります。
 
-`HERDR_PLUGIN_ROOT` は、インストールまたはリンクされたプラグインディレクトリです。
+`FLOCKR_PLUGIN_ROOT` は、インストールまたはリンクされたプラグインディレクトリです。
 GitHub からインストールされたプラグインのルートは管理されたソースチェックアウト
 なので、そこにユーザーの認証情報や永続状態を保存しないでください。`.env` ファイルの
-ようなユーザーが編集する設定は `HERDR_PLUGIN_CONFIG_DIR` の下に、ローカルの
-ランタイム状態は `HERDR_PLUGIN_STATE_DIR` の下に置いてください。Herdr はこれらの
+ようなユーザーが編集する設定は `FLOCKR_PLUGIN_CONFIG_DIR` の下に、ローカルの
+ランタイム状態は `FLOCKR_PLUGIN_STATE_DIR` の下に置いてください。Herdr はこれらの
 ディレクトリを作成し、レガシーなプラグイン設定の場所が存在すれば
-`HERDR_PLUGIN_CONFIG_DIR` に初期内容を移しますが、その中身の検証、同期、削除は
+`FLOCKR_PLUGIN_CONFIG_DIR` に初期内容を移しますが、その中身の検証、同期、削除は
 しません。ファイル形式とライフサイクルはプラグインが所有します。
 
-`HERDR_PLUGIN_CONTEXT_JSON` には、その呼び出しで利用可能な場合、ワークスペース、
+`FLOCKR_PLUGIN_CONTEXT_JSON` には、その呼び出しで利用可能な場合、ワークスペース、
 タブ、フォーカス中のペイン、worktree、エージェント、選択テキスト、クリックされた
 URL、リンクハンドラーのフィールドが含まれます。シェルプラグインは、よく使う id は
 個別の環境変数から読み、完全な形が必要ならコンテキスト JSON をパースできます。
 
 Node、PowerShell、Bash など別のランタイムから移植性を保って Herdr を呼び出す必要が
-あるときは `HERDR_BIN_PATH` を使ってください。`HERDR_SOCKET_PATH` の背後にある生の
+あるときは `FLOCKR_BIN_PATH` を使ってください。`FLOCKR_SOCKET_PATH` の背後にある生の
 ソケットトランスポートは OS 固有です: Unix クライアントは Unix ソケットパスに、
-Windows クライアントは名前付きパイプに接続します。`HERDR_BIN_PATH` を通じた CLI
+Windows クライアントは名前付きパイプに接続します。`FLOCKR_BIN_PATH` を通じた CLI
 呼び出しなら、そのトランスポートの違いを気にせずに済みます。利用可能なコマンドは
 [CLI リファレンス](/ja/docs/cli-reference/)、生のリクエスト形式は
 [ソケット API](/ja/docs/socket-api/)を参照してください。
@@ -326,7 +326,7 @@ API を呼び出せます。ペインがタブやワークスペースをまた�
 プラグインペインの所有権を元のペインに結び付けたまま維持します。
 ポップアップは Herdr ペインではなく、セッションに 1 つだけ存在できるリソースです。
 ペイン id を持たず、プラグインのフォーカスコンテキストを変更せず、ペインのライフサイクルイベントを発行せず、pane、layout、永続化、エージェント API に参加しません。
-そのプロセスには `HERDR_PANE_ID` が渡されず、背後のタイルペインは `HERDR_PLUGIN_CONTEXT_JSON` から参照できます。
+そのプロセスには `FLOCKR_PANE_ID` が渡されず、背後のタイルペインは `FLOCKR_PLUGIN_CONTEXT_JSON` から参照できます。
 Settings、コピーモード、または別の Herdr モーダルが開いている間にポップアップを開くと `ui_busy` が返り、起動後の `plugin.pane.open` は `ok` を返します。
 
 Windows では、ビルドコマンド、アクションコマンド、イベントコマンドは、素の
@@ -354,9 +354,9 @@ description = "apply layout"
 です。キャプチャされたターミナルのマウスレポートは、Command/Super を通常のクリックと
 区別して伝えないからです。`pattern` はクリックされた URL に対してマッチする Rust の
 正規表現で、`action` には同じプラグインが宣言したアクション名を指定します。リンク
-ハンドラーのアクションは `HERDR_PLUGIN_CONTEXT_JSON` で
+ハンドラーのアクションは `FLOCKR_PLUGIN_CONTEXT_JSON` で
 `invocation_source = "link_click"`、`clicked_url`、`link_handler_id` を受け取ります。
-シェルプラグインは `HERDR_PLUGIN_CLICKED_URL` と `HERDR_PLUGIN_LINK_HANDLER_ID` も
+シェルプラグインは `FLOCKR_PLUGIN_CLICKED_URL` と `FLOCKR_PLUGIN_LINK_HANDLER_ID` も
 読めます。ハンドラーは各プラグイン内でマニフェストの順にチェックされます。
 
 リンクのクリックでプラグインを呼び出すのは、`ui.mouse_capture` が有効な場合だけです。一致するハンドラーが先に実行され、起動に失敗するとエラーを表示して停止します。一致するハンドラーがない場合、外部で開くのは HTTP(S) リンクだけです。キャプチャが無効な場合、外側のターミナルが通常のショートカットと警告で明示的なハイパーリンクを処理します。Windows Terminal の URL 検出の注意点は[マウス操作](/ja/docs/quick-start/#マウスを使う)を参照してください。

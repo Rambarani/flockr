@@ -236,10 +236,10 @@ fn dead_server_cli_reports_one_session_aware_json_line() {
         .args(["workspace", "create"])
         .env("XDG_CONFIG_HOME", &config_home)
         .env("XDG_RUNTIME_DIR", &runtime_dir)
-        .env("HERDR_SOCKET_PATH", &stale_socket)
-        .env("HERDR_SESSION", "unrelated")
-        .env_remove("HERDR_CLIENT_SOCKET_PATH")
-        .env_remove("HERDR_ENV")
+        .env("FLOCKR_SOCKET_PATH", &stale_socket)
+        .env("FLOCKR_SESSION", "unrelated")
+        .env_remove("FLOCKR_CLIENT_SOCKET_PATH")
+        .env_remove("FLOCKR_ENV")
         .output()
         .unwrap();
     assert_server_not_running(stale, &stale_socket, "herdr");
@@ -267,7 +267,7 @@ fn integration_commands_run_locally_when_server_is_missing() {
 
     let workspace_list = Command::new(env!("CARGO_BIN_EXE_herdr"))
         .args(["workspace", "list"])
-        .env("HERDR_SOCKET_PATH", &missing_socket)
+        .env("FLOCKR_SOCKET_PATH", &missing_socket)
         .env("HOME", &home_dir)
         .output()
         .unwrap();
@@ -275,7 +275,7 @@ fn integration_commands_run_locally_when_server_is_missing() {
 
     let integration_install = Command::new(env!("CARGO_BIN_EXE_herdr"))
         .args(["integration", "install", "pi"])
-        .env("HERDR_SOCKET_PATH", &missing_socket)
+        .env("FLOCKR_SOCKET_PATH", &missing_socket)
         .env("HOME", &home_dir)
         .output()
         .unwrap();
@@ -287,7 +287,7 @@ fn integration_commands_run_locally_when_server_is_missing() {
 
     let integration_status = Command::new(env!("CARGO_BIN_EXE_herdr"))
         .args(["integration", "status"])
-        .env("HERDR_SOCKET_PATH", &missing_socket)
+        .env("FLOCKR_SOCKET_PATH", &missing_socket)
         .env("HOME", &home_dir)
         .output()
         .unwrap();
@@ -298,7 +298,7 @@ fn integration_commands_run_locally_when_server_is_missing() {
 
     let integration_uninstall = Command::new(env!("CARGO_BIN_EXE_herdr"))
         .args(["integration", "uninstall", "pi"])
-        .env("HERDR_SOCKET_PATH", &missing_socket)
+        .env("FLOCKR_SOCKET_PATH", &missing_socket)
         .env("HOME", &home_dir)
         .output()
         .unwrap();
@@ -330,7 +330,7 @@ fn integration_status_outdated_only_prints_action_for_legacy_install() {
 
     let output = Command::new(env!("CARGO_BIN_EXE_herdr"))
         .args(["integration", "status", "--outdated-only"])
-        .env("HERDR_SOCKET_PATH", &missing_socket)
+        .env("FLOCKR_SOCKET_PATH", &missing_socket)
         .env("HOME", &home_dir)
         .output()
         .unwrap();
@@ -356,7 +356,7 @@ fn integration_status_rejects_unknown_flags() {
 
     let output = Command::new(env!("CARGO_BIN_EXE_herdr"))
         .args(["integration", "status", "--wat"])
-        .env("HERDR_SOCKET_PATH", &missing_socket)
+        .env("FLOCKR_SOCKET_PATH", &missing_socket)
         .env("HOME", &home_dir)
         .output()
         .unwrap();

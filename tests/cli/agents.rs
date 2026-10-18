@@ -48,7 +48,7 @@ fn write_delayed_shell_and_fake_pi(
     fs::write(
         &fake_pi,
         format!(
-            "#!/bin/sh\nprintf '%s\\n' \"$@\" >> '{}'\nexport HERDR_AGENT=pi\n'{}' pane report-agent \"$HERDR_PANE_ID\" --source custom:delayed-shell-pi --agent pi --state idle >/dev/null\nwhile IFS= read -r _prompt; do :; done\n",
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" >> '{}'\nexport FLOCKR_AGENT=pi\n'{}' pane report-agent \"$FLOCKR_PANE_ID\" --source custom:delayed-shell-pi --agent pi --state idle >/dev/null\nwhile IFS= read -r _prompt; do :; done\n",
             invocations.display(),
             env!("CARGO_BIN_EXE_herdr"),
         ),
@@ -223,7 +223,7 @@ fn agent_start_command_works() {
     fs::write(
         &fake_pi,
         format!(
-            "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{0}'\nexport HERDR_AGENT=pi\n'{1}' pane report-agent \"$HERDR_PANE_ID\" --source custom:fake-pi --agent pi --state idle >/dev/null\nwhile IFS= read -r prompt; do\n  case \"$prompt\" in\n    \"do not transition\") continue ;;\n    \"done churn\")\n      '{1}' pane report-agent \"$HERDR_PANE_ID\" --source custom:fake-pi --agent pi --state done >/dev/null\n      '{1}' pane report-agent \"$HERDR_PANE_ID\" --source custom:fake-pi --agent pi --state idle >/dev/null\n      continue\n      ;;\n    \"session churn\")\n      '{1}' pane report-agent-session \"$HERDR_PANE_ID\" --source custom:fake-pi --agent pi --agent-session-id replacement >/dev/null\n      continue\n      ;;\n    \"block after submit\")\n      '{1}' pane report-agent \"$HERDR_PANE_ID\" --source custom:fake-pi --agent pi --state blocked >/dev/null\n      continue\n      ;;\n  esac\n  '{1}' pane report-agent \"$HERDR_PANE_ID\" --source custom:fake-pi --agent pi --state working >/dev/null\n  '{1}' pane report-agent \"$HERDR_PANE_ID\" --source custom:fake-pi --agent pi --state idle >/dev/null\n  printf '%s\\n' \"$prompt\" >> '{2}'\ndone\n",
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{0}'\nexport FLOCKR_AGENT=pi\n'{1}' pane report-agent \"$FLOCKR_PANE_ID\" --source custom:fake-pi --agent pi --state idle >/dev/null\nwhile IFS= read -r prompt; do\n  case \"$prompt\" in\n    \"do not transition\") continue ;;\n    \"done churn\")\n      '{1}' pane report-agent \"$FLOCKR_PANE_ID\" --source custom:fake-pi --agent pi --state done >/dev/null\n      '{1}' pane report-agent \"$FLOCKR_PANE_ID\" --source custom:fake-pi --agent pi --state idle >/dev/null\n      continue\n      ;;\n    \"session churn\")\n      '{1}' pane report-agent-session \"$FLOCKR_PANE_ID\" --source custom:fake-pi --agent pi --agent-session-id replacement >/dev/null\n      continue\n      ;;\n    \"block after submit\")\n      '{1}' pane report-agent \"$FLOCKR_PANE_ID\" --source custom:fake-pi --agent pi --state blocked >/dev/null\n      continue\n      ;;\n  esac\n  '{1}' pane report-agent \"$FLOCKR_PANE_ID\" --source custom:fake-pi --agent pi --state working >/dev/null\n  '{1}' pane report-agent \"$FLOCKR_PANE_ID\" --source custom:fake-pi --agent pi --state idle >/dev/null\n  printf '%s\\n' \"$prompt\" >> '{2}'\ndone\n",
             captured_args.display(),
             env!("CARGO_BIN_EXE_herdr"),
             captured_prompts.display(),
@@ -551,7 +551,7 @@ fn agent_start_timeout_releases_the_name_for_reuse() {
     let fake_pi = bin.join("pi");
     fs::write(
         &fake_pi,
-        "#!/bin/sh\nunset HERDR_AGENT\nexec /bin/sleep 20\n",
+        "#!/bin/sh\nunset FLOCKR_AGENT\nexec /bin/sleep 20\n",
     )
     .unwrap();
     fs::set_permissions(&fake_pi, fs::Permissions::from_mode(0o755)).unwrap();
@@ -633,7 +633,7 @@ fn agent_start_reports_detected_kind_mismatch_before_released_name() {
     let fake_pi = bin.join("pi");
     fs::write(
         &fake_pi,
-        "#!/bin/sh\nHERDR_AGENT=codex exec /bin/sleep 10\n",
+        "#!/bin/sh\nFLOCKR_AGENT=codex exec /bin/sleep 10\n",
     )
     .unwrap();
     fs::set_permissions(&fake_pi, fs::Permissions::from_mode(0o755)).unwrap();
@@ -708,7 +708,7 @@ fn agent_start_follows_its_named_terminal_when_the_pane_moves() {
     let bin = base.join("bin");
     fs::create_dir_all(&bin).unwrap();
     let fake_pi = bin.join("pi");
-    fs::write(&fake_pi, "#!/bin/sh\nHERDR_AGENT=pi exec /bin/sleep 10\n").unwrap();
+    fs::write(&fake_pi, "#!/bin/sh\nFLOCKR_AGENT=pi exec /bin/sleep 10\n").unwrap();
     fs::set_permissions(&fake_pi, fs::Permissions::from_mode(0o755)).unwrap();
 
     let herdr = spawn_herdr_with_path(&config_home, &runtime_dir, &socket_path, Some(&bin));

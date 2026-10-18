@@ -20,23 +20,23 @@ Herdr ペイン内のすべてのプロセスは、次の環境変数を継承�
 
 | 変数 | 意味 |
 | --- | --- |
-| `HERDR_ENV` | Herdr 内では `1` |
-| `HERDR_PANE_ID` | エージェントが動いているペイン |
-| `HERDR_BIN_PATH` | このペインを管理する Herdr バイナリ |
-| `HERDR_SOCKET_PATH` | Herdr の API ソケット |
+| `FLOCKR_ENV` | Herdr 内では `1` |
+| `FLOCKR_PANE_ID` | エージェントが動いているペイン |
+| `FLOCKR_BIN_PATH` | このペインを管理する Herdr バイナリ |
+| `FLOCKR_SOCKET_PATH` | Herdr の API ソケット |
 
-エージェントは `"$HERDR_BIN_PATH"` を通じて 3 種類の報告をします:
+エージェントは `"$FLOCKR_BIN_PATH"` を通じて 3 種類の報告をします:
 
 1. **状態。** `idle`、`working`、`blocked` が変わるたびに報告します。
 2. **resume コマンド。** 現在のセッションを開き直すコマンドを報告します。
 3. **解放。** エージェントの終了時にペインを解放します。
 
-`HERDR_ENV=1` で他の変数も設定されているときだけ報告してください。Herdr の外では、インテグレーションは何もしないようにします。
+`FLOCKR_ENV=1` で他の変数も設定されているときだけ報告してください。Herdr の外では、インテグレーションは何もしないようにします。
 
 ## 状態を報告する
 
 ```bash
-"$HERDR_BIN_PATH" pane report-agent "$HERDR_PANE_ID" \
+"$FLOCKR_BIN_PATH" pane report-agent "$FLOCKR_PANE_ID" \
   --source my-agent \
   --agent my-agent \
   --state working \
@@ -55,7 +55,7 @@ Herdr ペイン内のすべてのプロセスは、次の環境変数を継承�
 現在のセッションを再開するコマンドを `--` の後に置きます。モデルや権限モードなど、そのセッションに必要なオプションも含めると、再開したセッションが同じように動きます:
 
 ```bash
-"$HERDR_BIN_PATH" pane report-agent "$HERDR_PANE_ID" \
+"$FLOCKR_BIN_PATH" pane report-agent "$FLOCKR_PANE_ID" \
   --source my-agent \
   --agent my-agent \
   --state idle \
@@ -78,7 +78,7 @@ Herdr サーバーの再起動後、Herdr は同じディレクトリでペイ�
 ## 終了時に解放する
 
 ```bash
-"$HERDR_BIN_PATH" pane release-agent "$HERDR_PANE_ID" \
+"$FLOCKR_BIN_PATH" pane release-agent "$FLOCKR_PANE_ID" \
   --source my-agent \
   --agent my-agent \
   --seq 3
@@ -96,14 +96,14 @@ Herdr サーバーの再起動後、Herdr は同じディレクトリでペイ�
 
 ## ソケットを直接使う
 
-`HERDR_BIN_PATH` と CLI は Windows を含めて移植性のある選択肢です。エージェントに直接の IPC が必要な場合は、[Socket API](/ja/docs/socket-api/) に記載された同等の `pane.report_agent`、`pane.report_agent_session`、`pane.release_agent` リクエストを送信します。resume コマンドは `resume_argv` 配列に入れます。
+`FLOCKR_BIN_PATH` と CLI は Windows を含めて移植性のある選択肢です。エージェントに直接の IPC が必要な場合は、[Socket API](/ja/docs/socket-api/) に記載された同等の `pane.report_agent`、`pane.report_agent_session`、`pane.release_agent` リクエストを送信します。resume コマンドは `resume_argv` 配列に入れます。
 
 ## インテグレーションを確認する
 
 Herdr のペインでエージェントを起動し、Herdr から見える内容を確認します:
 
 ```bash
-herdr pane get "$HERDR_PANE_ID"
+herdr pane get "$FLOCKR_PANE_ID"
 herdr agent list
 ```
 

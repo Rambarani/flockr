@@ -227,10 +227,10 @@ herdr pane close <pane_id>
 ```
 
 For pane commands that accept `--current`, Herdr uses the calling pane's
-`HERDR_PANE_ID` when the command runs inside a Herdr pane. For `pane split`,
+`FLOCKR_PANE_ID` when the command runs inside a Herdr pane. For `pane split`,
 an explicit pane id or `--pane ID` splits that pane. An omitted target splits
-the calling pane when `HERDR_PANE_ID` is available, otherwise the focused pane.
-`--current` requires a calling pane and errors when `HERDR_PANE_ID` is unavailable.
+the calling pane when `FLOCKR_PANE_ID` is available, otherwise the focused pane.
+`--current` requires a calling pane and errors when `FLOCKR_PANE_ID` is unavailable.
 The split response exposes the new pane ID as `.result.pane.pane_id`.
 
 `pane input --right-click pane` forwards unmodified right-click gestures to a
@@ -238,7 +238,7 @@ mouse-reporting pane application. `herdr` restores the default pane menu.
 Right-clicking the pane frame still opens Herdr's menu. `pane split
 --right-click pane` applies the same policy to the new pane at creation.
 
-After `pane move`, use `.result.move_result.pane.pane_id` for later commands. A cross-workspace move changes the workspace-qualified pane ID; the prior value remains at `.result.move_result.previous_pane_id`. The running process keeps its launch-time `HERDR_PANE_ID`, `HERDR_TAB_ID`, and `HERDR_WORKSPACE_ID`; Herdr retains the old pane ID as an alias for that terminal, so pane commands using `--current` still resolve it. A live agent name follows the terminal and continues to resolve after the move.
+After `pane move`, use `.result.move_result.pane.pane_id` for later commands. A cross-workspace move changes the workspace-qualified pane ID; the prior value remains at `.result.move_result.previous_pane_id`. The running process keeps its launch-time `FLOCKR_PANE_ID`, `FLOCKR_TAB_ID`, and `FLOCKR_WORKSPACE_ID`; Herdr retains the old pane ID as an alias for that terminal, so pane commands using `--current` still resolve it. A live agent name follows the terminal and continues to resolve after the move.
 
 Read output:
 
@@ -529,7 +529,7 @@ new tab, a zoomed pane, or a session-modal `popup` that does not change the tab
 layout. `--width` and `--height` set the outer popup dimensions in terminal
 cells or percentages such as `80%`; omitted dimensions default to half the
 terminal size, and values smaller than the popup minimum are clamped. A popup
-is not a Herdr pane, does not export `HERDR_PANE_ID`, and does not participate
+is not a Herdr pane, does not export `FLOCKR_PANE_ID`, and does not participate
 in pane or agent APIs. Native non-terminal plugin panes are outside plugin v1.
 
 New panes identify as `TERM_PROGRAM=herdr`, with `TERM_PROGRAM_VERSION` set to
@@ -545,7 +545,7 @@ variables, including API keys and display settings, remain inherited rather than
 being replaced with the attaching client's environment. SSH-agent forwarding has
 its own reconnect handling. Existing pane processes are unchanged by this cleanup.
 
-`--env KEY=VALUE` can be repeated on process-launching commands. It applies to the newly launched process only. Herdr-managed variables such as `HERDR_SOCKET_PATH`, `HERDR_BIN_PATH`, `HERDR_ENV`, `HERDR_WORKSPACE_ID`, `HERDR_TAB_ID`, `HERDR_PANE_ID`, `HERDR_PLUGIN_ID`, `HERDR_PLUGIN_ROOT`, `HERDR_PLUGIN_CONFIG_DIR`, `HERDR_PLUGIN_STATE_DIR`, `HERDR_PLUGIN_ENTRYPOINT_ID`, and `HERDR_PLUGIN_CONTEXT_JSON` stay authoritative when they conflict with caller-provided env.
+`--env KEY=VALUE` can be repeated on process-launching commands. It applies to the newly launched process only. Herdr-managed variables such as `FLOCKR_SOCKET_PATH`, `FLOCKR_BIN_PATH`, `FLOCKR_ENV`, `FLOCKR_WORKSPACE_ID`, `FLOCKR_TAB_ID`, `FLOCKR_PANE_ID`, `FLOCKR_PLUGIN_ID`, `FLOCKR_PLUGIN_ROOT`, `FLOCKR_PLUGIN_CONFIG_DIR`, `FLOCKR_PLUGIN_STATE_DIR`, `FLOCKR_PLUGIN_ENTRYPOINT_ID`, and `FLOCKR_PLUGIN_CONTEXT_JSON` stay authoritative when they conflict with caller-provided env.
 
 ## Read sources
 
@@ -562,13 +562,13 @@ These meanings apply to reads. For `pane wait-output` only, both `recent` and `r
 
 | Variable | Purpose |
 | --- | --- |
-| `HERDR_CONFIG_PATH` | Override the config file path. |
-| `HERDR_SESSION` | Select a named session for CLI commands. |
-| `HERDR_SOCKET_PATH` | Low-level socket path override. |
-| `HERDR_PROCESS_DETECTION` | Linux process detection strategy: `native` (default) or opt-in `child-groups`. |
-| `HERDR_ENV` | Set to `1` inside Herdr-managed pane processes. |
-| `HERDR_PANE_ID` | Public pane id for the running pane process. |
-| `HERDR_TAB_ID` | Public tab id for the running pane process. |
-| `HERDR_WORKSPACE_ID` | Public workspace id for the running pane process. |
-| `HERDR_LOG` | Set log filter, for example `HERDR_LOG=herdr=debug`. |
-| `HERDR_DISABLE_SOUND` | Disable sound playback even when sound notifications are enabled. |
+| `FLOCKR_CONFIG_PATH` | Override the config file path. |
+| `FLOCKR_SESSION` | Select a named session for CLI commands. |
+| `FLOCKR_SOCKET_PATH` | Low-level socket path override. |
+| `FLOCKR_PROCESS_DETECTION` | Linux process detection strategy: `native` (default) or opt-in `child-groups`. |
+| `FLOCKR_ENV` | Set to `1` inside Herdr-managed pane processes. |
+| `FLOCKR_PANE_ID` | Public pane id for the running pane process. |
+| `FLOCKR_TAB_ID` | Public tab id for the running pane process. |
+| `FLOCKR_WORKSPACE_ID` | Public workspace id for the running pane process. |
+| `FLOCKR_LOG` | Set log filter, for example `FLOCKR_LOG=herdr=debug`. |
+| `FLOCKR_DISABLE_SOUND` | Disable sound playback even when sound notifications are enabled. |

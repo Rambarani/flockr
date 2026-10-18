@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-HERDR_BIN="${HERDR_BIN:-$ROOT/target/debug/herdr}"
+FLOCKR_BIN="${FLOCKR_BIN:-$ROOT/target/debug/herdr}"
 BASE="${BASE:-$(mktemp -d /tmp/herdr-handoff-smoke.XXXXXX)}"
 CONFIG_HOME="$BASE/config"
 RUNTIME_DIR="$BASE/runtime"
@@ -35,13 +35,13 @@ run_herdr() {
   socket="$(api_socket "$session")"
   assert_smoke_socket "$socket"
   mkdir -p "$(dirname "$socket")" "$RUNTIME_DIR" "$STATE_DIR"
-  env -u HERDR_SOCKET_PATH \
-    -u HERDR_CLIENT_SOCKET_PATH \
-    -u HERDR_SESSION \
+  env -u FLOCKR_SOCKET_PATH \
+    -u FLOCKR_CLIENT_SOCKET_PATH \
+    -u FLOCKR_SESSION \
     XDG_CONFIG_HOME="$CONFIG_HOME" \
     XDG_RUNTIME_DIR="$RUNTIME_DIR" \
     XDG_STATE_HOME="$STATE_DIR" \
-    "$HERDR_BIN" --session "$session" "$@"
+    "$FLOCKR_BIN" --session "$session" "$@"
 }
 
 session_dir() {
@@ -178,7 +178,7 @@ smoke_http_count() {
   printf '%s\n' "$count"
 }
 
-echo "using herdr: $HERDR_BIN"
+echo "using herdr: $FLOCKR_BIN"
 echo "smoke base: $BASE"
 
 cargo build --locked --manifest-path "$ROOT/Cargo.toml" >/dev/null

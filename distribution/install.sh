@@ -3,7 +3,7 @@ set -eu
 
 BIN="herdr"
 MANIFEST_URL="https://herdr.dev/latest.json"
-INSTALL_DIR="${HERDR_INSTALL_DIR:-$HOME/.local/bin}"
+INSTALL_DIR="${FLOCKR_INSTALL_DIR:-$HOME/.local/bin}"
 
 main() {
     echo ""

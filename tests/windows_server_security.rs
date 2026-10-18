@@ -147,15 +147,15 @@ fn server_integrity_requires_startup_consent_on_both_endpoints() {
             .stdout(Stdio::null())
             .creation_flags(CREATE_NO_WINDOW);
         for name in [
-            "HERDR_SOCKET_PATH",
-            "HERDR_CLIENT_SOCKET_PATH",
-            "HERDR_CONFIG_PATH",
-            "HERDR_SESSION",
-            "HERDR_WORKSPACE",
-            "HERDR_TAB",
-            "HERDR_PANE",
-            "HERDR_TERMINAL",
-            "HERDR_STARTUP_CWD",
+            "FLOCKR_SOCKET_PATH",
+            "FLOCKR_CLIENT_SOCKET_PATH",
+            "FLOCKR_CONFIG_PATH",
+            "FLOCKR_SESSION",
+            "FLOCKR_WORKSPACE",
+            "FLOCKR_TAB",
+            "FLOCKR_PANE",
+            "FLOCKR_TERMINAL",
+            "FLOCKR_STARTUP_CWD",
         ] {
             command.env_remove(name);
         }

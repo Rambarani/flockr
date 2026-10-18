@@ -1,9 +1,9 @@
 [CmdletBinding()]
 param(
-    [string]$Channel = $env:HERDR_CHANNEL,
-    [string]$ManifestUrl = $env:HERDR_MANIFEST_URL,
-    [string]$InstallDir = $env:HERDR_INSTALL_DIR,
-    [string]$ExpectedBuildId = $env:HERDR_EXPECTED_BUILD_ID,
+    [string]$Channel = $env:FLOCKR_CHANNEL,
+    [string]$ManifestUrl = $env:FLOCKR_MANIFEST_URL,
+    [string]$InstallDir = $env:FLOCKR_INSTALL_DIR,
+    [string]$ExpectedBuildId = $env:FLOCKR_EXPECTED_BUILD_ID,
     [int]$Retain = 3,
     [string]$LocalPackagePath,
     [string]$LocalPackageFormat,
@@ -712,10 +712,10 @@ switch ($architecture) {
     }
 }
 
-$herdrHome = if ([string]::IsNullOrWhiteSpace($env:HERDR_HOME)) {
+$herdrHome = if ([string]::IsNullOrWhiteSpace($env:FLOCKR_HOME)) {
     Join-Path $env:USERPROFILE ".herdr"
 } else {
-    $env:HERDR_HOME
+    $env:FLOCKR_HOME
 }
 $herdrHome = [System.IO.Path]::GetFullPath($herdrHome)
 $standaloneRoot = Join-Path $herdrHome "packages\standalone"

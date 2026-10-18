@@ -567,9 +567,9 @@ fn plugin_update_does_not_resurrect_a_plugin_unlinked_during_build() {
         .env("XDG_CONFIG_HOME", &config_home)
         .env("XDG_RUNTIME_DIR", &runtime_dir)
         .env("GIT_CONFIG_GLOBAL", &git_config)
-        .env_remove("HERDR_SOCKET_PATH")
-        .env_remove("HERDR_CLIENT_SOCKET_PATH")
-        .env_remove("HERDR_ENV")
+        .env_remove("FLOCKR_SOCKET_PATH")
+        .env_remove("FLOCKR_CLIENT_SOCKET_PATH")
+        .env_remove("FLOCKR_ENV")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let child = update.spawn().unwrap();
@@ -641,10 +641,10 @@ command = ["sh", "./read.sh", "pane"]
     fs::write(source_repo.join("version"), "old").unwrap();
     fs::write(source_repo.join("read.sh"), r#"
 kind="$1"
-touch "$HERDR_PLUGIN_ROOT/ready-$kind"
-while [ ! -e "$HERDR_PLUGIN_ROOT/release" ]; do sleep 0.05; done
-printf '%s:%s' "$(cat version)" "$(cat "$HERDR_PLUGIN_ROOT/version")" > "$HERDR_PLUGIN_ROOT/result-$kind.tmp"
-mv "$HERDR_PLUGIN_ROOT/result-$kind.tmp" "$HERDR_PLUGIN_ROOT/result-$kind"
+touch "$FLOCKR_PLUGIN_ROOT/ready-$kind"
+while [ ! -e "$FLOCKR_PLUGIN_ROOT/release" ]; do sleep 0.05; done
+printf '%s:%s' "$(cat version)" "$(cat "$FLOCKR_PLUGIN_ROOT/version")" > "$FLOCKR_PLUGIN_ROOT/result-$kind.tmp"
+mv "$FLOCKR_PLUGIN_ROOT/result-$kind.tmp" "$FLOCKR_PLUGIN_ROOT/result-$kind"
 "#).unwrap();
     run_git(&source_repo, &["add", "."]);
     run_git(&source_repo, &["commit", "--quiet", "-m", "old plugin"]);
@@ -944,7 +944,7 @@ command = ["sh", "-c", "sleep 5"]
             "--entrypoint",
             "board",
             "--env",
-            "HERDR_ROLE=board",
+            "FLOCKR_ROLE=board",
             "--no-focus",
         ],
     );
@@ -1022,7 +1022,7 @@ min_herdr_version = "0.6.10"
 platforms = ["linux", "macos", "windows"]
 
 [[build]]
-command = ["sh", "-c", "echo built > built.txt; if [ -n \"$HERDR_SESSION\" ]; then echo \"$HERDR_SESSION\" > leaked-session.txt; fi"]
+command = ["sh", "-c", "echo built > built.txt; if [ -n \"$FLOCKR_SESSION\" ]; then echo \"$FLOCKR_SESSION\" > leaked-session.txt; fi"]
 
 [[actions]]
 id = "bootstrap"
@@ -1066,7 +1066,7 @@ command = ["sh", "-c", "echo bootstrap"]
         &[
             ("GIT_CONFIG_GLOBAL", &git_config),
             ("XDG_STATE_HOME", &base.join("state")),
-            ("HERDR_SESSION", Path::new("leaked-session")),
+            ("FLOCKR_SESSION", Path::new("leaked-session")),
         ],
     );
     assert!(
@@ -1104,7 +1104,7 @@ command = ["sh", "-c", "echo bootstrap"]
             .join("worktree-bootstrap")
             .join("leaked-session.txt")
             .exists(),
-        "build command should not inherit HERDR_SESSION"
+        "build command should not inherit FLOCKR_SESSION"
     );
 
     let uninstall = run_named_cli(

@@ -7,7 +7,7 @@ use interprocess::local_socket::traits::Stream as _;
 
 use crate::ipc::LocalStream;
 
-pub const SESSION_ENV_VAR: &str = "HERDR_SESSION";
+pub const SESSION_ENV_VAR: &str = "FLOCKR_SESSION";
 pub const DEFAULT_SESSION_NAME: &str = "default";
 
 const MAX_SESSION_NAME_LEN: usize = 64;
@@ -991,7 +991,7 @@ mod tests {
 
         assert_eq!(
             active_restart_after_update_guidance(),
-            "Stop the old server to use the new version.\nStopping exits pane processes.\nRun `HERDR_SOCKET_PATH=/tmp/custom-herdr.sock herdr server stop`, then restart Herdr with the same socket override."
+            "Stop the old server to use the new version.\nStopping exits pane processes.\nRun `FLOCKR_SOCKET_PATH=/tmp/custom-herdr.sock herdr server stop`, then restart Herdr with the same socket override."
         );
 
         std::env::remove_var(crate::api::SOCKET_PATH_ENV_VAR);

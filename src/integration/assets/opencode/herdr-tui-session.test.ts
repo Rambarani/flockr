@@ -51,9 +51,9 @@ beforeEach(() => {
   holdConnections = false;
   failConnections = false;
   connections.length = 0;
-  process.env.HERDR_ENV = "1";
-  process.env.HERDR_SOCKET_PATH = "test.sock";
-  process.env.HERDR_PANE_ID = "test:p1";
+  process.env.FLOCKR_ENV = "1";
+  process.env.FLOCKR_SOCKET_PATH = "test.sock";
+  process.env.FLOCKR_PANE_ID = "test:p1";
 });
 
 afterEach(() => {

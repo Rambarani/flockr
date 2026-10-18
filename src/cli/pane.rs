@@ -578,7 +578,7 @@ fn parse_pane_input_args(
                 pane_id = Some(
                     env_pane_id
                         .map(super::normalize_pane_id)
-                        .ok_or("--current requires HERDR_PANE_ID")?,
+                        .ok_or("--current requires FLOCKR_PANE_ID")?,
                 );
                 index += 1;
             }
@@ -661,7 +661,7 @@ fn parse_pane_split_args(
                 pane_id = Some(
                     env_pane_id
                         .map(super::normalize_pane_id)
-                        .ok_or("--current requires HERDR_PANE_ID")?,
+                        .ok_or("--current requires FLOCKR_PANE_ID")?,
                 );
                 index += 1;
             }

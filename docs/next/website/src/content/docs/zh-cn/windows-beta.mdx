@@ -23,7 +23,7 @@ Windows 构建同时通过稳定版和预览版更新通道提供。新安装默
 
 安装器将发布版本保存在 `%USERPROFILE%\.herdr\packages\standalone\releases` 下,把当前带版本号的发布目录加入 PATH,将 `%LOCALAPPDATA%\Programs\Herdr\bin` 保留为稳定的兼容别名,并保留少量旧版本,以免运行中的进程阻塞更新。
 
-对于内部测试,`HERDR_MANIFEST_URL` 可以让安装器指向自定义清单,而不是 Herdr 的稳定或预览清单。使用自定义预览清单时还应设置 `HERDR_CHANNEL=preview`。
+对于内部测试,`FLOCKR_MANIFEST_URL` 可以让安装器指向自定义清单,而不是 Herdr 的稳定或预览清单。使用自定义预览清单时还应设置 `FLOCKR_CHANNEL=preview`。
 
 ## Windows 支持
 
@@ -118,7 +118,7 @@ host_cursor = "native"
 
 Windows 终端并不都以相同形式报告带修饰键的按键。Herdr 在 Windows Terminal 和 Windows 上的 Alacritty 中保留鼠标报告和 `ctrl+j`。原生 Windows 输入路径还会通过默认 ConPTY 窗格保留物理按键的按下、重复、释放、独立 Escape 和 `shift+enter`。带修饰键的输入仍依赖外层终端报告可区分的按键事件;如果它把 `shift+enter` 报告为普通 Enter,Herdr 也只能转发普通 Enter。
 
-旧版 Windows 10 的系统 ConPTY 会丢弃 Kimi 和 Pi 等智能体使用的 Kitty 键盘协议序列，因此 Windows 包包含 Microsoft 当前的应用本地 ConPTY 运行时。仅在诊断捆绑运行时的兼容性问题时，才应在启动 Herdr 前设置 `HERDR_WINDOWS_CONPTY=system`。
+旧版 Windows 10 的系统 ConPTY 会丢弃 Kimi 和 Pi 等智能体使用的 Kitty 键盘协议序列，因此 Windows 包包含 Microsoft 当前的应用本地 ConPTY 运行时。仅在诊断捆绑运行时的兼容性问题时，才应在启动 Herdr 前设置 `FLOCKR_WINDOWS_CONPTY=system`。
 
 ## 复制与粘贴
 
@@ -157,6 +157,6 @@ Windows 更新通过 Windows 安装器进行,并更新当前带版本号的发�
 - Windows 版本。
 - 终端应用。
 - Shell,比如 PowerShell 或 cmd。
-- 是否使用了命名的 `HERDR_SESSION`。
+- 是否使用了命名的 `FLOCKR_SESSION`。
 - 相关的 Herdr 日志。
 - 精确的复现步骤。

@@ -16,7 +16,7 @@ These instructions are layered.
   cannot be verified, skip maintainer workflow and follow the external
   contributor guardrail instead.
 - Local Can machine workflow applies only on Can's own workstation or Windows
-  VM setup, for example when `/home/can/Projects/herdr`, `HERDR_ENV=1`, or the
+  VM setup, for example when `/home/can/Projects/herdr`, `FLOCKR_ENV=1`, or the
   `windows-wirt` SSH alias exists. If those facts are not true, skip local
   machine workflow.
 - External contributor guardrail applies whenever the acting GitHub account is
@@ -61,7 +61,7 @@ Performance benchmarks are supporting evidence, not substitutes for behavioral
 coverage. Before a stable release, `just bench-release-smoke` must compare the
 candidate with the current stable binary under hidden and visible output. When
 the result moves materially or when validating performance work, repeat it with
-`HERDR_PERF_SAMPLE_SECONDS=60` and investigate the affected scenario.
+`FLOCKR_PERF_SAMPLE_SECONDS=60` and investigate the affected scenario.
 
 ### Runtime/client boundary guardrail
 
@@ -162,7 +162,7 @@ binary talks to the debug `herdr-dev` server instead of the installed stable
 server:
 
 ```bash
-env -u HERDR_SOCKET_PATH -u HERDR_CLIENT_SOCKET_PATH cargo run -- <command>
+env -u FLOCKR_SOCKET_PATH -u FLOCKR_CLIENT_SOCKET_PATH cargo run -- <command>
 ```
 
 ## Local Can Machine Workflow
@@ -253,7 +253,7 @@ Do not use GitHub closing keywords like `fixes #<issue-number>`, `closes #<issue
 - Rust: no `unwrap()` in production code. Use `tracing` for logging. Use `#[allow]` only with a comment explaining why.
 - Rust platform-specific code must be compile-gated. Put OS APIs and substantial OS behavior in `src/platform/`; when platform checks are needed elsewhere, use `#[cfg(windows)]`, `#[cfg(unix)]`, or target-specific `#[cfg(...)]` on imports, fields, functions, impls, and match arms so Windows-only code does not compile into Unix builds and Unix-only code does not compile into Windows builds. Use `cfg!(...)` only for pure cross-platform policy constants whose branches both compile on every target.
 - Don't add dependencies without a reason. Check whether existing dependencies cover the need first.
-- Integration asset versions (`HERDR_INTEGRATION_VERSION` markers and matching `*_INTEGRATION_VERSION` constants) are migration versions relative to the latest released tag, not per-commit counters on `master`. If an integration asset changes multiple times between releases, bump it once from the version in the latest release.
+- Integration asset versions (`FLOCKR_INTEGRATION_VERSION` markers and matching `*_INTEGRATION_VERSION` constants) are migration versions relative to the latest released tag, not per-commit counters on `master`. If an integration asset changes multiple times between releases, bump it once from the version in the latest release.
 - When changing the server/client wire protocol, compare `src/protocol/wire.rs::PROTOCOL_VERSION` against protocols published in both stable and preview releases. Bump it when the current source protocol has already been published in either channel and the wire format changes incompatibly. Do not bump it again for multiple incompatible changes before that protocol is published. Update hardcoded protocol expectations and manual protocol fixtures in tests.
 
 ## Release Channels

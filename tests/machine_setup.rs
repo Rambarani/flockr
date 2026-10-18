@@ -178,12 +178,12 @@ fn setup_options(
         String::from_utf8(status.stdout).unwrap(),
     );
     for name in [
-        "HERDR_ENV",
-        "HERDR_SESSION",
-        "HERDR_SOCKET_PATH",
-        "HERDR_CLIENT_SOCKET_PATH",
-        "HERDR_REMOTE_BINARY",
-        "HERDR_CONFIG_PATH",
+        "FLOCKR_ENV",
+        "FLOCKR_SESSION",
+        "FLOCKR_SOCKET_PATH",
+        "FLOCKR_CLIENT_SOCKET_PATH",
+        "FLOCKR_REMOTE_BINARY",
+        "FLOCKR_CONFIG_PATH",
     ] {
         command.env_remove(name);
     }
@@ -306,12 +306,12 @@ fn machine_add_accepts_help_argument_order() {
     command.env("XDG_STATE_HOME", root.join("state"));
     command.env("XDG_RUNTIME_DIR", &root);
     for name in [
-        "HERDR_ENV",
-        "HERDR_SESSION",
-        "HERDR_SOCKET_PATH",
-        "HERDR_CLIENT_SOCKET_PATH",
-        "HERDR_REMOTE_BINARY",
-        "HERDR_CONFIG_PATH",
+        "FLOCKR_ENV",
+        "FLOCKR_SESSION",
+        "FLOCKR_SOCKET_PATH",
+        "FLOCKR_CLIENT_SOCKET_PATH",
+        "FLOCKR_REMOTE_BINARY",
+        "FLOCKR_CONFIG_PATH",
     ] {
         command.env_remove(name);
     }

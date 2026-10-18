@@ -29,7 +29,7 @@ review_pane=$(printf '%s\n' "$split" | jq -r '.result.pane.pane_id')
 
 `workspace create` は `.result.workspace`、`.result.tab`、`.result.root_pane` を返します。`tab create` は `.result.tab` と `.result.root_pane` を返し、`pane split` は新しいペインを `.result.pane` として返します。
 
-ペインを別のワークスペースへ移動すると、ワークスペース修飾付きのペイン ID が変わります。`pane move` の後は `.result.move_result.pane.pane_id` を使い、以前の値が必要なら `.result.move_result.previous_pane_id` を参照してください。実行中プロセスは起動時の Herdr 環境を保ちますが、以前の `HERDR_PANE_ID` はそのターミナルの別名として残るため、`--current` は引き続き安全に使えます。移動後に始めるコマンドはエージェント名で解決できますが、すでに進行中の待機は `agent_not_running` で終了します。
+ペインを別のワークスペースへ移動すると、ワークスペース修飾付きのペイン ID が変わります。`pane move` の後は `.result.move_result.pane.pane_id` を使い、以前の値が必要なら `.result.move_result.previous_pane_id` を参照してください。実行中プロセスは起動時の Herdr 環境を保ちますが、以前の `FLOCKR_PANE_ID` はそのターミナルの別名として残るため、`--current` は引き続き安全に使えます。移動後に始めるコマンドはエージェント名で解決できますが、すでに進行中の待機は `agent_not_running` で終了します。
 
 シェル、テスト、サーバー、CI ウォッチャーなどの通常のターミナルプロセスにはペインコマンドを使います。どのエージェントが動いているか、または状態が `working`、`blocked`、`done`、`idle`、`unknown` のどれかを Herdr に判断させる場合はエージェントコマンドを使います。
 

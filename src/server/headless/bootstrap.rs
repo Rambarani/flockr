@@ -167,7 +167,7 @@ fn run_handoff_import_server(socket_path: &Path, token: &str) -> io::Result<()> 
             &mut imports,
         )?;
         crate::server::handoff::report_restored(&mut received.stream)?;
-        if std::env::var("HERDR_TEST_HANDOFF_IMPORT_FAIL").as_deref() == Ok("after_restored") {
+        if std::env::var("FLOCKR_TEST_HANDOFF_IMPORT_FAIL").as_deref() == Ok("after_restored") {
             return Err(io::Error::other(
                 "test handoff import failure after restored",
             ));

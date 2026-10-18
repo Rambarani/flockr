@@ -418,6 +418,20 @@ A timeout or `agent_prompt_stalled` does not prove the prompt was never delivere
 
 `pane wait-output` and `agent wait` wait indefinitely when `--timeout` is omitted. For `agent prompt --wait`, the settled-state wait is indefinite after activity is observed or when the prompt starts in `working`; a non-working prompt still returns `agent_prompt_stalled` after five seconds without observed activity. A timeout or server error is emitted as JSON on stderr with exit status 1. CLI usage errors exit with status 2.
 
+## Upstream herdr
+
+```sh
+flockr upstream check [--json]   # query GitHub now and list releases newer than the synced base
+flockr upstream status [--json]  # synced base, last check, pending and skipped releases, repo path
+flockr upstream review           # the review popup: Copy updates, Skip this version, Later
+flockr upstream copy [TAG]       # open a Flockr tab that runs `upstream sync` (default: latest pending)
+flockr upstream skip TAG         # stop notifying about a release
+flockr upstream sync TAG         # worktree + agent that merges the release; never touches your checkout
+flockr upstream apply TAG [--yes]  # merge a verified sync branch into flockr and rebuild
+```
+
+`check` and `status` print JSON with `--json`. `sync` and `apply` need `[upstream] repo_path` or a binary built from the source checkout; see [Configuration](/docs/configuration/#upstream-herdr-watcher).
+
 ## Integrations
 
 ```bash

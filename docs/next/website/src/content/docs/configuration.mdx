@@ -490,6 +490,28 @@ The default is `true`. The `"priority"` sort and filtered agent views interleave
 
 Sidebar row settings affect only the expanded desktop sidebar. Collapsed and mobile views keep their compact layouts.
 
+## Upstream herdr watcher
+
+Flockr is a fork of [herdr](https://github.com/herdrdev/herdr). The watcher checks the upstream releases once a day and tells you inside Flockr when there is something newer than the herdr version Flockr is synced to:
+
+```toml
+[upstream]
+enabled = true
+check_interval_hours = 24
+include_prereleases = false
+repo_path = "~/src/flockr"
+agent_command = "claude"
+review_key = "prefix+u"
+```
+
+The check runs on the server, only talks to the GitHub releases API of `herdrdev/herdr`, and fails quietly when offline. Flockr shows an in-app toast such as `herdr v0.9.7 available upstream — 3 features, 5 fixes` once per release. Press `prefix+u` (or run `flockr upstream review`) for the review popup: it lists every pending release with its notes and offers **Copy updates**, **Skip this version** and **Later**.
+
+**Copy updates** opens a new Flockr tab in `repo_path` that runs `flockr upstream sync <tag>`. The sync never touches your checked-out files or the `flockr` branch. It adds a git remote named `upstream` when missing, fetches its tags, creates a worktree at `<repo_path>/../flockr-sync-<tag>` on a new branch `upstream-sync/<tag>`, writes `.flockr/sync-<tag>.md` there, and starts `agent_command` with that prompt. The agent merges the tag, keeps Flockr's rename, legacy `HERDR_*` aliases, hosting URLs and features, and runs the build, tests, clippy and fmt. When everything passes it records the verified commit in `.flockr/sync-<tag>.verified`.
+
+Nothing reaches `flockr` until you run `flockr upstream apply <tag>`. It checks that the sync branch exists and was verified, that your checkout is clean and on `flockr`, prints what it will do, asks for confirmation (or `--yes`), merges the branch, runs `cargo build --release`, removes the worktree, and records the new upstream base. `flockr upstream skip <tag>` stops notifications for one release.
+
+`repo_path` is the Flockr source checkout. When it is unset, Flockr uses the checkout the binary was built from if that directory still exists and contains `.flockr/upstream-base`; otherwise the copy action tells you to set it. `agent_command` runs through your shell in the worktree. A `{prompt_file}` placeholder expands to the prompt file path; without one the prompt text is passed as the first argument, as in `claude "$(cat <file>)"`. The synced upstream version is committed in `.flockr/upstream-base`; watcher state (last check, notified and skipped tags, cached notes) lives in the Flockr state directory as `upstream.json`.
+
 ## Notifications
 
 Flockr can notify you when a background agent finishes or needs input:

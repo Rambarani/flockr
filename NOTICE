@@ -33,3 +33,8 @@ Summary of modifications made in flockr (see `git log` for the exact changes):
 4. Feature: sidebar agents are grouped under workspace headers.
 5. Feature: configurable notification sounds with built-in tones and a settings
    picker.
+6. Feature: upstream herdr watcher. flockr checks the upstream herdr releases
+   in the background (`[upstream]` config, `src/upstream/`), notifies inside the
+   app, and `flockr upstream sync|apply` merges a release into flockr through an
+   isolated git worktree. The upstream version flockr is synced to is recorded
+   in `.flockr/upstream-base`.

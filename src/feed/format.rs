@@ -36,7 +36,7 @@ const MAX_DIAGNOSTICS: usize = 20;
 
 /// Keys an action cannot use because the Feed overlay gives them a meaning of
 /// its own (named keys are matched ignoring case).
-const RESERVED_NAMES: &[&str] = &[
+pub(crate) const RESERVED_NAMES: &[&str] = &[
     "enter",
     "return",
     "esc",
@@ -55,7 +55,7 @@ const RESERVED_NAMES: &[&str] = &[
     "delete",
     "space",
 ];
-const RESERVED_CHARS: &[char] = &['j', 'k', 'q', 'g', 'G', 'R', '/'];
+pub(crate) const RESERVED_CHARS: &[char] = &['j', 'k', 'q', 'g', 'G', 'R', '/'];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct ActionRecord {

@@ -196,6 +196,11 @@ pub(crate) fn build(ctx: &SystemContext<'_>) -> SystemJobs {
     SystemJobs { jobs, diagnostics }
 }
 
+/// The names of the built-in jobs (the keys allowed under `[jobs.system]`).
+pub(crate) fn system_job_names() -> Vec<&'static str> {
+    SPECS.iter().map(|spec| spec.name).collect()
+}
+
 /// The config key of a system job id, or `None` for any other id.
 pub(crate) fn system_job_name(job_id: &str) -> Option<&str> {
     job_id

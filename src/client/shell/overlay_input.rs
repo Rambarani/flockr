@@ -492,6 +492,7 @@ impl ClientShellState {
                 }
                 true
             }
+            Some(ClientShellOverlay::Palette(_)) => self.insert_palette_text(text),
             _ => false,
         }
     }
@@ -502,6 +503,10 @@ impl ClientShellState {
         outcome: &mut ClientShellInput,
     ) {
         use crossterm::event::KeyModifiers;
+
+        if self.route_palette_key(key, outcome) {
+            return;
+        }
 
         if matches!(self.overlay, Some(ClientShellOverlay::Onboarding)) {
             if matches!(

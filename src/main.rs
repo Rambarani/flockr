@@ -205,6 +205,7 @@ const DEFAULT_CONFIG: &str = r##"# flockr configuration
 # collapse_agent_groups = ""   # optional, unset by default
 # expand_agent_groups = ""     # optional, unset by default
 # rename_agent = "prefix+shift+a"
+# command_palette = "prefix+:"
 # edit_scrollback = "prefix+e"
 # clear_pane = ""                  # unbound; e.g. "prefix+ctrl+k"
 # focus_pane_left = "prefix+h"

@@ -29,6 +29,7 @@ impl ActionCategory {
 }
 
 pub(super) struct ActionSpec<'a> {
+    pub(super) action: KeybindAction,
     pub(super) label: &'static str,
     pub(super) category: ActionCategory,
     pub(super) bindings: &'a ActionKeybinds,
@@ -50,6 +51,12 @@ pub(super) fn action_specs(keybinds: &Keybinds) -> Vec<ActionSpec<'_>> {
     [
         (A::Help, "keybinds", Session, &k.help),
         (A::Settings, "settings", Session, &k.settings),
+        (
+            A::CommandPalette,
+            "command palette",
+            Session,
+            &k.command_palette,
+        ),
         (A::ReloadConfig, "reload config", Session, &k.reload_config),
         (
             A::OpenNotificationTarget,
@@ -233,7 +240,8 @@ pub(super) fn action_specs(keybinds: &Keybinds) -> Vec<ActionSpec<'_>> {
         (A::LastPane, "last pane", Panes, &k.last_pane),
     ]
     .into_iter()
-    .map(|(_, label, category, bindings)| ActionSpec {
+    .map(|(action, label, category, bindings)| ActionSpec {
+        action,
         label,
         category,
         bindings,

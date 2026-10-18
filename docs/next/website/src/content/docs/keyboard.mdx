@@ -69,11 +69,14 @@ Workspaces and session:
 | Rename workspace | `prefix+shift+w` |
 | Close workspace | `prefix+shift+d` |
 | Goto picker | `prefix+g` |
+| Command palette | `prefix+:` |
 | Toggle sidebar | `prefix+b` |
 
 The full keymap and the binding syntax live in the [keybinding reference](/docs/configuration/#keybindings).
 
 The Goto picker (`prefix+g`) lists each agent or terminal on its own row, grouped by workspace. Split tabs never hide their panes behind another row. Click a row or press Enter to jump directly to it. Press `/` to search names, agent kinds, tabs, workspaces, branches, or paths; use Up/Down or `j/k` to move between rows when not typing a search. Left/Right jumps to the first agent or terminal in the previous/next workspace section, without wrapping. While editing a search, Left/Right moves the text cursor instead. Outside search, `b/w/i/d` filter blocked, working, idle, or done agents, and `a` shows all terminals again. The selected destination's location and path appear below the list. When the list overflows, use the mouse wheel, click the scrollbar track, or drag its thumb to scroll without opening a destination.
+
+The command palette (`prefix+:`, `keys.command_palette`) is a fuzzy-searchable popup over everything you can do. It lists every keybinding action with its key right-aligned, your custom commands (including the upstream review popup), workspaces, tabs, panes, agents on every connected machine, and the settings sections. Type to filter: matched characters are highlighted, and the kind of entry (`tabs`, `agent`, `workspace`, `settings`, and so on) is searchable too. Use Up/Down or `ctrl+n`/`ctrl+p` to move, Enter to run, and Esc to close; you can also click a row or use the mouse wheel. Running an entry does exactly what its key or sidebar click does. With an empty query the palette shows what you ran most recently first; that history is kept in Flockr's client state between runs. Fuzzy matching uses the `nucleo-matcher` crate and follows its pattern syntax: spaces separate terms that must all match, and a query containing an uppercase letter is case-sensitive.
 
 Press Esc or Ctrl+[ to leave workspace navigation. In the Go To picker, `/` also opens search on layouts that require Shift to type it.
 

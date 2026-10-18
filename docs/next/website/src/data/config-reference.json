@@ -746,6 +746,12 @@
           "description": "Rename the agent in the focused pane. An empty name clears the alias."
         },
         {
+          "key": "keys.command_palette",
+          "type": "keybinding",
+          "default": "\"prefix+:\"",
+          "description": "Open the command palette: a fuzzy-searchable popup for running actions and jumping to workspaces, agents, tabs and panes."
+        },
+        {
           "key": "keys.toggle_agent_group",
           "type": "keybinding",
           "default": "\"prefix+shift+e\"",

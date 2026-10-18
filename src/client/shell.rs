@@ -29,6 +29,7 @@ mod mouse;
 mod notification_policy;
 mod notifications;
 mod overlay_input;
+mod palette;
 mod popup_frame;
 mod preferences;
 mod render;

@@ -61,6 +61,7 @@ impl ClientShellState {
                 .then_some(self.config.agent_panel_sort),
             collapsed_groups,
             remote_collapsed_groups,
+            palette_recent: self.palette_recent.clone(),
         };
         if let Err(error) = preferences::store(path, preferences) {
             self.set_endpoint_error(error);

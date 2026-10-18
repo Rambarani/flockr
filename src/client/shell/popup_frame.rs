@@ -60,6 +60,21 @@ pub(super) fn heading_style(palette: &Palette) -> Style {
         .add_modifier(Modifier::BOLD)
 }
 
+/// Foreground for text drawn on top of an accent-colored selection bar.
+fn on_accent(palette: &Palette) -> ratatui::style::Color {
+    match palette.panel_bg {
+        ratatui::style::Color::Reset => palette.surface_dim,
+        color => color,
+    }
+}
+
+pub(super) fn selected_style(palette: &Palette) -> Style {
+    Style::default()
+        .fg(on_accent(palette))
+        .bg(palette.accent)
+        .add_modifier(Modifier::BOLD)
+}
+
 /// Display text of one buffer row, for assertions and smoke captures.
 #[cfg(test)]
 pub(super) fn buffer_row(buffer: &Buffer, y: u16) -> String {

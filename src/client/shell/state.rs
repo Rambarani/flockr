@@ -142,6 +142,7 @@ pub(super) struct ShellHitMap {
     pub(super) release_notes_scrollbar: Rect,
     pub(super) release_notes_scroll_metrics: Option<crate::pane::ScrollMetrics>,
     pub(super) release_notes_max_scroll: usize,
+    pub(super) palette: super::palette::PaletteHits,
 }
 
 #[derive(Clone)]
@@ -301,6 +302,7 @@ pub(super) enum ClientShellOverlayKind {
     ContextMenu,
     GlobalMenu,
     Settings,
+    Palette,
 }
 
 #[derive(Debug)]
@@ -626,6 +628,7 @@ pub(super) enum ClientShellOverlay {
     ContextMenu(ClientContextMenuOverlay),
     GlobalMenu(ClientGlobalMenuOverlay),
     Settings(ClientSettingsOverlay),
+    Palette(super::palette::ClientPaletteOverlay),
 }
 
 impl ClientShellOverlay {
@@ -644,6 +647,7 @@ impl ClientShellOverlay {
             Self::ContextMenu(_) => ClientShellOverlayKind::ContextMenu,
             Self::GlobalMenu(_) => ClientShellOverlayKind::GlobalMenu,
             Self::Settings(_) => ClientShellOverlayKind::Settings,
+            Self::Palette(_) => ClientShellOverlayKind::Palette,
         }
     }
 }
@@ -1016,6 +1020,7 @@ pub(crate) struct ClientShellState {
     pub(super) endpoint_error_deadline: Option<std::time::Instant>,
     pub(super) dismissed_product_announcement: Option<(String, String)>,
     pub(super) which_key: super::which_key::WhichKeyState,
+    pub(super) palette_recent: Vec<String>,
 }
 
 pub(super) fn product_announcement_state(
@@ -1186,6 +1191,7 @@ impl ClientShellState {
             endpoint_error_deadline: None,
             dismissed_product_announcement: None,
             which_key: Default::default(),
+            palette_recent: preferences.palette_recent,
         }
     }
 

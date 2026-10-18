@@ -661,6 +661,18 @@ impl ClientShellState {
                 occlusion.cover(rendered.area);
                 self.hits.context_menu_rows = rendered.menu_rows;
                 None
+            } else if matches!(overlay, ClientShellOverlay::Palette(_)) {
+                // Too small to draw: the palette stays keyboard-driven.
+                let rendered = self.render_palette_overlay(&mut composed);
+                self.hits.palette = rendered.as_ref().map_or_else(Default::default, |rendered| {
+                    occlusion.cover(rendered.area);
+                    super::palette::PaletteHits {
+                        popup: rendered.area,
+                        rows: rendered.rows.clone(),
+                        viewport_rows: rendered.viewport_rows,
+                    }
+                });
+                rendered.and_then(|rendered| rendered.cursor)
             } else if let ClientShellOverlay::GlobalMenu(menu) = overlay {
                 let rendered = render::render_global_menu(
                     &mut composed,

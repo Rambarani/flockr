@@ -1688,6 +1688,7 @@ impl AppState {
             AppEvent::WorktreeReadFinished(_) => Vec::new(),
             // Handled by `App` before it reaches the state, like the worktree results.
             AppEvent::JobRunFinished(_) => Vec::new(),
+            AppEvent::FeedTaskFinished(_) => Vec::new(),
             AppEvent::TabBarCommandFinished { .. } => Vec::new(),
             AppEvent::PluginCommandFinished { .. } => Vec::new(),
         }

@@ -747,6 +747,47 @@
                 "run"
               ],
               "type": "object"
+            },
+            {
+              "properties": {
+                "count": {
+                  "format": "uint32",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "job_id": {
+                  "type": "string"
+                },
+                "revision": {
+                  "format": "uint64",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "stale": {
+                  "type": "boolean"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "type": {
+                  "const": "feed_updated",
+                  "type": "string"
+                },
+                "unread": {
+                  "format": "uint32",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "type",
+                "job_id",
+                "title",
+                "revision",
+                "count",
+                "unread"
+              ],
+              "type": "object"
             }
           ]
         },
@@ -778,7 +819,8 @@
             "pane_agent_detected",
             "pane_agent_status_changed",
             "layout_updated",
-            "job_run_finished"
+            "job_run_finished",
+            "feed_updated"
           ],
           "type": "string"
         },
@@ -2278,6 +2320,80 @@
           },
           "required": [
             "match_event"
+          ],
+          "type": "object"
+        },
+        "FeedGetParams": {
+          "properties": {
+            "job_id": {
+              "type": "string"
+            },
+            "limit": {
+              "description": "Return at most this many items; `count` in the summary stays the total.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "since_revision": {
+              "description": "When it equals the feed's `revision` the response sets `unchanged` and\nomits the items.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "job_id"
+          ],
+          "type": "object"
+        },
+        "FeedListParams": {
+          "properties": {
+            "since_revision": {
+              "description": "When it equals the server's current revision the response sets\n`unchanged` and omits the feed list.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "FeedRunActionParams": {
+          "properties": {
+            "item_id": {
+              "type": "string"
+            },
+            "job_id": {
+              "type": "string"
+            },
+            "key": {
+              "description": "The action's key as listed on the item.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "job_id",
+            "item_id",
+            "key"
+          ],
+          "type": "object"
+        },
+        "FeedTarget": {
+          "properties": {
+            "job_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "job_id"
           ],
           "type": "object"
         },
@@ -4478,6 +4594,18 @@
                 "type"
               ],
               "type": "object"
+            },
+            {
+              "properties": {
+                "type": {
+                  "const": "feed.updated",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
             }
           ]
         },
@@ -6619,6 +6747,70 @@
             "params"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "feed.list",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/FeedListParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "feed.get",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/FeedGetParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "feed.refresh",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/FeedTarget"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "feed.run_action",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/FeedRunActionParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
         }
       ],
       "properties": {
@@ -7767,6 +7959,47 @@
                 "run"
               ],
               "type": "object"
+            },
+            {
+              "properties": {
+                "count": {
+                  "format": "uint32",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "job_id": {
+                  "type": "string"
+                },
+                "revision": {
+                  "format": "uint64",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "stale": {
+                  "type": "boolean"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "type": {
+                  "const": "feed_updated",
+                  "type": "string"
+                },
+                "unread": {
+                  "format": "uint32",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "type",
+                "job_id",
+                "title",
+                "revision",
+                "count",
+                "unread"
+              ],
+              "type": "object"
             }
           ]
         },
@@ -7813,9 +8046,200 @@
             "pane_agent_detected",
             "pane_agent_status_changed",
             "layout_updated",
-            "job_run_finished"
+            "job_run_finished",
+            "feed_updated"
           ],
           "type": "string"
+        },
+        "FeedActionInfo": {
+          "properties": {
+            "key": {
+              "description": "The single key that runs the action in the Feed overlay.",
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "key",
+            "title"
+          ],
+          "type": "object"
+        },
+        "FeedActionResult": {
+          "description": "The outcome of the last item action run for a feed.",
+          "properties": {
+            "finished_unix_ms": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "item_id": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "ok": {
+              "type": "boolean"
+            },
+            "summary": {
+              "description": "One short line: `ok`, or why it failed.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "item_id",
+            "key",
+            "ok",
+            "summary",
+            "finished_unix_ms"
+          ],
+          "type": "object"
+        },
+        "FeedItemInfo": {
+          "properties": {
+            "actions": {
+              "items": {
+                "$ref": "#/schemas/success_response/$defs/FeedActionInfo"
+              },
+              "type": "array"
+            },
+            "badge": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "state": {
+              "$ref": "#/schemas/success_response/$defs/FeedItemState"
+            },
+            "subtitle": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "title": {
+              "type": "string"
+            },
+            "updated_at": {
+              "description": "The item's own timestamp as the feed gave it (RFC 3339).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "url": {
+              "description": "An http or https link; Enter or a click opens it.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "state"
+          ],
+          "type": "object"
+        },
+        "FeedItemState": {
+          "description": "Feeds are lists of items that a job prints in the feed format (version 1)\nand flockr stores per job. Action commands stay on the server; clients get\nonly the key and title of each action and ask the server to run it.",
+          "enum": [
+            "unread",
+            "read",
+            "done",
+            "warn",
+            "error"
+          ],
+          "type": "string"
+        },
+        "FeedSummary": {
+          "properties": {
+            "count": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "diagnostics": {
+              "description": "Problems found while reading the feed that did not stop it.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "error": {
+              "description": "Why the last refresh failed.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "fetched_unix_ms": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "job_id": {
+              "description": "The job that produces the feed.",
+              "type": "string"
+            },
+            "last_action": {
+              "anyOf": [
+                {
+                  "$ref": "#/schemas/success_response/$defs/FeedActionResult"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "loaded": {
+              "description": "A feed has been read from the job's command at least once.",
+              "type": "boolean"
+            },
+            "refreshing": {
+              "description": "A refresh or an item action is running.",
+              "type": "boolean"
+            },
+            "revision": {
+              "description": "Advances when the feed's items, title or staleness change.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "stale": {
+              "description": "The last refresh failed; the items are from the last good one.",
+              "type": "boolean"
+            },
+            "title": {
+              "description": "The `feed.title` from the job file, else the feed's own title, else the job title.",
+              "type": "string"
+            },
+            "unread": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "job_id",
+            "title",
+            "count",
+            "unread",
+            "revision",
+            "loaded"
+          ],
+          "type": "object"
         },
         "InstalledPluginInfo": {
           "properties": {
@@ -11117,6 +11541,125 @@
               "required": [
                 "type",
                 "env"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "feeds": {
+                  "default": [],
+                  "items": {
+                    "$ref": "#/schemas/success_response/$defs/FeedSummary"
+                  },
+                  "type": "array"
+                },
+                "revision": {
+                  "description": "Advances whenever any feed's visible state changes.",
+                  "format": "uint64",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "type": {
+                  "const": "feed_list",
+                  "type": "string"
+                },
+                "unchanged": {
+                  "description": "The request's `since_revision` is current; `feeds` is empty.",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "type",
+                "revision"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "feed": {
+                  "$ref": "#/schemas/success_response/$defs/FeedSummary"
+                },
+                "items": {
+                  "default": [],
+                  "items": {
+                    "$ref": "#/schemas/success_response/$defs/FeedItemInfo"
+                  },
+                  "type": "array"
+                },
+                "type": {
+                  "const": "feed_detail",
+                  "type": "string"
+                },
+                "unchanged": {
+                  "description": "The request's `since_revision` is current; `items` is empty.",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "type",
+                "feed"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "job_id": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "started": {
+                  "description": "False when a refresh or action was already running, or the job is.",
+                  "type": "boolean"
+                },
+                "type": {
+                  "const": "feed_refresh_requested",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "job_id",
+                "started"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "item_id": {
+                  "type": "string"
+                },
+                "job_id": {
+                  "type": "string"
+                },
+                "key": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "started": {
+                  "description": "False when the feed was busy.",
+                  "type": "boolean"
+                },
+                "type": {
+                  "const": "feed_action_requested",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "job_id",
+                "item_id",
+                "key",
+                "started"
               ],
               "type": "object"
             },

@@ -48,6 +48,10 @@ impl App {
 
     /// Re-read job files if they changed. Called before answering job API
     /// requests so a file saved a moment ago is already visible.
+    pub(super) fn refresh_jobs_for_api(&mut self) {
+        self.refresh_jobs(false);
+    }
+
     fn refresh_jobs(&mut self, force: bool) {
         if !self.jobs.is_active() {
             return;
@@ -79,6 +83,7 @@ impl App {
         for (job_id, trigger) in self.jobs.take_due(now_ms) {
             changed |= self.start_job_run(&job_id, trigger, now_ms).is_ok();
         }
+        self.start_first_feed_refreshes();
         changed |= self.deliver_job_notices();
         let mut wait = MAX_TICK_INTERVAL;
         if let Some(due_ms) = self.jobs.next_deadline_ms() {
@@ -146,6 +151,9 @@ impl App {
         let Some(finished) = self.jobs.finish_run(result) else {
             return false;
         };
+        if finished.info.status == JobRunStatus::Success {
+            self.refresh_feed_after_run(&finished.job_id);
+        }
         self.emit_event(EventEnvelope {
             event: EventKind::JobRunFinished,
             data: EventData::JobRunFinished {

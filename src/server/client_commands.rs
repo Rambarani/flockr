@@ -15,6 +15,10 @@ const ENDPOINT_RESPONSE_CHUNK_BYTES: usize = 512 * 1024;
 const CLIENT_SHELL_METHODS: &[&str] = &[
     "client_shell.surface.set",
     "command.invoke",
+    "feed.get",
+    "feed.list",
+    "feed.refresh",
+    "feed.run_action",
     "integration.install",
     "integration.list",
     "job.get",
@@ -328,6 +332,27 @@ mod tests {
             (
                 "job.set_enabled",
                 "f7b106f68f8bcf22c99249df59fdd02e6576eb0f067a091bf56801ed4d0f2ff0",
+            ),
+        ] {
+            assert_eq!(actual.remove(method).as_deref(), Some(digest), "{method}");
+        }
+        // Feed methods: frozen from their first release.
+        for (method, digest) in [
+            (
+                "feed.get",
+                "945ffd5355f87408a30d063c69a3639b921ecdf0e4f4587efd3c6647bf1c8532",
+            ),
+            (
+                "feed.list",
+                "b3298c9fd31af97405a86e821d3af32737cb45136d0b62be0e136a8a843d058e",
+            ),
+            (
+                "feed.refresh",
+                "e65a7456a8ddbf5f6865cebd4cce6ede72d303bec55878d799698739915c8b5a",
+            ),
+            (
+                "feed.run_action",
+                "3e3b579b580f24cc4bd071ea14a78212bbeb9349bed07bd416752261b2b30352",
             ),
         ] {
             assert_eq!(actual.remove(method).as_deref(), Some(digest), "{method}");

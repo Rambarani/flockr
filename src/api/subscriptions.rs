@@ -160,6 +160,7 @@ impl ActiveSubscription {
             }
             Subscription::LayoutUpdated {} => Ok(event_subscription(EventKind::LayoutUpdated)),
             Subscription::JobRunFinished {} => Ok(event_subscription(EventKind::JobRunFinished)),
+            Subscription::FeedUpdated {} => Ok(event_subscription(EventKind::FeedUpdated)),
             Subscription::PaneOutputMatched {
                 pane_id,
                 source,

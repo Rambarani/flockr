@@ -180,14 +180,23 @@ pub(crate) fn load(path: &Path) -> JobStateFile {
 /// Write `state` atomically: a temporary file in the same directory, synced,
 /// then renamed over the destination.
 pub(crate) fn save(path: &Path, state: &JobStateFile) -> std::io::Result<()> {
+    write_json_atomic(path, state)
+}
+
+/// Serialize `value` as pretty JSON and replace `path` with it atomically.
+pub(crate) fn write_json_atomic<T: Serialize>(path: &Path, value: &T) -> std::io::Result<()> {
     use std::io::Write;
 
     let Some(dir) = path.parent() else {
         return Err(std::io::Error::other("state path has no parent directory"));
     };
     std::fs::create_dir_all(dir)?;
-    let json = serde_json::to_vec_pretty(state).map_err(std::io::Error::other)?;
-    let temporary = dir.join(format!(".state.json.{}.tmp", std::process::id()));
+    let json = serde_json::to_vec_pretty(value).map_err(std::io::Error::other)?;
+    let file_name = path.file_name().map_or_else(
+        || "state".into(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    let temporary = dir.join(format!(".{file_name}.{}.tmp", std::process::id()));
     // A stale temporary from a crashed process with the same pid would make
     // the exclusive create below fail forever.
     let _ = std::fs::remove_file(&temporary);

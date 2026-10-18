@@ -147,6 +147,7 @@ pub struct App {
     /// check at most every 30 seconds, or a queued toast waiting its turn.
     pub(crate) next_jobs_tick: Option<Instant>,
     pub(crate) jobs: crate::jobs::JobsManager,
+    pub(crate) feeds: crate::feed::FeedManager,
     /// Job results waiting for the in-frame toast slot.
     pub(crate) pending_job_notices: std::collections::VecDeque<crate::jobs::manager::Notice>,
     /// Job results for terminal or system delivery, forwarded to clients by
@@ -683,6 +684,7 @@ impl App {
                 std::sync::Arc::new(crate::jobs::env::LoginEnvCache::system()),
                 policy.jobs,
             ),
+            feeds: crate::feed::FeedManager::new(),
             pending_job_notices: std::collections::VecDeque::new(),
             job_client_notices: Vec::new(),
             upstream_config: config.upstream.clone(),

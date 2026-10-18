@@ -25,6 +25,7 @@ mod config;
 mod copy_mode;
 mod detect;
 mod events;
+mod feed;
 use ghostty_vt as ghostty;
 mod handoff_runtime;
 mod input;
@@ -702,6 +703,7 @@ fn main() -> io::Result<()> {
         println!("       flockr integration <subcommand> ...");
         println!("       flockr upstream <subcommand> ...");
         println!("       flockr job <subcommand> ...");
+        println!("       flockr feed <subcommand> ...");
         println!();
         println!("Common commands:");
         for (command, description) in [
@@ -776,6 +778,10 @@ fn main() -> io::Result<()> {
             (
                 "flockr job <subcommand>",
                 "List, run and inspect scheduled jobs",
+            ),
+            (
+                "flockr feed <subcommand>",
+                "Show job feeds, refresh them and run item actions",
             ),
         ] {
             println!("  {command:<32} {description}");

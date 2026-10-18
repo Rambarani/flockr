@@ -49,6 +49,7 @@ pub(super) fn command() -> Command {
         .subcommand(integration_command())
         .subcommand(upstream_command())
         .subcommand(job_command())
+        .subcommand(feed_command())
         .subcommand(plugin_command());
     configure_help(command, 0)
 }
@@ -239,6 +240,65 @@ fn job_command() -> Command {
                 .about("Manage the login-shell environment jobs run with")
                 .subcommand(
                     Command::new("refresh").about("Capture the login-shell environment again now"),
+                ),
+        )
+}
+
+fn feed_command() -> Command {
+    let job_id = || {
+        Arg::new("job")
+            .value_name("JOB")
+            .required(true)
+            .help("Id of the job that has the feed, such as workbox-sync")
+    };
+    Command::new("feed")
+        .about("Inspect and act on job feeds")
+        .subcommand(
+            Command::new("list")
+                .about("List feeds with their item counts and state")
+                .arg(json_flag()),
+        )
+        .subcommand(
+            Command::new("show")
+                .about("Show a feed's items")
+                .arg(job_id())
+                .arg(json_flag()),
+        )
+        .subcommand(
+            Command::new("refresh")
+                .about("Run a feed's command again now")
+                .arg(job_id())
+                .arg(flag("no-wait").help("Return at once instead of waiting for the refresh")),
+        )
+        .subcommand(
+            Command::new("action")
+                .about("Run an item's action, then refresh the feed")
+                .arg(job_id())
+                .arg(
+                    Arg::new("item")
+                        .value_name("ITEM")
+                        .required(true)
+                        .help("Item id as shown by `flockr feed show`"),
+                )
+                .arg(
+                    Arg::new("key")
+                        .value_name("KEY")
+                        .required(true)
+                        .help("Action key listed on the item"),
+                )
+                .arg(flag("no-wait").help("Return at once instead of waiting for the action")),
+        )
+        .subcommand(
+            Command::new("adapt")
+                .about("Convert another tool's JSON on stdin into a feed")
+                .subcommand(
+                    Command::new("workbox")
+                        .about("Convert `workbox list --json` into a feed")
+                        .arg(option("title", "TITLE").help("Feed title (default: workbox)"))
+                        .arg(
+                            option("bin", "PROGRAM")
+                                .help("Program the action commands run (default: workbox)"),
+                        ),
                 ),
         )
 }

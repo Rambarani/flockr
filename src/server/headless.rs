@@ -3359,6 +3359,15 @@ impl HeadlessServer {
 
         if self
             .app
+            .next_jobs_tick
+            .is_some_and(|deadline| now >= deadline)
+        {
+            changed |= self.app.run_jobs_tick(now);
+            self.forward_job_notices();
+        }
+
+        if self
+            .app
             .session_save_deadline
             .is_some_and(|deadline| now >= deadline)
         {

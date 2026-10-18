@@ -723,6 +723,30 @@
                 "layout"
               ],
               "type": "object"
+            },
+            {
+              "properties": {
+                "job_id": {
+                  "type": "string"
+                },
+                "run": {
+                  "$ref": "#/schemas/event/$defs/JobRunInfo"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "type": {
+                  "const": "job_run_finished",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "job_id",
+                "title",
+                "run"
+              ],
+              "type": "object"
             }
           ]
         },
@@ -753,9 +777,115 @@
             "pane_exited",
             "pane_agent_detected",
             "pane_agent_status_changed",
-            "layout_updated"
+            "layout_updated",
+            "job_run_finished"
           ],
           "type": "string"
+        },
+        "JobRunInfo": {
+          "properties": {
+            "duration_ms": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "env_note": {
+              "description": "Which environment the run used, without values, for example\n`login-shell (214 variables)`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "error": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "exit_code": {
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "finished_unix_ms": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "run_id": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "skipped_count": {
+              "description": "Consecutive skipped runs folded into this entry.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "started_unix_ms": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "status": {
+              "$ref": "#/schemas/event/$defs/JobRunStatus"
+            },
+            "summary": {
+              "description": "One short line: the exit code, the timeout, or why it did not start.",
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/schemas/event/$defs/JobRunTrigger"
+            }
+          },
+          "required": [
+            "run_id",
+            "trigger",
+            "status",
+            "started_unix_ms",
+            "finished_unix_ms",
+            "duration_ms",
+            "summary"
+          ],
+          "type": "object"
+        },
+        "JobRunStatus": {
+          "description": "Jobs are global per user: scheduled commands that flockr runs on a cron\nschedule or an interval and records the result of. Nothing here carries\nenvironment values; only counts and diagnostics are exposed.",
+          "oneOf": [
+            {
+              "enum": [
+                "success",
+                "failed",
+                "timed_out",
+                "spawn_failed"
+              ],
+              "type": "string"
+            },
+            {
+              "const": "skipped",
+              "description": "Not run because the previous run was still going.",
+              "type": "string"
+            }
+          ]
+        },
+        "JobRunTrigger": {
+          "oneOf": [
+            {
+              "enum": [
+                "schedule",
+                "manual"
+              ],
+              "type": "string"
+            },
+            {
+              "const": "catch_up",
+              "description": "Ran once at server start because a scheduled time passed while flockr\nwas not running.",
+              "type": "string"
+            }
+          ]
         },
         "PaneInfo": {
           "properties": {
@@ -2192,6 +2322,75 @@
           },
           "required": [
             "target"
+          ],
+          "type": "object"
+        },
+        "JobListParams": {
+          "properties": {
+            "since_revision": {
+              "description": "When it equals the server's current revision the response sets\n`unchanged` and omits the job list.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "JobLogsParams": {
+          "properties": {
+            "job_id": {
+              "type": "string"
+            },
+            "lines": {
+              "description": "Keep only the last N lines of each stream.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "run_id": {
+              "description": "A run from the job's history; the latest finished run by default.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "job_id"
+          ],
+          "type": "object"
+        },
+        "JobSetEnabledParams": {
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "job_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "job_id",
+            "enabled"
+          ],
+          "type": "object"
+        },
+        "JobTarget": {
+          "properties": {
+            "job_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "job_id"
           ],
           "type": "object"
         },
@@ -4267,6 +4466,18 @@
                 "type"
               ],
               "type": "object"
+            },
+            {
+              "properties": {
+                "type": {
+                  "const": "job.run_finished",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
             }
           ]
         },
@@ -6312,6 +6523,102 @@
             "params"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "job.list",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/JobListParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "job.get",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/JobTarget"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "job.run",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/JobTarget"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "job.set_enabled",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/JobSetEnabledParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "job.logs",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/JobLogsParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "job.env_refresh",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/EmptyParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
         }
       ],
       "properties": {
@@ -7436,6 +7743,30 @@
                 "layout"
               ],
               "type": "object"
+            },
+            {
+              "properties": {
+                "job_id": {
+                  "type": "string"
+                },
+                "run": {
+                  "$ref": "#/schemas/success_response/$defs/JobRunInfo"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "type": {
+                  "const": "job_run_finished",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "job_id",
+                "title",
+                "run"
+              ],
+              "type": "object"
             }
           ]
         },
@@ -7481,7 +7812,8 @@
             "pane_exited",
             "pane_agent_detected",
             "pane_agent_status_changed",
-            "layout_updated"
+            "layout_updated",
+            "job_run_finished"
           ],
           "type": "string"
         },
@@ -7668,6 +8000,277 @@
             "messages"
           ],
           "type": "object"
+        },
+        "JobEnvStatus": {
+          "description": "State of the cached login-shell environment. Values are never exposed.",
+          "properties": {
+            "captured_unix_ms": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "diagnostic": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "refreshing": {
+              "type": "boolean"
+            },
+            "source": {
+              "description": "`none` before the first capture, `login-shell`, or `server-fallback`\nwhen the capture failed and jobs use the server environment.",
+              "type": "string"
+            },
+            "variable_count": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "source",
+            "variable_count",
+            "refreshing"
+          ],
+          "type": "object"
+        },
+        "JobInfo": {
+          "properties": {
+            "command": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "diagnostics": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "dir": {
+              "description": "Directory that holds the job's files.",
+              "type": "string"
+            },
+            "enabled": {
+              "description": "Effective: the `enabled_override` wins over the job file.",
+              "type": "boolean"
+            },
+            "enabled_overridden": {
+              "description": "An `enable`/`disable` command overrides the job file's `enabled`.",
+              "type": "boolean"
+            },
+            "env": {
+              "description": "`login-shell` or `server`.",
+              "type": "string"
+            },
+            "has_feed": {
+              "description": "The job file declares a `feed` table.",
+              "type": "boolean"
+            },
+            "job_id": {
+              "type": "string"
+            },
+            "last_run": {
+              "anyOf": [
+                {
+                  "$ref": "#/schemas/success_response/$defs/JobRunInfo"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "next_run_unix_ms": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "notify": {
+              "type": "string"
+            },
+            "running_since_unix_ms": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "schedule": {
+              "description": "The cron expression, or `every 1h`.",
+              "type": "string"
+            },
+            "schedule_kind": {
+              "$ref": "#/schemas/success_response/$defs/JobScheduleKind"
+            },
+            "source": {
+              "description": "`user`, or `plugin:<plugin id>`.",
+              "type": "string"
+            },
+            "state": {
+              "$ref": "#/schemas/success_response/$defs/JobState"
+            },
+            "timeout_secs": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "job_id",
+            "title",
+            "source",
+            "command",
+            "schedule",
+            "schedule_kind",
+            "timeout_secs",
+            "enabled",
+            "env",
+            "notify",
+            "state",
+            "dir"
+          ],
+          "type": "object"
+        },
+        "JobRunInfo": {
+          "properties": {
+            "duration_ms": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "env_note": {
+              "description": "Which environment the run used, without values, for example\n`login-shell (214 variables)`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "error": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "exit_code": {
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "finished_unix_ms": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "run_id": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "skipped_count": {
+              "description": "Consecutive skipped runs folded into this entry.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "started_unix_ms": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "status": {
+              "$ref": "#/schemas/success_response/$defs/JobRunStatus"
+            },
+            "summary": {
+              "description": "One short line: the exit code, the timeout, or why it did not start.",
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/schemas/success_response/$defs/JobRunTrigger"
+            }
+          },
+          "required": [
+            "run_id",
+            "trigger",
+            "status",
+            "started_unix_ms",
+            "finished_unix_ms",
+            "duration_ms",
+            "summary"
+          ],
+          "type": "object"
+        },
+        "JobRunStatus": {
+          "description": "Jobs are global per user: scheduled commands that flockr runs on a cron\nschedule or an interval and records the result of. Nothing here carries\nenvironment values; only counts and diagnostics are exposed.",
+          "oneOf": [
+            {
+              "enum": [
+                "success",
+                "failed",
+                "timed_out",
+                "spawn_failed"
+              ],
+              "type": "string"
+            },
+            {
+              "const": "skipped",
+              "description": "Not run because the previous run was still going.",
+              "type": "string"
+            }
+          ]
+        },
+        "JobRunTrigger": {
+          "oneOf": [
+            {
+              "enum": [
+                "schedule",
+                "manual"
+              ],
+              "type": "string"
+            },
+            {
+              "const": "catch_up",
+              "description": "Ran once at server start because a scheduled time passed while flockr\nwas not running.",
+              "type": "string"
+            }
+          ]
+        },
+        "JobScheduleKind": {
+          "enum": [
+            "cron",
+            "interval"
+          ],
+          "type": "string"
+        },
+        "JobState": {
+          "oneOf": [
+            {
+              "enum": [
+                "idle",
+                "running",
+                "disabled"
+              ],
+              "type": "string"
+            },
+            {
+              "const": "invalid",
+              "description": "The job file has problems; see `diagnostics`.",
+              "type": "string"
+            }
+          ]
         },
         "LayoutDescription": {
           "properties": {
@@ -10355,6 +10958,165 @@
               "required": [
                 "type",
                 "pane_id"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "env": {
+                  "$ref": "#/schemas/success_response/$defs/JobEnvStatus"
+                },
+                "jobs": {
+                  "default": [],
+                  "items": {
+                    "$ref": "#/schemas/success_response/$defs/JobInfo"
+                  },
+                  "type": "array"
+                },
+                "revision": {
+                  "description": "Advances whenever any job's visible state changes.",
+                  "format": "uint64",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "type": {
+                  "const": "job_list",
+                  "type": "string"
+                },
+                "unchanged": {
+                  "description": "The request's `since_revision` is current; `jobs` is empty.",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "type",
+                "revision",
+                "env"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "history": {
+                  "description": "Oldest first, output omitted; at most 20 runs.",
+                  "items": {
+                    "$ref": "#/schemas/success_response/$defs/JobRunInfo"
+                  },
+                  "type": "array"
+                },
+                "job": {
+                  "$ref": "#/schemas/success_response/$defs/JobInfo"
+                },
+                "type": {
+                  "const": "job_detail",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "job",
+                "history"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "job_id": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "run_id": {
+                  "format": "uint64",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "started": {
+                  "description": "False when a run was already going.",
+                  "type": "boolean"
+                },
+                "type": {
+                  "const": "job_run_requested",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "job_id",
+                "started"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "job": {
+                  "$ref": "#/schemas/success_response/$defs/JobInfo"
+                },
+                "type": {
+                  "const": "job_updated",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "job"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "job_id": {
+                  "type": "string"
+                },
+                "run": {
+                  "$ref": "#/schemas/success_response/$defs/JobRunInfo"
+                },
+                "stderr": {
+                  "type": "string"
+                },
+                "stderr_truncated": {
+                  "type": "boolean"
+                },
+                "stdout": {
+                  "type": "string"
+                },
+                "stdout_truncated": {
+                  "type": "boolean"
+                },
+                "type": {
+                  "const": "job_logs",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "job_id",
+                "run",
+                "stdout",
+                "stderr"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "env": {
+                  "$ref": "#/schemas/success_response/$defs/JobEnvStatus"
+                },
+                "type": {
+                  "const": "job_env_refreshing",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "env"
               ],
               "type": "object"
             },

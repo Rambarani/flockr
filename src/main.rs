@@ -30,6 +30,7 @@ mod handoff_runtime;
 mod input;
 mod integration;
 mod ipc;
+mod jobs;
 mod kitty_graphics;
 mod layout;
 mod legacy_herdr;

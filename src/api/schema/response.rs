@@ -6,6 +6,7 @@ use super::events::EventEnvelope;
 use super::integrations::{
     IntegrationInstallResult, IntegrationTarget, IntegrationUninstallResult,
 };
+use super::jobs::{JobEnvStatus, JobInfo, JobRunInfo};
 use super::panes::{
     LayoutDescription, PaneEdgesResult, PaneFocusDirectionResult, PaneInfo, PaneLayoutSnapshot,
     PaneMoveResult, PaneNeighborResult, PaneProcessInfo, PaneReadResult, PaneResizeResult,
@@ -266,6 +267,46 @@ pub enum ResponseResult {
     },
     PluginPaneClosed {
         pane_id: String,
+    },
+    JobList {
+        /// Advances whenever any job's visible state changes.
+        revision: u64,
+        /// The request's `since_revision` is current; `jobs` is empty.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        unchanged: bool,
+        #[serde(default)]
+        jobs: Vec<JobInfo>,
+        env: JobEnvStatus,
+    },
+    JobDetail {
+        job: JobInfo,
+        /// Oldest first, output omitted; at most 20 runs.
+        history: Vec<JobRunInfo>,
+    },
+    JobRunRequested {
+        job_id: String,
+        /// False when a run was already going.
+        started: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        run_id: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
+    JobUpdated {
+        job: JobInfo,
+    },
+    JobLogs {
+        job_id: String,
+        run: JobRunInfo,
+        stdout: String,
+        stderr: String,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        stdout_truncated: bool,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        stderr_truncated: bool,
+    },
+    JobEnvRefreshing {
+        env: JobEnvStatus,
     },
     ConfigReload {
         status: crate::config::ConfigReloadStatus,

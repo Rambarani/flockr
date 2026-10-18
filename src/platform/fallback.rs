@@ -141,6 +141,16 @@ pub(crate) fn hostname() -> Option<String> {
     None
 }
 
+pub(crate) fn local_civil_at(_unix_secs: i64) -> Option<(i32, u8, u8, u8, u8, u8)> {
+    None
+}
+
+pub(crate) fn configure_job_command(_process: &mut std::process::Command) {}
+
+pub(crate) fn configure_detached_session_command(_process: &mut std::process::Command) {}
+
+pub(crate) fn terminate_process_group(_process_id: u32, _force: bool) {}
+
 pub(crate) fn local_datetime() -> Option<time::PrimitiveDateTime> {
     None
 }

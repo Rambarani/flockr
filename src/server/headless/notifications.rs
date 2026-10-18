@@ -210,6 +210,23 @@ impl HeadlessServer {
         })
     }
 
+    /// Job results queued for terminal or system delivery become client
+    /// notifications; in-frame delivery is rendered by the app itself.
+    pub(super) fn forward_job_notices(&mut self) {
+        let notices = self.app.take_job_client_notices();
+        if toast_notify_kind(self.app.state.toast_config.delivery).is_none() {
+            return;
+        }
+        for notice in notices {
+            self.send_notify_to_foreground_client(
+                toast_notify_kind(self.app.state.toast_config.delivery)
+                    .unwrap_or(protocol::NotifyKind::Toast),
+                &notice.title,
+                non_empty_body(&notice.body),
+            );
+        }
+    }
+
     pub(super) fn send_flat_toast_to_foreground_client(
         &mut self,
         kind: protocol::NotifyKind,
@@ -573,6 +590,11 @@ impl HeadlessServer {
                 }
 
                 true
+            }
+            AppEvent::JobRunFinished(_) => {
+                let changed = self.app.handle_internal_event_with_render_impact(ev);
+                self.forward_job_notices();
+                changed
             }
             AppEvent::UpstreamUpdatesAvailable { title, context } => {
                 let title = title.clone();

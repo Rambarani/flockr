@@ -494,6 +494,60 @@ pub(crate) fn local_datetime() -> Option<time::PrimitiveDateTime> {
     datetime_from_tm(&local)
 }
 
+/// Local civil time (year, month 1-12, day, hour, minute, second) at a Unix
+/// timestamp, from the C library's timezone rules. Used for cron scheduling.
+pub(crate) fn local_civil_at(unix_secs: i64) -> Option<(i32, u8, u8, u8, u8, u8)> {
+    let timestamp = libc::time_t::try_from(unix_secs).ok()?;
+    let mut local: libc::tm = unsafe { std::mem::zeroed() };
+    if unsafe { libc::localtime_r(&timestamp, &mut local) }.is_null() {
+        return None;
+    }
+    Some((
+        local.tm_year + 1900,
+        u8::try_from(local.tm_mon + 1).ok()?,
+        u8::try_from(local.tm_mday).ok()?,
+        u8::try_from(local.tm_hour).ok()?,
+        u8::try_from(local.tm_min).ok()?,
+        u8::try_from(local.tm_sec).ok()?,
+    ))
+}
+
+/// Run a job command as the leader of its own process group so a timeout can
+/// stop the command and everything it spawned.
+pub(crate) fn configure_job_command(process: &mut std::process::Command) {
+    use std::os::unix::process::CommandExt;
+
+    process.process_group(0);
+}
+
+/// Run a command in its own session, detached from any controlling terminal.
+/// Interactive shells used for environment capture need this so they never
+/// touch the terminal the server was started from.
+pub(crate) fn configure_detached_session_command(process: &mut std::process::Command) {
+    use std::os::unix::process::CommandExt;
+
+    // SAFETY: setsid is async-signal-safe and runs between fork and exec.
+    unsafe {
+        process.pre_exec(|| {
+            libc::setsid();
+            Ok(())
+        });
+    }
+}
+
+/// Stop the process group led by `process_id`: SIGTERM, or SIGKILL when
+/// `force` is set. The caller spawned the process with `configure_job_command`
+/// or `configure_detached_session_command`, so the pid is the group id.
+pub(crate) fn terminate_process_group(process_id: u32, force: bool) {
+    let Ok(group) = i32::try_from(process_id) else {
+        return;
+    };
+    let signal = if force { libc::SIGKILL } else { libc::SIGTERM };
+    unsafe {
+        libc::kill(-group, signal);
+    }
+}
+
 pub(crate) fn status_commands_supported() -> bool {
     true
 }

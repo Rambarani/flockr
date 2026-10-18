@@ -705,6 +705,12 @@ pub(crate) fn api_method_name(method: &Method) -> &'static str {
         Method::PluginPaneOpen(_) => "plugin.pane.open",
         Method::PluginPaneFocus(_) => "plugin.pane.focus",
         Method::PluginPaneClose(_) => "plugin.pane.close",
+        Method::JobList(_) => "job.list",
+        Method::JobGet(_) => "job.get",
+        Method::JobRun(_) => "job.run",
+        Method::JobSetEnabled(_) => "job.set_enabled",
+        Method::JobLogs(_) => "job.logs",
+        Method::JobEnvRefresh(_) => "job.env_refresh",
     }
 }
 

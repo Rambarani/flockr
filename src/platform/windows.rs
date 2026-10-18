@@ -976,6 +976,47 @@ pub(crate) fn hostname() -> Option<String> {
         .filter(|name| !name.is_empty())
 }
 
+/// Local civil time (year, month 1-12, day, hour, minute, second) at a Unix
+/// timestamp. Used for cron scheduling.
+pub(crate) fn local_civil_at(unix_secs: i64) -> Option<(i32, u8, u8, u8, u8, u8)> {
+    let timestamp = libc::time_t::try_from(unix_secs).ok()?;
+    let mut local: libc::tm = unsafe { std::mem::zeroed() };
+    if unsafe { libc::localtime_s(&mut local, &timestamp) } != 0 {
+        return None;
+    }
+    Some((
+        local.tm_year + 1900,
+        u8::try_from(local.tm_mon + 1).ok()?,
+        u8::try_from(local.tm_mday).ok()?,
+        u8::try_from(local.tm_hour).ok()?,
+        u8::try_from(local.tm_min).ok()?,
+        u8::try_from(local.tm_sec).ok()?,
+    ))
+}
+
+/// Run a job command without a console window.
+pub(crate) fn configure_job_command(process: &mut std::process::Command) {
+    configure_background_command_platform(process);
+}
+
+/// Run an environment-capture command without a console window.
+pub(crate) fn configure_detached_session_command(process: &mut std::process::Command) {
+    configure_background_command_platform(process);
+}
+
+/// Stop the process tree rooted at `process_id`. Windows has no graceful
+/// group signal, so `force` is ignored and the whole tree is killed.
+pub(crate) fn terminate_process_group(process_id: u32, _force: bool) {
+    let mut taskkill = std::process::Command::new("taskkill");
+    taskkill
+        .args(["/PID", &process_id.to_string(), "/T", "/F"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    configure_background_command_platform(&mut taskkill);
+    let _ = taskkill.status();
+}
+
 pub(crate) fn local_datetime() -> Option<time::PrimitiveDateTime> {
     let mut timestamp: libc::time_t = 0;
     if unsafe { libc::time(&mut timestamp) } == -1 {

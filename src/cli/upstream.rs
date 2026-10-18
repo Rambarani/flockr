@@ -347,6 +347,16 @@ fn upstream_skip(args: &[String]) -> std::io::Result<i32> {
 /// The id of the system job that announces upstream releases.
 const UPSTREAM_JOB_ID: &str = "system.upstream-herdr";
 
+/// Whether `decision` is the watcher's question about release `tag`.
+fn is_upstream_decision_for(decision: &DecisionInfo, tag: &str) -> bool {
+    decision.job_id == UPSTREAM_JOB_ID
+        && decision
+            .context
+            .as_ref()
+            .and_then(|context| context["tag"].as_str())
+            == Some(tag)
+}
+
 /// Start the pending decision the watcher raised for `tag`, if there is one.
 /// `None` means there is none (or the server has no decisions), so the caller
 /// opens the tab itself; `Some` is the outcome of starting it, which is the
@@ -362,14 +372,9 @@ fn start_upstream_decision(tag: &str) -> Option<Result<String, String>> {
     }
     let decisions: Vec<DecisionInfo> =
         serde_json::from_value(listed["result"]["decisions"].clone()).ok()?;
-    let decision = decisions.into_iter().find(|decision| {
-        decision.job_id == UPSTREAM_JOB_ID
-            && decision
-                .context
-                .as_ref()
-                .and_then(|context| context["tag"].as_str())
-                == Some(tag)
-    })?;
+    let decision = decisions
+        .into_iter()
+        .find(|decision| is_upstream_decision_for(decision, tag))?;
     let started = match super::send_request(&Request {
         id: "cli:upstream:decision:start".into(),
         method: Method::DecisionStart(DecisionTarget {
@@ -406,12 +411,10 @@ fn dismiss_upstream_decisions(tags: &[String]) {
         return;
     };
     for decision in decisions {
-        let tag = decision
-            .context
-            .as_ref()
-            .and_then(|context| context["tag"].as_str())
-            .map(str::to_owned);
-        if decision.job_id == UPSTREAM_JOB_ID && tag.is_some_and(|tag| tags.contains(&tag)) {
+        if tags
+            .iter()
+            .any(|tag| is_upstream_decision_for(&decision, tag))
+        {
             let _ = super::send_request(&Request {
                 id: "cli:upstream:decision:dismiss".into(),
                 method: Method::DecisionDismiss(DecisionTarget {
@@ -773,5 +776,54 @@ mod tests {
             assert_eq!(run_upstream_command(&args).unwrap(), 2, "{args:?}");
         }
         assert_eq!(run_upstream_command(&["--help".to_string()]).unwrap(), 0);
+    }
+
+    fn decision(job: &str, tag: Option<&str>) -> DecisionInfo {
+        DecisionInfo {
+            decision_id: "d1".into(),
+            job_id: job.into(),
+            job_title: job.into(),
+            run_id: 1,
+            ask: "ask".into(),
+            tab_title: "t".into(),
+            cwd: "/".into(),
+            agent_command: "flockr upstream sync v0.9.7".into(),
+            status: crate::api::schema::DecisionStatus::Pending,
+            created_unix_ms: 0,
+            snoozed_until_unix_ms: None,
+            resolved_unix_ms: None,
+            outcome: None,
+            last_error: None,
+            prompt_file: None,
+            context: tag.map(|tag| json!({ "tag": tag })),
+            prompt: None,
+        }
+    }
+
+    #[test]
+    fn copy_and_review_find_the_watchers_decision_for_the_tag() {
+        let ours = decision(UPSTREAM_JOB_ID, Some("v0.9.7"));
+        assert!(is_upstream_decision_for(&ours, "v0.9.7"));
+        assert!(!is_upstream_decision_for(&ours, "v0.9.8"));
+        assert!(!is_upstream_decision_for(
+            &decision("workbox-sync", Some("v0.9.7")),
+            "v0.9.7"
+        ));
+        assert!(!is_upstream_decision_for(
+            &decision(UPSTREAM_JOB_ID, None),
+            "v0.9.7"
+        ));
+    }
+
+    #[test]
+    fn check_takes_one_mode_flag_and_rejects_anything_else() {
+        for args in [
+            vec!["check", "--job", "x"],
+            vec!["check", "--job", "--json"],
+            vec!["check", "--nope"],
+        ] {
+            let args: Vec<String> = args.into_iter().map(String::from).collect();
+            assert_eq!(run_upstream_command(&args).unwrap(), 2, "{args:?}");
+        }
     }
 }

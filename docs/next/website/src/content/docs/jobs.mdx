@@ -13,6 +13,8 @@ A job can also publish a [feed](#feeds): a list of items, such as what needs you
 - `flockr job list` shows every job. `prefix+t` opens the Jobs overlay inside Flockr. `flockr feed list` shows the jobs' feeds, and `prefix+f` opens the Feed overlay.
 - A job runs with your login-shell environment by default, so credentials you keep in `~/.zshrc` are available.
 - If Flockr was not running when a job was due, the job runs once when the server starts.
+- Flockr ships a few jobs of its own, the [system jobs](#system-jobs). They sit in the same list with source `system`.
+- A job can [ask you](#handoff-ask-then-start-an-agent) whether to start an agent after a run. Nothing starts until you say so.
 
 ## Define a job
 
@@ -38,7 +40,7 @@ notify = "on_failure"              # never | on_failure | on_change | always
 | `cwd` | Working directory. Defaults to the job directory. `~` and relative paths (relative to the job directory) work. |
 | `notify` | See [Notifications](#notifications). Default `on_failure`. |
 | `feed` | Optional table that gives the job a [feed](#feeds): `command` (required argv) and `title`. |
-| `handoff` | Reserved for a later release. `when` is validated; nothing acts on it yet. |
+| `handoff` | Optional table: after a run, ask whether to start an agent tab. See [Handoff](#handoff-ask-then-start-an-agent). |
 
 Unknown keys are errors, so a typo such as `evry` is reported instead of ignored. Problems are listed together, with the file and the key, in `flockr job list` and in the Jobs overlay:
 
@@ -105,9 +107,147 @@ State lives in `<state dir>/jobs/<id>/state.json`, written atomically. It holds 
 
 `flockr job enable` and `disable` override `enabled` in the file until you set the file's value again. Enabling restarts the schedule from now, so a job that was off for a week does not run at once. `flockr job run` works for disabled jobs too.
 
-A stdout line that starts with `{"flockr_handoff":` is kept verbatim in the run record for a later release.
+A stdout line that starts with `{"flockr_handoff":` is a [dynamic handoff](#dynamic-handoff). It is kept verbatim in the run record, and the handoff reads it after the run.
 
 Feed output does not appear in the run record: a feed refresh is not a run and does not count in the history.
+
+## System jobs
+
+System jobs are jobs built into Flockr. Their ids start with `system.`, they run through the same scheduler and runner as your jobs, and they show in `flockr job list`, `flockr job status` and the Jobs overlay with source `system`. They have no `job.toml`; their timing comes from config.
+
+| Job | What it does |
+| --- | --- |
+| `system.upstream-herdr` | Checks the upstream herdr releases (once a day by default) and asks whether to copy the updates. It replaces the fixed upstream timer; see [Upstream herdr watcher](/docs/configuration/#upstream-herdr-watcher). |
+
+```toml
+# config.toml
+[jobs.system.upstream-herdr]
+every = "24h"          # or schedule = "0 9 * * *"; exactly one of them
+enabled = true
+notify = "never"       # never | on_failure | on_change | always
+```
+
+- **Timing and switches.** `every` and `schedule` take the same values as in a job file; `enabled` and `notify` work as there. A bad value is reported as a config diagnostic and the default stays. A table that names no system job is reported too.
+- **The old keys keep working.** `[upstream] enabled` switches the upstream job and `[upstream] check_interval_hours` is its default interval. The interval key is deprecated and draws a diagnostic. `[jobs.system.upstream-herdr]` wins over both.
+- **First run.** A system job that has never run is due at once when the server starts, then follows its schedule.
+- **Run by hand.** `flockr job run system.upstream-herdr --wait`, `flockr job logs system.upstream-herdr`, `flockr job disable system.upstream-herdr` work like for any job.
+
+## Change when a job runs
+
+You can change a job's timing at any time, in the job file or without opening it:
+
+- **Jobs overlay.** Select the job, press `t`, type a schedule and press `enter`. The prompt starts with the current schedule and checks what you type as you type: `every 2h` (or just `2h`) is an interval of at least a minute, anything else must be a five-field cron expression such as `0 9 * * 1-5`. Nothing is sent until it is valid.
+- **Command line.** `flockr job schedule <id> every 2h` or `flockr job schedule <id> "0 9 * * 1-5"`.
+
+Where the new schedule is written:
+
+| Job | Written to |
+| --- | --- |
+| System job | `[jobs.system.<name>]` in `config.toml`: `every = "2h"` or `schedule = "..."`, and the other key is removed. The rest of the file stays as it was. |
+| Job with a `job.toml` | The existing `schedule` or `every` line of that file, changed in place, keeping its indentation and trailing comment. Nothing else in the file is touched. Flockr re-reads the edited text and refuses to write it unless it is the original document with only that key changed. |
+| Anything else | An override stored in the job's state (`state.json`), and Flockr says so. That is where plugin jobs go, and any `job.toml` whose schedule is written in a form the line editor does not understand (a multi-line string, both keys set, or no key at all). `flockr job status` marks the override. Editing the file and running `flockr job schedule` again moves it back into the file. |
+
+The change applies at once, without a restart, and the schedule starts again from now: a job moved to `every 5m` runs in five minutes, not immediately for the time the old interval had already waited.
+
+## Handoff: ask, then start an agent
+
+A job can end with a question for you. After a run, Flockr decides whether the job has something worth your attention. If it does, it records a **decision**, shows a toast with the question, and waits. It never starts an agent on its own: you answer **Start**, **Snooze 1h** or **Dismiss**, and **Start** opens a tab in the directory you chose and runs your agent with a prompt built from the job's output.
+
+```toml
+# ~/.config/flockr/jobs/workbox-sync/job.toml
+[handoff]
+when = "on_change"                 # on_success | on_change | on_failure | always | "exit:<code>"
+ask = "{{count}} items need you. Start Claude?"
+agent_command = "claude"           # default; any command, see below
+cwd = "~/Desktop/poc/workbox"      # the tab's working directory; default: the job's cwd
+tab_title = "workbox · {{date}}"   # default: "{{job.title}} · {{date}}"
+prompt_file = "prompt.md"          # a template in the job directory ...
+# prompt = "Triage {{count}} items:\n{{feed_json}}"   # ... or an inline template (not both)
+```
+
+| Key | Meaning |
+| --- | --- |
+| `when` | Which runs ask. `on_success`: the run succeeded. `on_failure`: it failed, timed out or could not start. `always`: every run. `exit:<code>`: it exited with that code. `on_change`: the run's stdout or the job's feed differs from the previous run's (the first run counts as a change). Default `on_change`. |
+| `ask` | The question, a template. Default `<job title> has something for you. Start an agent?` |
+| `agent_command` | What the tab runs. Default `claude`. A template; values filled into it are shell-quoted. |
+| `cwd` | The tab's working directory, a template. `~` and paths relative to the job directory work. It must exist when you press Start. |
+| `tab_title` | The tab's name, a template, cut to 60 characters. |
+| `prompt_file` or `prompt` | The prompt template: a file in the job directory, or inline text. At most one. Without either the agent starts with no prompt. |
+
+### The prompt reaches the agent as a file
+
+The rendered prompt is written to `<state dir>/jobs/<id>/handoffs/<run>.md` (the newest 50 per job are kept), and the agent gets the file, never a huge argument. Flockr starts the agent like `flockr upstream sync` always did:
+
+- If `agent_command` contains `{prompt_file}`, it is replaced by the quoted path of the file: `agent_command = "claude --append-system-prompt-file {prompt_file}"`.
+- Otherwise the prompt text is passed as the first argument: `claude "$(cat '<file>')"`.
+- With no prompt at all the command runs exactly as written. (The upstream decision works this way: its command is `flockr upstream sync <tag>`, which builds its own prompt.)
+
+The command is typed into the new tab's shell, so the agent owns a real terminal and you can watch and steer it.
+
+### Templates
+
+`ask`, `agent_command`, `cwd`, `tab_title`, `prompt` and the prompt file use `{{name}}` placeholders:
+
+| Name | Value |
+| --- | --- |
+| `{{stdout}}` | The run's stdout, without the handoff line, cut to 12,000 characters. |
+| `{{stderr_tail}}` | The end of stderr, at most 4,000 characters. |
+| `{{exit_code}}` | The exit code, empty when the run had none (timeout, signal, not started). |
+| `{{feed_json}}` | The job's feed after this run's refresh as `{"title", "total", "items": [...]}` without action commands, cut to 48,000 characters by dropping items from the end (then `"truncated": true`). `{"items":[]}` when the job has no feed. |
+| `{{count}}` | `context.count` of a dynamic handoff if it has one, otherwise the feed's unread count, otherwise 0. |
+| `{{date}}` | Today's local date, `YYYY-MM-DD`. |
+| `{{job.id}}`, `{{job.title}}`, `{{run.id}}` | The job and the run. |
+| `{{context.<path>}}` | A value from the dynamic handoff's `context` object, `{{context.tag}}` or `{{context.release.name}}`. Strings as they are, other values as JSON, each cut to 8,000 characters. |
+
+A name with no value renders as empty text and is logged. Substitution is a single pass: a value is never searched for placeholders again, so job output cannot inject more. The prompt is cut at 200,000 characters. The `ask` and the tab title are flattened to one line.
+
+### Dynamic handoff
+
+A job can decide by itself. If its stdout has a line that starts with `{"flockr_handoff":`, the last one is the handoff: it asks regardless of `when`, even without a `[handoff]` table.
+
+```json
+{"flockr_handoff": {"ask": "herdr {{context.tag}} is out. Copy updates?",
+  "agent_command": "flockr upstream sync {{context.tag}}",
+  "cwd": "~/src/flockr", "tab_title": "upstream-sync {{context.tag}}",
+  "context": {"tag": "v0.9.7", "count": 3, "notes": "..."}}}
+```
+
+Its fields (`ask`, `agent_command`, `cwd`, `tab_title`, `prompt`, `prompt_file`) override the table's and may use the same templates, and `context` is any JSON object for `{{context.*}}`. A field of the wrong type is ignored with a log entry. The upstream watcher is the first user.
+
+### When Flockr asks
+
+After a run, once its feed refresh (if the job has one) is done, so `{{feed_json}}` and `on_change` see the new items. A decision is dropped when the same job already has one with the same content (same question, command, directory, title and prompt), whether pending or answered, so a job that keeps printing the same thing asks once. If the handoff cannot be built (an unreadable prompt file, `{prompt_file}` without a prompt) you get a toast saying so and no decision.
+
+## Decisions
+
+A decision is a question a job asked. It stays until you answer, because you may be away: the list is kept in `<state dir>/decisions.json` and survives restarts. At most 50 are kept; when the list is full the oldest answered one goes first, then the oldest unanswered one.
+
+You are told by:
+
+- a toast with the question, in the attention style, delivered like other toasts (`[ui.toast] delivery`: in Flockr, through the terminal, or the OS). With `off` there is no popup, so rely on the badge and the list below.
+- the badge on the Jobs overlay's title (`jobs  [decisions (2)]`) and a `●1` on the job's row.
+- **decisions (N)** in the command palette.
+- `flockr decision list`.
+
+Open the **Decisions** tab with `prefix+t`, then `tab`:
+
+| Key | Action |
+| --- | --- |
+| `enter` or `s` | **Start**: open the tab and run the agent. |
+| `z` | **Snooze** for an hour. The decision hides, then comes back as pending with a new toast. |
+| `x` | **Dismiss**. |
+| `p` | Preview the agent command, directory, tab title and rendered prompt. |
+
+**Start** opens a tab in the decision's directory (`~` expanded), titled `tab_title`, and types the agent command into it. The tab runs in the active workspace and takes focus. The command gets the job's environment rules: the cached login-shell variables (when already captured), `env_file`, the `[env]` table and the `FLOCKR_*` job variables. If the directory does not exist, the prompt file is gone, or there is no workspace, nothing opens: the reason is recorded on the decision, shown in the overlay and by `flockr decision list`, and the decision stays pending, so you can fix the cause and press Start again. A started decision records `started in tab <id>` and leaves the list; `flockr decision list --all` still shows it.
+
+```sh
+flockr decision list [--all] [--json]
+flockr decision start d3
+flockr decision snooze d3 --for 2h
+flockr decision dismiss d3
+```
+
+The upstream watcher's **Copy updates** is a decision of `system.upstream-herdr` whose command is `flockr upstream sync <tag>`; `flockr upstream copy` and the review popup start it, and Skip dismisses it.
 
 ## Feeds
 
@@ -241,8 +381,11 @@ flockr job run <id> [--wait]      # run now; --wait exits non-zero if the run fa
 flockr job logs <id> [-n LINES]   # stdout then stderr of the last run
 flockr job enable <id>
 flockr job disable <id>
+flockr job schedule <id> <every 2h|CRON>   # change timing; see "Change when a job runs"
 flockr job env refresh            # capture the login-shell environment again
 ```
+
+Decisions: `flockr decision list|start|snooze|dismiss`, see [Decisions](#decisions).
 
 Feeds:
 
@@ -266,9 +409,11 @@ flockr feed adapt workbox [--title T] [--bin PROGRAM]   # stdin: workbox JSON, s
 | `r` | Run the selected job now |
 | `l` or `enter` | Show the last run's output (scroll with `j`/`k`, `pgup`/`pgdn`, `g`/`G`; `esc` goes back) |
 | `e` | Enable or disable the job |
+| `t` | Change the schedule ([how](#change-when-a-job-runs)) |
+| `tab` | Switch to the [Decisions](#decisions) list |
 | `esc` or `q` | Close |
 
-The command palette also lists **run job &lt;id&gt;** for every job. Servers without job support show a short explanation instead.
+The title shows how many decisions are waiting, `[jobs]  decisions (2)`, and a job with decisions pending has a `●N` after its name. The command palette also lists **run job &lt;id&gt;** for every job and **decisions (N)**. Servers without job support show a short explanation instead, and a server without the decision methods only loses the Decisions tab and `t`.
 
 ## Plugin jobs
 
@@ -289,10 +434,22 @@ every = "30m"
 | `job.get` | One job and its history without output. |
 | `job.run` | Start a run: `started: false` when one is already going. |
 | `job.set_enabled` | Set the enabled override. |
+| `job.set_schedule` | Change a job's schedule (`job_id`, `schedule` as `every 2h` or cron). The answer says where it was stored: `config`, `job_file` or `state`, with a `note` when that was the fallback. |
 | `job.logs` | The stdout and stderr tails of a run (`run_id`, `lines` optional). |
 | `job.env_refresh` | Start recapturing the login-shell environment in the background. |
 
-Subscribe to `job.run_finished` for `job_id`, `title` and the run record (without output). `job.list`, `job.get`, `job.logs`, `job.run` and `job.set_enabled` are also available to the Flockr client on the endpoint command lane.
+Subscribe to `job.run_finished` for `job_id`, `title` and the run record (without output). `job.list`, `job.get`, `job.logs`, `job.run`, `job.set_enabled` and `job.set_schedule` are also available to the Flockr client on the endpoint command lane.
+
+Decision methods:
+
+| Method | Purpose |
+| --- | --- |
+| `decision.list` | Pending and snoozed decisions, newest first, with a `revision` and the `pending` count. `since_revision` equal to the current one answers `unchanged: true`. `include_resolved` adds started and dismissed ones. `decision_id` with `include_prompt` returns one decision with its rendered `prompt` (cut to 64 KiB). |
+| `decision.start` | Open the agent tab. Answers the decision, `tab_id` and `pane_id`. Errors: `decision_not_found`, `decision_resolved`, `decision_cwd_missing`, `decision_prompt_missing`, `decision_command_invalid`, `decision_tab_failed`, `decision_launch_failed`; the decision stays pending with `last_error`. |
+| `decision.snooze` | Hide a decision for `for_secs` seconds (default 3600, at most 30 days). |
+| `decision.dismiss` | Dismiss it. |
+
+Subscribe to `decision.created` for the new `decision`. The four decision methods are also available to the Flockr client on the endpoint command lane.
 
 Feed methods:
 
@@ -313,3 +470,4 @@ Subscribe to `feed.updated` for `job_id`, `title`, `revision`, `count`, `unread`
 - A feed holds at most 500 items, and a feed command's action gets at most 60 seconds.
 - Cron time zones follow the machine's local time. On Windows the current UTC offset is used for daylight-saving changes.
 - A server restart does not stop a job that is still running; its result is not recorded.
+- A handoff offers one agent tab per decision. The prompt is capped at 200,000 characters, `{{stdout}}` at 12,000, and at most 50 decisions and 50 prompt files per job are kept.

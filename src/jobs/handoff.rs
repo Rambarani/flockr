@@ -1152,4 +1152,44 @@ mod tests {
         assert_eq!(date.len(), 10);
         assert!(date.starts_with("2026-10-"), "{date}");
     }
+
+    #[test]
+    fn the_workbox_example_parses_and_renders() {
+        // docs/flockr is a local, git-ignored area; skip on a checkout without it.
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/flockr/examples/workbox-sync");
+        let Ok(text) = std::fs::read_to_string(dir.join("job.toml")) else {
+            return;
+        };
+        let job = parse_job_toml(&text, "workbox-sync", &dir).expect("the example job is valid");
+        let handoff = job.handoff.as_ref().expect("the example has a [handoff]");
+        assert_eq!(handoff.when, "on_change");
+        assert_eq!(handoff.prompt_file.as_deref(), Some("prompt.md"));
+
+        let feed = FeedSnapshot {
+            json: "{\"items\":[{\"id\":\"jira:NH-1\",\"title\":\"Fix login\"}]}".into(),
+            unread: 3,
+            fingerprint: feed_fingerprint("x"),
+        };
+        let offer = eval(
+            &job,
+            &record(JobRunStatus::Success, Some(0), "synced 12 items\n"),
+            Some(&feed),
+            None,
+        )
+        .unwrap()
+        .offer
+        .expect("a first sync with unread items asks");
+        assert_eq!(offer.ask, "3 items need you. Start Claude?");
+        assert_eq!(offer.tab_title, "workbox · 2026-10-18");
+        assert_eq!(offer.agent_command, "claude");
+        assert!(offer.cwd.ends_with("Desktop/poc/workbox"), "{}", offer.cwd);
+        assert!(offer.prompt.contains("Today is 2026-10-18."));
+        assert!(
+            offer.prompt.contains("jira:NH-1"),
+            "feed json is in the prompt"
+        );
+        assert!(offer.prompt.contains("/plan-day"));
+        assert!(offer.prompt.contains("synced 12 items"));
+        assert!(offer.warnings.is_empty(), "{:?}", offer.warnings);
+    }
 }

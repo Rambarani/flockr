@@ -513,25 +513,32 @@ Click a row to open its link, right-click it for the item's actions, click the h
 
 ## Upstream herdr watcher
 
-Flockr is a fork of [herdr](https://github.com/herdrdev/herdr). The watcher checks the upstream releases once a day and tells you inside Flockr when there is something newer than the herdr version Flockr is synced to:
+Flockr is a fork of [herdr](https://github.com/herdrdev/herdr). The watcher is the [system job](/docs/jobs/#system-jobs) `system.upstream-herdr`. It checks the upstream releases once a day and asks you inside Flockr when there is something newer than the herdr version Flockr is synced to:
 
 ```toml
 [upstream]
-enabled = true
-check_interval_hours = 24
+enabled = true                     # switches the system job on or off
 include_prereleases = false
 repo_path = "~/src/flockr"
 agent_command = "claude"
 review_key = "prefix+u"
+
+# When and how often it runs (see Jobs: System jobs). These win over [upstream].
+[jobs.system.upstream-herdr]
+every = "24h"                      # or schedule = "0 9 * * *"
+enabled = true
+notify = "never"
 ```
 
-The check runs on the server, only talks to the GitHub releases API of `herdrdev/herdr`, and fails quietly when offline. Flockr shows an in-app toast such as `herdr v0.9.7 available upstream — 3 features, 5 fixes` once per release. Press `prefix+u` (or run `flockr upstream review`) for the review popup: it lists every pending release with its notes and offers **Copy updates**, **Skip this version** and **Later**.
+`check_interval_hours` is deprecated. It still sets the default interval of the job, and Flockr reports it as a config diagnostic; put `every = "<hours>h"` in `[jobs.system.upstream-herdr]` instead. A table there overrides `enabled` and `check_interval_hours`. You can also change the timing without editing the file: press `t` on the job in the Jobs overlay, or run `flockr job schedule system.upstream-herdr "every 12h"`.
 
-**Copy updates** opens a new Flockr tab in `repo_path` that runs `flockr upstream sync <tag>`. The sync never touches your checked-out files or the `flockr` branch. It adds a git remote named `upstream` when missing, fetches its tags, creates a worktree at `<repo_path>/../flockr-sync-<tag>` on a new branch `upstream-sync/<tag>`, writes `.flockr/sync-<tag>.md` there, and starts `agent_command` with that prompt. The agent merges the tag, keeps Flockr's rename, legacy `HERDR_*` aliases, hosting URLs and features, and runs the build, tests, clippy and fmt. When everything passes it records the verified commit in `.flockr/sync-<tag>.verified`.
+The job runs `flockr upstream check --job` in a child process, so it has the job runner's timeout and logs (`flockr job logs system.upstream-herdr`) and cannot take the server down. It only talks to the GitHub releases API of `herdrdev/herdr` and fails quietly when offline: the run is recorded as failed without a toast. When a release is new to you it raises one [decision](/docs/jobs/#decisions): a toast such as `herdr v0.9.7 is out (3 features, 5 fixes). Copy updates?`, an entry in the Jobs overlay's **Decisions** tab (`prefix+t`, then `tab`) and `flockr decision list`. The decision carries the tag, the counts and the release notes as its context. Each release asks once, even across restarts. Press `prefix+u` (or run `flockr upstream review`) for the review popup: it lists every pending release with its notes and offers **Copy updates**, **Skip this version** and **Later**.
+
+**Copy updates** (or **Start** on the decision, which is the same thing) opens a new Flockr tab in `repo_path` that runs `flockr upstream sync <tag>`. The popup and `flockr upstream copy` start the matching decision when there is one, so it leaves the list; Skip dismisses it. The sync never touches your checked-out files or the `flockr` branch. It adds a git remote named `upstream` when missing, fetches its tags, creates a worktree at `<repo_path>/../flockr-sync-<tag>` on a new branch `upstream-sync/<tag>`, writes `.flockr/sync-<tag>.md` there, and starts `agent_command` with that prompt. The agent merges the tag, keeps Flockr's rename, legacy `HERDR_*` aliases, hosting URLs and features, and runs the build, tests, clippy and fmt. When everything passes it records the verified commit in `.flockr/sync-<tag>.verified`.
 
 Nothing reaches `flockr` until you run `flockr upstream apply <tag>`. It checks that the sync branch exists and was verified, that your checkout is clean and on `flockr`, prints what it will do, asks for confirmation (or `--yes`), merges the branch, runs `cargo build --release`, removes the worktree, and records the new upstream base. `flockr upstream skip <tag>` stops notifications for one release.
 
-`repo_path` is the Flockr source checkout. When it is unset, Flockr uses the checkout the binary was built from if that directory still exists and contains `.flockr/upstream-base`; otherwise the copy action tells you to set it. `agent_command` runs through your shell in the worktree. A `{prompt_file}` placeholder expands to the prompt file path; without one the prompt text is passed as the first argument, as in `claude "$(cat <file>)"`. The synced upstream version is committed in `.flockr/upstream-base`; watcher state (last check, notified and skipped tags, cached notes) lives in the Flockr state directory as `upstream.json`.
+`repo_path` is the Flockr source checkout. When it is unset, Flockr uses the checkout the binary was built from if that directory still exists and contains `.flockr/upstream-base`; otherwise the copy action tells you to set it. `agent_command` runs through your shell in the worktree. A `{prompt_file}` placeholder expands to the prompt file path; without one the prompt text is passed as the first argument, as in `claude "$(cat <file>)"`. The synced upstream version is committed in `.flockr/upstream-base`; watcher state (last check, notified and skipped tags, cached notes) lives in the Flockr state directory as `upstream.json`, and the decision list as `decisions.json`. Debug builds do not run the watcher on a schedule (like the other background update checks); `flockr job run system.upstream-herdr` runs it by hand, and `[jobs.system.upstream-herdr] enabled = true` turns it on.
 
 ## Notifications
 

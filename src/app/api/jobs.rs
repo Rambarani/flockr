@@ -359,3 +359,533 @@ fn begin_error_response(id: String, job_id: &str, error: BeginError) -> String {
         }
     }
 }
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::api::schema::{
+        ErrorResponse, JobRunStatus, JobState, Method, Request, SuccessResponse,
+    };
+    use crate::jobs::env::LoginEnvCache;
+    use crate::jobs::{JobsManager, JobsPaths};
+
+    struct Fixture {
+        root: std::path::PathBuf,
+        app: App,
+    }
+
+    impl Fixture {
+        fn new(name: &str) -> Self {
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
+            let root = std::env::temp_dir().join(format!(
+                "flockr-app-jobs-{name}-{}-{nanos}",
+                std::process::id()
+            ));
+            std::fs::create_dir_all(root.join("config")).unwrap();
+            let (_api_tx, api_rx) = tokio::sync::mpsc::unbounded_channel();
+            let mut app = App::new(
+                &crate::config::Config::default(),
+                crate::app::AppPolicy::TEST,
+                None,
+                api_rx,
+                crate::api::EventHub::default(),
+            );
+            app.jobs = JobsManager::new(
+                JobsPaths {
+                    config_dir: root.join("config"),
+                    state_root: root.join("state"),
+                },
+                Arc::new(LoginEnvCache::new(Box::new(|| {
+                    Ok(vec![("PATH".into(), "/usr/bin:/bin".into())])
+                }))),
+                true,
+            );
+            app.state.toast_config.delivery = crate::config::ToastDelivery::Flockr;
+            Self { root, app }
+        }
+
+        fn write_job(&self, id: &str, body: &str) {
+            let dir = self.root.join("config").join(id);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("job.toml"), body).unwrap();
+        }
+
+        fn call(&mut self, method: Method) -> String {
+            self.app.handle_api_request(Request {
+                id: "test".into(),
+                method,
+            })
+        }
+
+        fn ok(&mut self, method: Method) -> ResponseResult {
+            let response = self.call(method);
+            serde_json::from_str::<SuccessResponse>(&response)
+                .unwrap_or_else(|err| panic!("not a success: {response}: {err}"))
+                .result
+        }
+
+        fn err(&mut self, method: Method) -> (String, String) {
+            let response = self.call(method);
+            let error = serde_json::from_str::<ErrorResponse>(&response)
+                .unwrap_or_else(|err| panic!("not an error: {response}: {err}"))
+                .error;
+            (error.code, error.message)
+        }
+
+        /// Pump app events until the job's worker reports.
+        fn wait_for_run(&mut self) {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+            loop {
+                self.app.drain_all_internal_events();
+                if self
+                    .app
+                    .jobs
+                    .info("echo", 0)
+                    .is_none_or(|info| info.state != JobState::Running)
+                    && !self.app.jobs.is_running("echo")
+                {
+                    return;
+                }
+                assert!(std::time::Instant::now() < deadline, "job did not finish");
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+        }
+    }
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    const ECHO_JOB: &str = "title = \"Echo job\"\ncommand = [\"sh\", \"-c\", \"echo hello; echo oops >&2\"]\nevery = \"1h\"\nnotify = \"always\"\nenv = \"server\"\n";
+
+    fn target(id: &str) -> JobTarget {
+        JobTarget { job_id: id.into() }
+    }
+
+    #[test]
+    fn list_get_and_unknown_jobs() {
+        let mut fx = Fixture::new("list");
+        fx.write_job("echo", ECHO_JOB);
+        fx.write_job("broken", "command = []\n");
+        let ResponseResult::JobList {
+            revision,
+            unchanged,
+            jobs,
+            ..
+        } = fx.ok(Method::JobList(JobListParams::default()))
+        else {
+            panic!("expected a job list");
+        };
+        assert!(!unchanged);
+        assert_eq!(jobs.len(), 2);
+        assert_eq!(jobs[1].job_id, "echo");
+        assert_eq!(jobs[0].state, JobState::Invalid);
+
+        // The same revision answers without the list.
+        let ResponseResult::JobList {
+            unchanged, jobs, ..
+        } = fx.ok(Method::JobList(JobListParams {
+            since_revision: Some(revision),
+        }))
+        else {
+            panic!("expected a job list");
+        };
+        assert!(unchanged && jobs.is_empty());
+
+        let ResponseResult::JobDetail { job, history } = fx.ok(Method::JobGet(target("echo")))
+        else {
+            panic!("expected detail");
+        };
+        assert_eq!(job.title, "Echo job");
+        assert!(history.is_empty());
+
+        assert_eq!(fx.err(Method::JobGet(target("nope"))).0, "job_not_found");
+        assert_eq!(fx.err(Method::JobRun(target("nope"))).0, "job_not_found");
+        let (code, message) = fx.err(Method::JobRun(target("broken")));
+        assert_eq!(code, "job_invalid");
+        assert!(message.contains("command: required"), "{message}");
+        assert_eq!(
+            fx.err(Method::JobLogs(JobLogsParams {
+                job_id: "echo".into(),
+                run_id: None,
+                lines: None
+            }))
+            .0,
+            "no_job_run"
+        );
+    }
+
+    #[test]
+    fn running_a_job_records_output_emits_the_event_and_toasts() {
+        let mut fx = Fixture::new("run");
+        fx.write_job("echo", ECHO_JOB);
+        let ResponseResult::JobRunRequested {
+            started, run_id, ..
+        } = fx.ok(Method::JobRun(target("echo")))
+        else {
+            panic!("expected run request");
+        };
+        assert!(started);
+        assert_eq!(run_id, Some(1));
+        // While it runs, a second request is refused without a new run.
+        if fx.app.jobs.is_running("echo") {
+            let ResponseResult::JobRunRequested {
+                started, reason, ..
+            } = fx.ok(Method::JobRun(target("echo")))
+            else {
+                panic!("expected run request");
+            };
+            if !started {
+                assert_eq!(reason.as_deref(), Some("skipped: still running"));
+            }
+        }
+        fx.wait_for_run();
+
+        let ResponseResult::JobLogs {
+            run,
+            stdout,
+            stderr,
+            ..
+        } = fx.ok(Method::JobLogs(JobLogsParams {
+            job_id: "echo".into(),
+            run_id: None,
+            lines: None,
+        }))
+        else {
+            panic!("expected logs");
+        };
+        assert_eq!(run.status, JobRunStatus::Success);
+        assert_eq!(stdout, "hello\n");
+        assert_eq!(stderr, "oops\n");
+        assert_eq!(run.env_note.as_deref(), Some("server environment"));
+
+        let ResponseResult::JobDetail { job, history } = fx.ok(Method::JobGet(target("echo")))
+        else {
+            panic!("expected detail");
+        };
+        assert_eq!(job.last_run.unwrap().run_id, run.run_id);
+        assert_eq!(history.len(), 1);
+
+        // job.run_finished is on the event stream.
+        let events = fx.app.event_hub.events_after(0);
+        let finished: Vec<_> = events
+            .iter()
+            .filter(|(_, event)| event.event == EventKind::JobRunFinished)
+            .collect();
+        assert_eq!(finished.len(), 1);
+        let EventData::JobRunFinished { job_id, title, run } = &finished[0].1.data else {
+            panic!("wrong payload");
+        };
+        assert_eq!((job_id.as_str(), title.as_str()), ("echo", "Echo job"));
+        assert_eq!(run.status, JobRunStatus::Success);
+
+        // notify = "always" with in-frame delivery shows a toast.
+        let toast = fx.app.state.toast.clone().expect("toast shown");
+        assert_eq!(toast.title, "Echo job");
+        assert!(toast.context.starts_with("ok in "), "{}", toast.context);
+        assert!(toast.context.ends_with("hello"), "{}", toast.context);
+        assert_eq!(toast.kind, ToastKind::Finished);
+    }
+
+    fn files_under(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+        let mut found = Vec::new();
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return found;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                found.extend(files_under(&path));
+            } else {
+                found.push(path);
+            }
+        }
+        found
+    }
+
+    #[test]
+    fn login_shell_values_reach_the_job_but_never_disk_or_api_output() {
+        let secret = "s3cr3t-token-9f2c41";
+        // The job file carries only a prefix, so a leak of the whole value is detectable.
+        let prefix = "s3cr3t-token-";
+        let mut fx = Fixture::new("secret");
+        fx.app.jobs = JobsManager::new(
+            JobsPaths {
+                config_dir: fx.root.join("config"),
+                state_root: fx.root.join("state"),
+            },
+            Arc::new(LoginEnvCache::new(Box::new(move || {
+                Ok(vec![
+                    ("PATH".into(), "/usr/bin:/bin".into()),
+                    ("GITHUB_TOKEN".into(), secret.into()),
+                ])
+            }))),
+            true,
+        );
+        // The default env mode is the login shell. The job only reports
+        // whether it saw the value, never the value itself.
+        fx.write_job(
+            "echo",
+            &format!(
+                "command = [\"sh\", \"-c\", \"case \\\"$GITHUB_TOKEN\\\" in {prefix}*) echo token-visible;; esac\"]\nevery = \"1h\"\n"
+            ),
+        );
+        fx.ok(Method::JobRun(target("echo")));
+        fx.wait_for_run();
+
+        let ResponseResult::JobLogs { stdout, run, .. } = fx.ok(Method::JobLogs(JobLogsParams {
+            job_id: "echo".into(),
+            run_id: None,
+            lines: None,
+        })) else {
+            panic!("expected logs");
+        };
+        assert_eq!(
+            stdout, "token-visible\n",
+            "the job saw the login-shell value"
+        );
+        assert_eq!(run.env_note.as_deref(), Some("login-shell (2 variables)"));
+
+        let mut surfaces = vec![
+            fx.call(Method::JobList(JobListParams::default())),
+            fx.call(Method::JobGet(target("echo"))),
+            fx.call(Method::JobLogs(JobLogsParams {
+                job_id: "echo".into(),
+                run_id: None,
+                lines: None,
+            })),
+        ];
+        let events = fx.app.event_hub.events_after(0);
+        surfaces.push(
+            serde_json::to_string(&events.iter().map(|(_, e)| e).collect::<Vec<_>>()).unwrap(),
+        );
+        let persisted = files_under(&fx.root.join("state"));
+        assert!(
+            persisted.iter().any(|path| path.ends_with("state.json")),
+            "state was persisted"
+        );
+        for path in persisted {
+            surfaces.push(std::fs::read_to_string(&path).unwrap_or_default());
+        }
+        for surface in surfaces {
+            assert!(!surface.contains(secret), "secret leaked into: {surface}");
+        }
+    }
+
+    #[test]
+    fn logs_can_be_trimmed_to_the_last_lines() {
+        let mut fx = Fixture::new("logs");
+        fx.write_job(
+            "echo",
+            "command = [\"sh\", \"-c\", \"printf 'a\\\\nb\\\\nc\\\\n'\"]\nevery = \"1h\"\nenv = \"server\"\nnotify = \"never\"\n",
+        );
+        fx.ok(Method::JobRun(target("echo")));
+        fx.wait_for_run();
+        let ResponseResult::JobLogs { stdout, .. } = fx.ok(Method::JobLogs(JobLogsParams {
+            job_id: "echo".into(),
+            run_id: None,
+            lines: Some(2),
+        })) else {
+            panic!("expected logs");
+        };
+        assert_eq!(stdout, "b\nc\n");
+        assert!(fx.app.state.toast.is_none(), "notify = never");
+    }
+
+    #[test]
+    fn failures_toast_with_the_attention_style_and_delivery_off_is_silent() {
+        let mut fx = Fixture::new("fail");
+        fx.write_job(
+            "echo",
+            "command = [\"sh\", \"-c\", \"echo broke >&2; exit 4\"]\nevery = \"1h\"\nenv = \"server\"\n",
+        );
+        fx.ok(Method::JobRun(target("echo")));
+        fx.wait_for_run();
+        let toast = fx.app.state.toast.clone().expect("failure toast");
+        assert_eq!(toast.kind, ToastKind::NeedsAttention);
+        assert!(
+            toast.context.starts_with("failed (exit 4)"),
+            "{}",
+            toast.context
+        );
+
+        fx.app.state.toast = None;
+        fx.app.state.toast_config.delivery = crate::config::ToastDelivery::Off;
+        fx.ok(Method::JobRun(target("echo")));
+        fx.wait_for_run();
+        assert!(fx.app.state.toast.is_none());
+        assert!(fx.app.pending_job_notices.is_empty());
+    }
+
+    #[test]
+    fn terminal_delivery_queues_a_client_notification() {
+        let mut fx = Fixture::new("terminal");
+        fx.write_job("echo", ECHO_JOB);
+        fx.app.state.toast_config.delivery = crate::config::ToastDelivery::Terminal;
+        fx.ok(Method::JobRun(target("echo")));
+        fx.wait_for_run();
+        assert!(fx.app.state.toast.is_none());
+        let notices = fx.app.take_job_client_notices();
+        assert_eq!(notices.len(), 1);
+        assert_eq!(notices[0].title, "Echo job");
+        assert!(fx.app.take_job_client_notices().is_empty());
+    }
+
+    #[test]
+    fn a_busy_toast_slot_holds_job_notices_until_it_clears() {
+        let mut fx = Fixture::new("busy");
+        fx.write_job("echo", ECHO_JOB);
+        fx.app.state.toast = Some(ToastNotification {
+            kind: ToastKind::Finished,
+            title: "other".into(),
+            context: String::new(),
+            position: None,
+            target: None,
+        });
+        fx.ok(Method::JobRun(target("echo")));
+        fx.wait_for_run();
+        assert_eq!(fx.app.state.toast.as_ref().unwrap().title, "other");
+        assert_eq!(fx.app.pending_job_notices.len(), 1);
+        fx.app.state.toast = None;
+        assert!(fx.app.deliver_job_notices());
+        assert_eq!(fx.app.state.toast.as_ref().unwrap().title, "Echo job");
+    }
+
+    #[test]
+    fn enable_disable_round_trip_and_disabled_jobs_are_not_scheduled() {
+        let mut fx = Fixture::new("enable");
+        fx.write_job("echo", ECHO_JOB);
+        let ResponseResult::JobUpdated { job } =
+            fx.ok(Method::JobSetEnabled(JobSetEnabledParams {
+                job_id: "echo".into(),
+                enabled: false,
+            }))
+        else {
+            panic!("expected update");
+        };
+        assert_eq!(job.state, JobState::Disabled);
+        fx.app.run_jobs_tick(Instant::now());
+        assert!(!fx.app.jobs.is_running("echo"));
+        let ResponseResult::JobUpdated { job } =
+            fx.ok(Method::JobSetEnabled(JobSetEnabledParams {
+                job_id: "echo".into(),
+                enabled: true,
+            }))
+        else {
+            panic!("expected update");
+        };
+        assert_eq!(job.state, JobState::Idle);
+        assert_eq!(
+            fx.err(Method::JobSetEnabled(JobSetEnabledParams {
+                job_id: "nope".into(),
+                enabled: true
+            }))
+            .0,
+            "job_not_found"
+        );
+    }
+
+    #[test]
+    fn the_tick_starts_a_due_job_once_and_arms_the_timer() {
+        let mut fx = Fixture::new("tick");
+        fx.write_job("echo", ECHO_JOB);
+        // Make the job look written long ago so its first interval has passed.
+        let long_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(3 * 3600);
+        let file = std::fs::File::options()
+            .write(true)
+            .open(fx.root.join("config/echo/job.toml"))
+            .unwrap();
+        file.set_modified(long_ago).unwrap();
+        drop(file);
+
+        let started = Instant::now();
+        assert!(fx.app.run_jobs_tick(started));
+        assert!(
+            fx.app.jobs.is_running("echo"),
+            "missed run starts at the first tick"
+        );
+        let next = fx.app.next_jobs_tick.expect("timer armed");
+        assert!(
+            next > started
+                && next <= started + MAX_TICK_INTERVAL + std::time::Duration::from_secs(1)
+        );
+        fx.wait_for_run();
+        let history = fx.app.jobs.history("echo").unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].trigger, JobRunTrigger::CatchUp);
+        // A second pass does not run it again.
+        fx.app.run_jobs_tick(Instant::now());
+        assert!(!fx.app.jobs.is_running("echo"));
+        assert_eq!(fx.app.jobs.history("echo").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn reload_config_rereads_job_files() {
+        let mut fx = Fixture::new("reload");
+        fx.write_job("echo", ECHO_JOB);
+        fx.ok(Method::JobList(JobListParams::default()));
+        // Same length edit within one mtime tick: only a forced reload sees it.
+        fx.write_job("echo", &ECHO_JOB.replace("Echo job", "Echo JOB"));
+        fx.app.reload_jobs_now();
+        assert_eq!(fx.app.jobs.info("echo", 0).unwrap().title, "Echo JOB");
+        assert!(fx.app.next_jobs_tick.is_some());
+    }
+
+    #[test]
+    fn env_refresh_answers_at_once_and_completes_in_the_background() {
+        let mut fx = Fixture::new("env");
+        let ResponseResult::JobEnvRefreshing { env } = fx.ok(Method::JobEnvRefresh(
+            crate::api::schema::EmptyParams::default(),
+        )) else {
+            panic!("expected env status");
+        };
+        assert!(env.refreshing || env.source != "none");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            let ResponseResult::JobList { env, .. } =
+                fx.ok(Method::JobList(JobListParams::default()))
+            else {
+                panic!("expected list");
+            };
+            if !env.refreshing && env.source != "none" {
+                assert_eq!(env.source, "login-shell");
+                assert_eq!(env.variable_count, 1);
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "refresh did not finish"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
+    #[test]
+    fn the_method_is_advertised_by_name_and_encoded_as_a_request() {
+        let request = Request {
+            id: "1".into(),
+            method: Method::JobRun(target("a")),
+        };
+        let json = serde_json::to_value(&request).unwrap();
+        assert_eq!(json["method"], "job.run");
+        assert_eq!(json["params"]["job_id"], "a");
+        assert!(crate::api::request_changes_ui(&request));
+        assert!(
+            crate::server::client_commands::supports_client_shell_method(&Method::JobList(
+                JobListParams::default()
+            ))
+        );
+        assert!(
+            !crate::server::client_commands::supports_client_shell_method(&Method::JobEnvRefresh(
+                crate::api::schema::EmptyParams::default()
+            ))
+        );
+    }
+}

@@ -702,6 +702,18 @@ impl ClientShellState {
                     }
                 });
                 rendered.and_then(|rendered| rendered.cursor)
+            } else if matches!(overlay, ClientShellOverlay::Jobs(_)) {
+                let rendered = self.render_jobs_overlay(&mut composed);
+                self.hits.jobs = rendered.as_ref().map_or_else(Default::default, |rendered| {
+                    occlusion.cover(rendered.area);
+                    super::jobs_overlay::JobsHits {
+                        popup: rendered.area,
+                        rows: rendered.rows.clone(),
+                        viewport_rows: rendered.viewport_rows,
+                        offset: rendered.offset,
+                    }
+                });
+                None
             } else if let ClientShellOverlay::GlobalMenu(menu) = overlay {
                 let rendered = render::render_global_menu(
                     &mut composed,

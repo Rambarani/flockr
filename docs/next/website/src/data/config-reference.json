@@ -752,6 +752,12 @@
           "description": "Open the agent dashboard: a full-screen table of every agent across machines with state, time in state and last output line."
         },
         {
+          "key": "keys.jobs",
+          "type": "keybinding",
+          "default": "\"prefix+t\"",
+          "description": "Open the Jobs overlay: scheduled jobs with their state, next run and last result. r runs a job now, l shows its output, e enables or disables it."
+        },
+        {
           "key": "keys.preview_agent",
           "type": "keybinding",
           "default": "\"prefix+i\"",

@@ -26,6 +26,7 @@ mod global_menu;
 mod graphics;
 mod input;
 mod input_source;
+mod jobs_overlay;
 mod link_hover;
 mod mobile;
 mod mouse;

@@ -34,6 +34,7 @@ pub(super) enum PaletteAction {
         target: ClientEndpointFocusTarget,
     },
     Settings(ClientSettingsSection),
+    RunJob(String),
 }
 
 #[derive(Debug, Clone)]
@@ -173,6 +174,21 @@ impl ClientShellState {
                 detail: command.bindings.label().unwrap_or_default(),
                 action: PaletteAction::Command(command.clone()),
             });
+        }
+        if self.jobs.cache_endpoint.as_ref() == Some(&self.active_endpoint_id) {
+            for (job_id, title) in &self.jobs.cache {
+                items.push(PaletteItem {
+                    id: format!("job:{job_id}"),
+                    kind: "job",
+                    title: format!("run job {job_id}"),
+                    detail: if title == job_id {
+                        String::new()
+                    } else {
+                        title.clone()
+                    },
+                    action: PaletteAction::RunJob(job_id.clone()),
+                });
+            }
         }
         for section in ClientSettingsSection::ALL {
             items.push(PaletteItem {
@@ -484,6 +500,7 @@ impl ClientShellState {
                 self.open_settings_overlay();
                 self.select_settings_section(section, outcome);
             }
+            PaletteAction::RunJob(job_id) => self.run_job_from_palette(job_id, outcome),
         }
     }
 }

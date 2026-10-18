@@ -52,7 +52,6 @@ enum Definition {
 }
 
 struct Running {
-    run_id: u64,
     started_unix_ms: u64,
 }
 
@@ -505,7 +504,6 @@ impl JobsManager {
         };
         let run_id = entry.state.next_run_id();
         entry.running = Some(Running {
-            run_id,
             started_unix_ms: now_ms,
         });
         entry.catch_up = false;
@@ -706,6 +704,7 @@ impl JobsManager {
         self.entries.contains_key(job_id)
     }
 
+    #[cfg(test)]
     pub(crate) fn is_running(&self, job_id: &str) -> bool {
         self.entries
             .get(job_id)

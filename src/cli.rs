@@ -26,6 +26,7 @@ mod agent;
 mod api;
 mod completion;
 mod integration;
+mod job;
 mod machine;
 mod notification;
 mod pane;
@@ -132,6 +133,7 @@ pub fn maybe_run(args: &[String]) -> std::io::Result<CommandOutcome> {
         "integration" => integration::run_integration_command(&args[2..])?,
         "session" => run_session_command(&args[2..])?,
         "upstream" => upstream::run_upstream_command(&args[2..])?,
+        "job" => job::run_job_command(&args[2..])?,
         _ => return Ok(CommandOutcome::NotCli),
     };
 

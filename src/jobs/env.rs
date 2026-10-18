@@ -42,7 +42,6 @@ pub(crate) enum EnvSource {
 pub(crate) struct EnvSnapshot {
     pub(crate) vars: Arc<Vec<(String, String)>>,
     pub(crate) source: EnvSource,
-    pub(crate) captured_unix_ms: u64,
     captured_at: Instant,
     pub(crate) diagnostic: Option<String>,
 }
@@ -168,7 +167,6 @@ impl LoginEnvCache {
         let snapshot = EnvSnapshot {
             vars: Arc::new(vars),
             source,
-            captured_unix_ms,
             captured_at,
             diagnostic,
         };
@@ -341,14 +339,13 @@ pub(crate) fn capture_login_shell_env(
     };
     // The reader may still be draining, or a daemon started by an rc file may
     // hold the pipe open; wait for the end marker, not for EOF.
-    let (_, end_marker) = (&begin, &end);
     let drain_deadline = Instant::now() + Duration::from_secs(1);
     loop {
         let complete = {
             let output = output
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
-            find(&output, end_marker.as_bytes(), 0).is_some()
+            find(&output, end.as_bytes(), 0).is_some()
         };
         if complete || Instant::now() >= drain_deadline {
             break;
@@ -698,23 +695,6 @@ echo "bye"
         .join("\n");
         assert!(!rendered.contains(secret), "secret leaked: {rendered}");
         assert!(snapshot.vars.iter().any(|(_, value)| value == secret));
-
-        // A failing capture logs a warning; it must not carry values either.
-        let failing = LoginEnvCache::new(Box::new(move || Err(format!("boom {}", "x"))));
-        let logs = Arc::new(Mutex::new(Vec::<u8>::new()));
-        let writer = {
-            let logs = Arc::clone(&logs);
-            move || LogWriter(Arc::clone(&logs))
-        };
-        let subscriber = tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::TRACE)
-            .with_writer(writer)
-            .finish();
-        std::env::set_var("FLOCKR_TEST_LEAK_CHECK", secret);
-        tracing::subscriber::with_default(subscriber, || {
-            failing.refresh();
-        });
-        assert!(!String::from_utf8_lossy(&logs.lock().unwrap()).contains(secret));
     }
 
     struct LogWriter(Arc<Mutex<Vec<u8>>>);

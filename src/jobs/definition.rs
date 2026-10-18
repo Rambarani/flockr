@@ -254,9 +254,11 @@ pub(crate) fn parse_duration(text: &str) -> Result<Duration, String> {
             'm' => 60,
             'h' => 3_600,
             'd' => 86_400,
-            _ => return Err(format!(
+            _ => {
+                return Err(format!(
                 "'{text}' has unknown unit '{ch}'; use s, m, h or d (for example 90s, 5m, 1h30m)"
-            )),
+            ))
+            }
         };
         if digits.is_empty() {
             return Err(format!("'{text}' needs a number before '{ch}'"));
@@ -520,13 +522,13 @@ fn build_job(
     })
 }
 
+type EnvParts = (Option<String>, BTreeMap<String, String>);
+
 /// Take `env` out of a job document. It is either a string (`env = "server"`)
 /// or a table (`[env]`) of overrides with an optional reserved `mode` key,
 /// since TOML cannot hold both forms under one key. Returns the mode and the
 /// overrides.
-fn extract_env(
-    document: &mut toml::Table,
-) -> Result<(Option<String>, BTreeMap<String, String>), Vec<String>> {
+fn extract_env(document: &mut toml::Table) -> Result<EnvParts, Vec<String>> {
     match document.remove("env") {
         Some(toml::Value::Table(mut table)) => {
             let mut errors = Vec::new();

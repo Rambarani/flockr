@@ -207,6 +207,7 @@ const DEFAULT_CONFIG: &str = r##"# flockr configuration
 # expand_agent_groups = ""     # optional, unset by default
 # rename_agent = "prefix+shift+a"
 # agent_dashboard = "prefix+d"
+# jobs = "prefix+t"
 # preview_agent = "prefix+i"
 # command_palette = "prefix+:"
 # edit_scrollback = "prefix+e"
@@ -700,6 +701,7 @@ fn main() -> io::Result<()> {
         println!("       flockr session <subcommand> ...");
         println!("       flockr integration <subcommand> ...");
         println!("       flockr upstream <subcommand> ...");
+        println!("       flockr job <subcommand> ...");
         println!();
         println!("Common commands:");
         for (command, description) in [
@@ -770,6 +772,10 @@ fn main() -> io::Result<()> {
             (
                 "flockr upstream <subcommand>",
                 "Watch upstream herdr releases and copy updates",
+            ),
+            (
+                "flockr job <subcommand>",
+                "List, run and inspect scheduled jobs",
             ),
         ] {
             println!("  {command:<32} {description}");

@@ -146,6 +146,7 @@ pub(super) struct ShellHitMap {
     pub(super) palette: super::palette::PaletteHits,
     pub(super) preview: super::agent_preview::PreviewHits,
     pub(super) dashboard: super::agent_dashboard::DashboardHits,
+    pub(super) jobs: super::jobs_overlay::JobsHits,
 }
 
 #[derive(Clone)]
@@ -307,6 +308,7 @@ pub(super) enum ClientShellOverlayKind {
     Settings,
     Palette,
     Dashboard,
+    Jobs,
 }
 
 #[derive(Debug)]
@@ -634,6 +636,7 @@ pub(super) enum ClientShellOverlay {
     Settings(ClientSettingsOverlay),
     Palette(super::palette::ClientPaletteOverlay),
     Dashboard(super::agent_dashboard::ClientDashboardOverlay),
+    Jobs(super::jobs_overlay::ClientJobsOverlay),
 }
 
 impl ClientShellOverlay {
@@ -654,6 +657,7 @@ impl ClientShellOverlay {
             Self::Settings(_) => ClientShellOverlayKind::Settings,
             Self::Palette(_) => ClientShellOverlayKind::Palette,
             Self::Dashboard(_) => ClientShellOverlayKind::Dashboard,
+            Self::Jobs(_) => ClientShellOverlayKind::Jobs,
         }
     }
 }
@@ -711,6 +715,10 @@ pub(super) enum PendingEndpointKind {
     PaneRead {
         pane_id: String,
         purpose: super::agent_preview::PaneReadPurpose,
+    },
+    /// Quiet `job.*` request for the Jobs overlay or a palette "run job" entry.
+    Jobs {
+        request: super::jobs_overlay::JobsRequest,
     },
     CopySearch {
         pane_id: String,
@@ -1035,6 +1043,7 @@ pub(crate) struct ClientShellState {
     pub(super) agent_clock: super::agent_activity::AgentClock,
     pub(super) agent_preview: super::agent_preview::AgentPreviewState,
     pub(super) dashboard_sort: super::agent_dashboard::DashboardSort,
+    pub(super) jobs: super::jobs_overlay::JobsClientState,
 }
 
 pub(super) fn product_announcement_state(
@@ -1209,6 +1218,7 @@ impl ClientShellState {
             agent_clock: Default::default(),
             agent_preview: Default::default(),
             dashboard_sort: Default::default(),
+            jobs: Default::default(),
         }
     }
 

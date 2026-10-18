@@ -1,0 +1,46 @@
+# Hourly workbox sync, with the today list shown in the Flockr sidebar.
+#
+# `flockr job new workbox-sync --template workbox` writes this file (and
+# prompt.md) to ~/.config/flockr/jobs/workbox-sync/ (debug builds use
+# ~/.config/flockr-dev/jobs/...). Check it with `flockr job validate
+# workbox-sync`, try it with `flockr job run workbox-sync --dry-run`, then
+# switch it on with `flockr job enable workbox-sync`. See README.md next to
+# this file.
+
+title = "workbox sync"
+command = ["workbox", "sync"]
+every = "1h"
+timeout = "10m"
+enabled = false                     # created disabled; `flockr job enable workbox-sync` turns it on
+notify = "on_failure"
+
+# The feed command runs after every successful sync, on demand
+# (`flockr feed refresh workbox-sync`, or R in the Feed overlay), and once
+# when the server starts if the feed has never been read. It prints the
+# JSON array of `workbox list --json`, which `flockr feed adapt workbox`
+# turns into a feed: unread items get a dot, Enter or a click opens the link,
+# and each item has done (d), seen (s) and today (t) actions that run
+# `workbox mark`.
+[feed]
+command = ["sh", "-c", "workbox list --json | flockr feed adapt workbox --title 'Today (workbox)'"]
+title = "Today (workbox)"
+
+# Only the items on the today tab:
+# command = ["sh", "-c", "workbox list --tab today --json | flockr feed adapt workbox --title 'Today (workbox)'"]
+
+# After a sync that changed something, ask whether to start Claude on the
+# items. Nothing starts until you answer: a toast and an entry in the Jobs
+# overlay's Decisions tab (prefix+t, then tab) offer Start, Snooze and
+# Dismiss. Start opens a tab in `cwd` titled `tab_title` and runs
+# `agent_command` with prompt.md rendered next to this file: {{count}} is the
+# feed's unread count and {{feed_json}} the feed as JSON. The rendered prompt
+# is stored under <state dir>/jobs/workbox-sync/handoffs/ and passed as
+# `claude "$(cat <file>)"`. Use `agent_command = "claude --some-flag {prompt_file}"`
+# if your agent reads the prompt from a file.
+[handoff]
+when = "on_change"                  # the sync's output or the feed changed since last time
+ask = "{{count}} items need you. Start Claude?"
+agent_command = "claude"
+cwd = "~/Desktop/poc/workbox"
+tab_title = "workbox · {{date}}"
+prompt_file = "prompt.md"

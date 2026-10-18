@@ -1155,11 +1155,10 @@ mod tests {
 
     #[test]
     fn the_workbox_example_parses_and_renders() {
-        // docs/flockr is a local, git-ignored area; skip on a checkout without it.
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/flockr/examples/workbox-sync");
-        let Ok(text) = std::fs::read_to_string(dir.join("job.toml")) else {
-            return;
-        };
+        // The example is tracked, so a missing file is a failure, not a skip.
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/jobs/workbox-sync");
+        let text = std::fs::read_to_string(dir.join("job.toml"))
+            .expect("examples/jobs/workbox-sync/job.toml is tracked");
         let job = parse_job_toml(&text, "workbox-sync", &dir).expect("the example job is valid");
         let handoff = job.handoff.as_ref().expect("the example has a [handoff]");
         assert_eq!(handoff.when, "on_change");

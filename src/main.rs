@@ -32,6 +32,7 @@ mod integration;
 mod ipc;
 mod kitty_graphics;
 mod layout;
+mod legacy_herdr;
 mod logging;
 mod metadata_tokens;
 mod noninteractive_process;

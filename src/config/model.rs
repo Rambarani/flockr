@@ -63,6 +63,9 @@ fn default_update_channel_for_build(is_windows: bool, is_preview: bool) -> Updat
 pub enum ToastDelivery {
     #[default]
     Off,
+    // Deprecated alias: upstream herdr configs use `delivery = "herdr"`
+    // (see `legacy_herdr`).
+    #[serde(alias = "herdr")]
     Flockr,
     Terminal,
     System,
@@ -1285,6 +1288,9 @@ impl<'de> Deserialize<'de> for ToastConfig {
             delivery: Option<ToastDelivery>,
             enabled: Option<bool>,
             delay_seconds: Option<u64>,
+            // Deprecated alias: `[ui.toast.herdr]` from upstream herdr configs
+            // (see `legacy_herdr`).
+            #[serde(alias = "herdr")]
             flockr: FlockrToastConfig,
             clipboard: ClipboardToastConfig,
         }
@@ -1932,6 +1938,23 @@ enabled = true
 "#;
         let config: Config = toml::from_str(toml).unwrap();
         assert_eq!(config.ui.toast.delivery, ToastDelivery::Flockr);
+    }
+
+    #[test]
+    fn toast_config_accepts_deprecated_herdr_aliases() {
+        let toml = r#"
+[ui.toast]
+delivery = "herdr"
+
+[ui.toast.herdr]
+position = "top-left"
+"#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert_eq!(config.ui.toast.delivery, ToastDelivery::Flockr);
+        assert_eq!(
+            config.ui.toast.flockr.position,
+            ToastFlockrPosition::TopLeft
+        );
     }
 
     #[test]

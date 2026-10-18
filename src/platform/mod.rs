@@ -602,7 +602,10 @@ pub fn process_agent_hint(_pid: u32) -> Option<crate::detect::Agent> {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(crate) fn parse_agent_env_hint(environ: &[u8]) -> Option<crate::detect::Agent> {
     for record in environ.split(|&byte| byte == 0) {
-        let Some(value) = record.strip_prefix(b"FLOCKR_AGENT=") else {
+        let Some(value) = record
+            .strip_prefix(b"FLOCKR_AGENT=")
+            .or_else(|| record.strip_prefix(crate::legacy_herdr::LEGACY_AGENT_HINT_RECORD_PREFIX))
+        else {
             continue;
         };
         return crate::detect::parse_agent_label(std::str::from_utf8(value).ok()?);
@@ -842,6 +845,17 @@ mod tests {
     fn parse_agent_env_hint_ignores_missing_or_unknown_agents() {
         assert_eq!(parse_agent_env_hint(b"PATH=/bin\0TERM=xterm\0"), None);
         assert_eq!(parse_agent_env_hint(b"FLOCKR_AGENT=not-an-agent\0"), None);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn parse_agent_env_hint_accepts_legacy_name() {
+        let mut environ = crate::legacy_herdr::LEGACY_AGENT_HINT_RECORD_PREFIX.to_vec();
+        environ.extend_from_slice(b"codex\0");
+        assert_eq!(
+            parse_agent_env_hint(&environ),
+            Some(crate::detect::Agent::Codex)
+        );
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]

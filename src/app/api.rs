@@ -1186,19 +1186,28 @@ impl App {
             }
             Method::PaneRename(params) => return self.handle_pane_rename(request.id, params),
             Method::PaneRead(params) => return self.handle_pane_read(request.id, params),
-            Method::PaneReportAgent(params) => {
+            Method::PaneReportAgent(mut params) => {
+                // Legacy `herdr:<id>` sources are aliases of `flockr:<id>`.
+                crate::legacy_herdr::canonicalize_report_source(&mut params.source);
                 return self.handle_pane_report_agent(request.id, params);
             }
-            Method::PaneReportAgentSession(params) => {
+            Method::PaneReportAgentSession(mut params) => {
+                crate::legacy_herdr::canonicalize_report_source(&mut params.source);
                 return self.handle_pane_report_agent_session(request.id, params);
             }
-            Method::PaneReportMetadata(params) => {
+            Method::PaneReportMetadata(mut params) => {
+                crate::legacy_herdr::canonicalize_report_source(&mut params.source);
+                crate::legacy_herdr::canonicalize_optional_report_source(
+                    &mut params.applies_to_source,
+                );
                 return self.handle_pane_report_metadata(request.id, params);
             }
-            Method::PaneClearAgentAuthority(params) => {
+            Method::PaneClearAgentAuthority(mut params) => {
+                crate::legacy_herdr::canonicalize_optional_report_source(&mut params.source);
                 return self.handle_pane_clear_agent_authority(request.id, params);
             }
-            Method::PaneReleaseAgent(params) => {
+            Method::PaneReleaseAgent(mut params) => {
+                crate::legacy_herdr::canonicalize_report_source(&mut params.source);
                 return self.handle_pane_release_agent(request.id, params);
             }
             Method::PaneSendText(params) => return self.handle_pane_send_text(request.id, params),

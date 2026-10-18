@@ -1,5 +1,6 @@
 use std::io::Write;
 
+use clap::builder::{PossibleValue, PossibleValuesParser};
 use clap::{Arg, ArgAction, ArgGroup, Command, ValueHint};
 
 mod completion;
@@ -542,7 +543,7 @@ fn pane_command() -> Command {
                 .args(current_pane_args())
                 .arg(
                     option("right-click", "TARGET")
-                        .value_parser(["flockr", "pane"])
+                        .value_parser(right_click_values())
                         .required(true),
                 ),
         )
@@ -555,7 +556,7 @@ fn pane_command() -> Command {
                 .arg(option("ratio", "FLOAT"))
                 .arg(path_option("cwd", "PATH"))
                 .arg(env_option())
-                .arg(option("right-click", "TARGET").value_parser(["flockr", "pane"]))
+                .arg(option("right-click", "TARGET").value_parser(right_click_values()))
                 .arg(flag("focus"))
                 .arg(flag("no-focus")),
         )
@@ -1401,4 +1402,14 @@ mod tests {
             assert!(!output.is_empty(), "empty {shell:?} completion output");
         }
     }
+}
+
+/// Right-click targets. The deprecated upstream spelling stays accepted but
+/// hidden from help and completions (see `legacy_herdr`).
+fn right_click_values() -> PossibleValuesParser {
+    PossibleValuesParser::new([
+        PossibleValue::new("flockr"),
+        PossibleValue::new("pane"),
+        PossibleValue::new(crate::legacy_herdr::LEGACY_RIGHT_CLICK_VALUE).hide(true),
+    ])
 }

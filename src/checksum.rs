@@ -60,7 +60,7 @@ mod tests {
         fs::write(&path, b"flockr").unwrap();
         let result = super::verify_sha256(
             &path,
-            "78193ef266c1e3c2ce4ea2a86d7fc87e8c52799653faaac8536533a1c9300f82",
+            "a649c6e8b80af111e53502fda82ac1cce6242e6fec7d493c67c8e014b8909ba6",
         );
         let _ = fs::remove_file(&path);
         assert!(result.is_ok());

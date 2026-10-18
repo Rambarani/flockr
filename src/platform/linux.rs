@@ -284,7 +284,7 @@ fn parse_process_detection_mode(value: Option<&str>) -> Result<ProcessDetectionM
 fn process_detection_mode() -> ProcessDetectionMode {
     static MODE: OnceLock<ProcessDetectionMode> = OnceLock::new();
     *MODE.get_or_init(|| {
-        let value = std::env::var(PROCESS_DETECTION_ENV_VAR).ok();
+        let value = crate::legacy_herdr::var(PROCESS_DETECTION_ENV_VAR).ok();
         parse_process_detection_mode(value.as_deref()).unwrap_or_else(|value| {
             tracing::warn!(
                 variable = PROCESS_DETECTION_ENV_VAR,

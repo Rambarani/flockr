@@ -11,6 +11,8 @@ use super::common::{AgentStatus, PaneAgentState, ReadFormat, ReadSource, SplitDi
 #[serde(rename_all = "snake_case")]
 pub enum PaneRightClickTarget {
     #[default]
+    // Deprecated alias for upstream herdr clients (see `legacy_herdr`).
+    #[serde(alias = "herdr")]
     Flockr,
     Pane,
 }

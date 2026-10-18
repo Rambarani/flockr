@@ -89,7 +89,7 @@ impl RenderProfiler {
 
 pub(crate) fn enabled() -> bool {
     *ENABLED.get_or_init(|| {
-        std::env::var(ENV_VAR)
+        crate::legacy_herdr::var(ENV_VAR)
             .map(|value| matches!(value.as_str(), "1" | "true" | "yes" | "on"))
             .unwrap_or(false)
     })

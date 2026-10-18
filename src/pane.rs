@@ -220,6 +220,8 @@ fn apply_pane_launch_env(cmd: &mut CommandBuilder, launch_env: &PaneLaunchEnv) {
             cmd.env_remove(crate::integration::FLOCKR_PANE_ID_ENV_VAR);
         }
     }
+    // Agents with built-in herdr support read the HERDR_* spelling.
+    crate::legacy_herdr::apply_legacy_pane_env(cmd);
 }
 
 #[derive(Debug, Clone, Copy)]

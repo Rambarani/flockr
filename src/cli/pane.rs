@@ -610,6 +610,7 @@ fn parse_right_click_target(value: &str) -> Result<PaneRightClickTarget, String>
     match value {
         "flockr" => Ok(PaneRightClickTarget::Flockr),
         "pane" => Ok(PaneRightClickTarget::Pane),
+        crate::legacy_herdr::LEGACY_RIGHT_CLICK_VALUE => Ok(PaneRightClickTarget::Flockr),
         _ => Err(format!("invalid right-click target: {value}")),
     }
 }
@@ -1725,6 +1726,18 @@ mod tests {
         assert_eq!(params.direction, crate::api::schema::SplitDirection::Right);
         assert_eq!(params.ratio, Some(0.333));
         assert_eq!(params.right_click, PaneRightClickTarget::Flockr);
+    }
+
+    #[test]
+    fn right_click_target_accepts_deprecated_herdr_value() {
+        assert_eq!(
+            parse_right_click_target(crate::legacy_herdr::LEGACY_RIGHT_CLICK_VALUE),
+            Ok(PaneRightClickTarget::Flockr)
+        );
+        assert_eq!(
+            serde_json::from_str::<PaneRightClickTarget>("\"herdr\"").unwrap(),
+            PaneRightClickTarget::Flockr
+        );
     }
 
     #[test]

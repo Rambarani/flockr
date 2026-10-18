@@ -188,7 +188,8 @@ fn play_selection(sound: Sound, selection: &SoundSelection, volume: f32) {
 }
 
 fn sound_playback_disabled_by_env() -> bool {
-    std::env::var_os(DISABLE_SOUND_ENV).is_some() || std::env::var_os("NEXTEST").is_some()
+    crate::legacy_herdr::var_os(DISABLE_SOUND_ENV).is_some()
+        || std::env::var_os("NEXTEST").is_some()
 }
 
 fn play_file(path: &Path, volume: f32) -> Result<(), String> {

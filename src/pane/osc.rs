@@ -626,7 +626,7 @@ impl Default for OscDebugTracker {
 }
 
 fn osc_debug_enabled_from_env() -> bool {
-    std::env::var("FLOCKR_DEBUG_OSC_EVIDENCE")
+    crate::legacy_herdr::var("FLOCKR_DEBUG_OSC_EVIDENCE")
         .map(|value| {
             matches!(
                 value.trim().to_ascii_lowercase().as_str(),

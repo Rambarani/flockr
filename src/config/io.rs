@@ -193,7 +193,7 @@ pub(super) fn resolve_config_relative_path(path: &Path) -> PathBuf {
 }
 
 pub fn config_path() -> PathBuf {
-    if let Ok(path) = std::env::var(CONFIG_PATH_ENV_VAR) {
+    if let Ok(path) = crate::legacy_herdr::var(CONFIG_PATH_ENV_VAR) {
         return PathBuf::from(path);
     }
     config_dir().join("config.toml")

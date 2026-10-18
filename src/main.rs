@@ -209,6 +209,7 @@ const DEFAULT_CONFIG: &str = r##"# flockr configuration
 # rename_agent = "prefix+shift+a"
 # agent_dashboard = "prefix+d"
 # jobs = "prefix+t"
+# feed = "prefix+f"
 # preview_agent = "prefix+i"
 # command_palette = "prefix+:"
 # edit_scrollback = "prefix+e"
@@ -386,6 +387,12 @@ const DEFAULT_CONFIG: &str = r##"# flockr configuration
 # header to collapse or expand its group; the choice is remembered per workspace.
 # [ui.sidebar]
 # group_agents_by_workspace = true
+
+# Job feeds: a collapsible section under the agent list for each job that has a feed table.
+# [ui.sidebar.feeds]
+# enabled = true
+# show = "all"                 # or a list of job ids, such as ["workbox-sync"]
+# max_rows = 8                 # item rows per feed before "+N more"
 
 # Expanded agent rows. Built-ins are state_icon, state_text, machine, workspace, tab,
 # pane, agent, terminal_title, and terminal_title_stripped.

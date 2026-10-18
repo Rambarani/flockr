@@ -248,6 +248,8 @@ pub(super) struct ShellRenderState<'a> {
     pub(super) reveal_navigation_workspace: &'a mut bool,
     pub(super) dragged_workspace_id: Option<&'a str>,
     pub(super) workspace_drop_indicator_row: Option<u16>,
+    /// The feed sections under the agent list, when there is anything to show.
+    pub(super) feeds: Option<super::feed_sidebar::FeedSidebarInput<'a>>,
 }
 
 pub(super) fn render_shell(
@@ -327,6 +329,7 @@ pub(super) fn render_shell(
         hits.workspace_scrollbar = Rect::default();
         hits.agent_scrollbar = Rect::default();
         hits.agent_sort_toggle = Rect::default();
+        hits.feed = Default::default();
         hits.new_workspace = Rect::default();
         hits.machines.clear();
         hits.workspaces.clear();

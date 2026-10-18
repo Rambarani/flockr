@@ -475,11 +475,84 @@ impl Default for SpacesSidebarConfig {
     }
 }
 
+const DEFAULT_FEED_MAX_ROWS: u16 = 8;
+const MAX_FEED_MAX_ROWS: u16 = 50;
+
+/// Which job feeds the sidebar shows: all of them, or the listed job ids.
+/// In the file this is the string `"all"` or an array of job ids.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FeedsShow(pub Option<Vec<String>>);
+
+impl FeedsShow {
+    pub fn includes(&self, job_id: &str) -> bool {
+        self.0
+            .as_ref()
+            .is_none_or(|ids| ids.iter().any(|id| id == job_id))
+    }
+}
+
+impl Serialize for FeedsShow {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match &self.0 {
+            None => serializer.serialize_str("all"),
+            Some(ids) => ids.serialize(serializer),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for FeedsShow {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            Keyword(String),
+            Ids(Vec<String>),
+        }
+        match Raw::deserialize(deserializer)? {
+            Raw::Keyword(word) if word == "all" => Ok(Self(None)),
+            Raw::Keyword(_) => Err(serde::de::Error::custom(
+                "show must be \"all\" or a list of job ids",
+            )),
+            Raw::Ids(ids) => Ok(Self(Some(ids))),
+        }
+    }
+}
+
+/// The job feed sections below the agent list in the sidebar.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default)]
+pub struct FeedsSidebarConfig {
+    /// Show feed sections at all. Default: true.
+    pub enabled: bool,
+    /// `"all"` (default) or a list of job ids whose feeds show.
+    pub show: FeedsShow,
+    /// Item rows shown per feed before "+N more". Default: 8, at most 50.
+    pub max_rows: u16,
+}
+
+impl FeedsSidebarConfig {
+    /// `max_rows` limited to a usable range.
+    pub fn row_limit(&self) -> usize {
+        usize::from(self.max_rows.clamp(1, MAX_FEED_MAX_ROWS))
+    }
+}
+
+impl Default for FeedsSidebarConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            show: FeedsShow::default(),
+            max_rows: DEFAULT_FEED_MAX_ROWS,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default)]
 pub struct SidebarConfig {
     pub agents: AgentsSidebarConfig,
     pub spaces: SpacesSidebarConfig,
+    pub feeds: FeedsSidebarConfig,
     /// Show a header per workspace above its agents in the "spaces" agent
     /// ordering. Default: true.
     pub group_agents_by_workspace: bool,
@@ -490,6 +563,7 @@ impl Default for SidebarConfig {
         Self {
             agents: AgentsSidebarConfig::default(),
             spaces: SpacesSidebarConfig::default(),
+            feeds: FeedsSidebarConfig::default(),
             group_agents_by_workspace: true,
         }
     }
@@ -508,6 +582,51 @@ mod tests {
             toml::from_str("[ui.sidebar]\ngroup_agents_by_workspace = false\n").unwrap();
         assert!(!config.ui.sidebar.group_agents_by_workspace);
         assert_eq!(config.ui.sidebar.agents, AgentsSidebarConfig::default());
+    }
+
+    #[test]
+    fn feeds_sidebar_defaults_and_parsing() {
+        let config: crate::config::Config = toml::from_str("[ui.sidebar]\n").unwrap();
+        let feeds = &config.ui.sidebar.feeds;
+        assert!(feeds.enabled);
+        assert_eq!(feeds.show, FeedsShow(None));
+        assert_eq!(feeds.row_limit(), 8);
+        assert!(feeds.show.includes("anything"));
+
+        let config: crate::config::Config = toml::from_str(
+            "[ui.sidebar.feeds]\nenabled = false\nshow = [\"workbox-sync\", \"news\"]\nmax_rows = 3\n",
+        )
+        .unwrap();
+        let feeds = &config.ui.sidebar.feeds;
+        assert!(!feeds.enabled);
+        assert!(feeds.show.includes("news") && !feeds.show.includes("other"));
+        assert_eq!(feeds.row_limit(), 3);
+
+        let config: crate::config::Config =
+            toml::from_str("[ui.sidebar.feeds]\nshow = \"all\"\nmax_rows = 0\n").unwrap();
+        assert_eq!(config.ui.sidebar.feeds.show, FeedsShow(None));
+        assert_eq!(config.ui.sidebar.feeds.row_limit(), 1, "at least one row");
+        let config: crate::config::Config =
+            toml::from_str("[ui.sidebar.feeds]\nmax_rows = 500\n").unwrap();
+        assert_eq!(
+            config.ui.sidebar.feeds.row_limit(),
+            50,
+            "at most fifty rows"
+        );
+    }
+
+    #[test]
+    fn feeds_show_rejects_other_words_and_round_trips() {
+        assert!(
+            toml::from_str::<crate::config::Config>("[ui.sidebar.feeds]\nshow = \"some\"\n")
+                .is_err()
+        );
+        for text in ["show = \"all\"", "show = [\"a\", \"b\"]"] {
+            let config: FeedsSidebarConfig = toml::from_str(text).unwrap();
+            let written = toml::to_string(&config).unwrap();
+            let again: FeedsSidebarConfig = toml::from_str(&written).unwrap();
+            assert_eq!(config, again, "{written}");
+        }
     }
 
     #[test]

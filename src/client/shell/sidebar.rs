@@ -430,6 +430,10 @@ pub(crate) fn render_sidebar(
         }
     }
 
+    let feed_plan = state
+        .feeds
+        .and_then(|feeds| super::feed_sidebar::plan(feeds, detail_area.height));
+    let (detail_area, feed_area) = split_feed_area(detail_area, feed_plan.as_ref());
     super::render_agent_panel(
         buffer,
         detail_area,
@@ -443,6 +447,10 @@ pub(crate) fn render_sidebar(
         state.agent_scroll,
         hits,
     );
+
+    if let Some(plan) = &feed_plan {
+        super::feed_sidebar::render(buffer, feed_area, plan, config, &mut hits.feed);
+    }
 
     hits.sidebar_toggle = Rect::new(
         area.right().saturating_sub(2),
@@ -458,6 +466,34 @@ pub(crate) fn render_sidebar(
         "«",
         Style::default().fg(palette.overlay0),
     );
+}
+
+/// Split the bottom rows of the sidebar's detail area off for the feed
+/// sections. Without a plan the area is returned untouched.
+pub(in crate::client::shell) fn split_feed_area(
+    detail_area: Rect,
+    plan: Option<&super::feed_sidebar::FeedPlan<'_>>,
+) -> (Rect, Rect) {
+    let Some(plan) = plan else {
+        return (detail_area, Rect::default());
+    };
+    let margin = super::feed_sidebar::BOTTOM_MARGIN;
+    let height = plan.height().min(detail_area.height.saturating_sub(margin));
+    let agent_height = detail_area.height - height - margin.min(detail_area.height - height);
+    (
+        Rect::new(
+            detail_area.x,
+            detail_area.y,
+            detail_area.width,
+            agent_height,
+        ),
+        Rect::new(
+            detail_area.x,
+            detail_area.y + agent_height,
+            detail_area.width,
+            height,
+        ),
+    )
 }
 
 pub(crate) fn workspace_entries(

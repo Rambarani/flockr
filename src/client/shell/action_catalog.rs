@@ -58,6 +58,7 @@ pub(super) fn action_specs(keybinds: &Keybinds) -> Vec<ActionSpec<'_>> {
             &k.agent_dashboard,
         ),
         (A::Jobs, "jobs", Session, &k.jobs),
+        (A::Feed, "feed", Session, &k.feed),
         (A::PreviewAgent, "preview agent", Agents, &k.preview_agent),
         (
             A::CommandPalette,

@@ -30,6 +30,8 @@ impl ClientShellState {
                 .bg(self.config.palette.panel_bg),
         );
         self.hits = ShellHitMap::default();
+        // This frame draws no feed sections.
+        self.feeds.sidebar_visible = false;
         let sidebar = if layout.sidebar.width > 0 {
             layout.sidebar
         } else {
@@ -77,6 +79,7 @@ impl ClientShellState {
             reveal_navigation_workspace: &mut self.reveal_navigation_workspace,
             dragged_workspace_id: None,
             workspace_drop_indicator_row: None,
+            feeds: None,
         };
         if let Some(snapshot) = local_snapshot {
             render::render_sidebar(
@@ -205,6 +208,8 @@ impl ClientShellState {
             _ => (None, None),
         };
         let mut buffer = Buffer::empty(Rect::new(0, 0, cols, rows));
+        // Feed data is polled only while the expanded sidebar is on screen.
+        self.feeds.sidebar_visible = layout.sidebar.width > 0 && !self.sidebar_collapsed;
         self.hits = render::render_shell(
             &mut buffer,
             layout,
@@ -233,6 +238,13 @@ impl ClientShellState {
                 reveal_navigation_workspace: &mut self.reveal_navigation_workspace,
                 dragged_workspace_id,
                 workspace_drop_indicator_row,
+                feeds: feed_sidebar::sidebar_input(
+                    &self.feeds,
+                    &self.config,
+                    &self.active_endpoint_id,
+                    &self.collapsed_groups,
+                    &self.remote_collapsed_groups,
+                ),
             },
         );
         self.hits.panes = surface
@@ -713,6 +725,20 @@ impl ClientShellState {
                         offset: rendered.offset,
                     }
                 });
+                None
+            } else if matches!(overlay, ClientShellOverlay::Feed(_)) {
+                let rendered = self.render_feed_overlay(&mut composed);
+                self.hits.feed_overlay =
+                    rendered.as_ref().map_or_else(Default::default, |rendered| {
+                        occlusion.cover(rendered.area);
+                        super::feed_overlay::FeedOverlayHits {
+                            popup: rendered.area,
+                            tabs: rendered.tabs.clone(),
+                            rows: rendered.rows.clone(),
+                            viewport_rows: rendered.viewport_rows,
+                            offset: rendered.offset,
+                        }
+                    });
                 None
             } else if let ClientShellOverlay::GlobalMenu(menu) = overlay {
                 let rendered = render::render_global_menu(

@@ -1683,7 +1683,7 @@ fn semantic_notifications_use_client_policy_and_stable_navigation_targets() {
     assert_eq!(state.pending_notifications.len(), 1);
 }
 
-fn two_workspace_agent_snapshot() -> ClientShellSnapshot {
+pub(super) fn two_workspace_agent_snapshot() -> ClientShellSnapshot {
     let mut projected = snapshot();
     let mut second_workspace = projected.workspaces[0].clone();
     second_workspace.workspace_id = "ws_2".into();

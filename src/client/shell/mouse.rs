@@ -697,6 +697,7 @@ impl ClientShellState {
         if self.route_palette_mouse(mouse, outcome)
             || self.route_dashboard_mouse(mouse, outcome)
             || self.route_jobs_mouse(mouse, outcome)
+            || self.route_feed_mouse(mouse, outcome)
         {
             return;
         }
@@ -1843,6 +1844,10 @@ impl ClientShellState {
                 if !self.config.mouse_capture {
                     return;
                 }
+                if !self.sidebar_collapsed && self.open_feed_context_menu(point) {
+                    outcome.repaint = true;
+                    return;
+                }
                 if !self.sidebar_collapsed && self.open_agent_group_context_menu(point) {
                     outcome.repaint = true;
                     return;
@@ -2161,6 +2166,9 @@ impl ClientShellState {
                     .flatten();
                 if let Some(tab_press) = tab_press {
                     self.tab_press = Some(tab_press);
+                    return;
+                }
+                if !self.sidebar_collapsed && self.handle_feed_sidebar_click(point, outcome) {
                     return;
                 }
                 if self.handle_agent_header_click(point, outcome) {

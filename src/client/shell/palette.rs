@@ -35,6 +35,8 @@ pub(super) enum PaletteAction {
     },
     Settings(ClientSettingsSection),
     RunJob(String),
+    OpenFeed(String),
+    RefreshFeed(String),
 }
 
 #[derive(Debug, Clone)]
@@ -189,6 +191,22 @@ impl ClientShellState {
                     action: PaletteAction::RunJob(job_id.clone()),
                 });
             }
+        }
+        for (job_id, title) in self.feed_palette_entries() {
+            items.push(PaletteItem {
+                id: format!("feed:{job_id}"),
+                kind: "feed",
+                title: format!("feed: {title}"),
+                detail: job_id.clone(),
+                action: PaletteAction::OpenFeed(job_id.clone()),
+            });
+            items.push(PaletteItem {
+                id: format!("feed-refresh:{job_id}"),
+                kind: "feed",
+                title: format!("refresh feed {job_id}"),
+                detail: title,
+                action: PaletteAction::RefreshFeed(job_id),
+            });
         }
         for section in ClientSettingsSection::ALL {
             items.push(PaletteItem {
@@ -501,6 +519,13 @@ impl ClientShellState {
                 self.select_settings_section(section, outcome);
             }
             PaletteAction::RunJob(job_id) => self.run_job_from_palette(job_id, outcome),
+            PaletteAction::OpenFeed(job_id) => {
+                self.open_feed_overlay(Some(job_id));
+                outcome.repaint = true;
+            }
+            PaletteAction::RefreshFeed(job_id) => {
+                self.refresh_feed(job_id, super::feed_state::FeedOrigin::Elsewhere, outcome)
+            }
         }
     }
 }

@@ -2401,3 +2401,24 @@ fn group_rows_are_cut_to_the_sidebar_width() {
         lines[2]
     );
 }
+
+#[test]
+fn the_overlay_fetches_items_of_the_first_feed_even_when_only_its_groups_show_in_the_sidebar() {
+    let mut state = new_state(&Config::default());
+    state.compose(COLS, ROWS).expect("frame");
+    open_overlay(&mut state);
+    let list = requests(&tick(&mut state, Instant::now()));
+    let (grouped, _) = grouped_feed();
+    let (_, actions) = answer(&mut state, &list[0], feed_list_result(vec![grouped], 7));
+    let fetched: Vec<_> = actions
+        .iter()
+        .filter_map(|action| match action {
+            ClientShellAction::Endpoint { request, .. } => match &request.method {
+                Method::FeedGet(params) => Some(params.job_id.clone()),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect();
+    assert_eq!(fetched, ["workbox-sync"]);
+}

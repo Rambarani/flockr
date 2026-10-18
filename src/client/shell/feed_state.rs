@@ -207,7 +207,12 @@ impl ClientShellState {
             }
         }
         if let Some(ClientShellOverlay::Feed(overlay)) = &self.overlay {
-            if let Some(job_id) = overlay.job_id.as_ref() {
+            // The chosen feed, or the first one until one is chosen.
+            let shown = overlay
+                .job_id
+                .as_ref()
+                .or_else(|| self.feeds.feeds.first().map(|feed| &feed.job_id));
+            if let Some(job_id) = shown {
                 if self
                     .feeds
                     .summary(job_id)

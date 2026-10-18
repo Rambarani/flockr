@@ -53,6 +53,11 @@ impl ClientShellState {
                     outcome.repaint = true;
                     return;
                 }
+                if action == crate::input::KeybindAction::Jobs {
+                    self.open_jobs_overlay();
+                    outcome.repaint = true;
+                    return;
+                }
                 if action == crate::input::KeybindAction::PreviewAgent {
                     self.preview_agent_for_focused_pane(outcome);
                     return;
@@ -558,6 +563,9 @@ impl ClientShellState {
         if let PendingEndpointKind::PaneRead { pane_id, purpose } = pending.kind {
             return self.complete_pane_read(pane_id, purpose, result);
         }
+        if let PendingEndpointKind::Jobs { request } = pending.kind {
+            return self.complete_jobs_request(request, result);
+        }
         if result.is_ok() {
             let timeout_key = ClientEndpointNoticeKey {
                 boot_id: boot_id.to_owned(),
@@ -610,7 +618,9 @@ impl ClientShellState {
         }
         match pending.kind {
             PendingEndpointKind::Generic => {}
-            PendingEndpointKind::PaneLinkResolve { .. } | PendingEndpointKind::PaneRead { .. } => {
+            PendingEndpointKind::PaneLinkResolve { .. }
+            | PendingEndpointKind::PaneRead { .. }
+            | PendingEndpointKind::Jobs { .. } => {
                 unreachable!("handled above")
             }
             PendingEndpointKind::ProductAnnouncementDismiss { version, id } => {

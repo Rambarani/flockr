@@ -220,4 +220,6 @@ pub enum AppEvent {
     WorktreeRemoveFinished(Box<WorktreeRemoveResult>),
     /// Background worktree discovery completed for an API list/open request.
     WorktreeReadFinished(Box<WorktreeReadResult>),
+    /// A scheduled job's command finished (or failed to start).
+    JobRunFinished(Box<crate::jobs::JobRunResult>),
 }

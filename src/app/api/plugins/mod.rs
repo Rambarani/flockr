@@ -767,7 +767,7 @@ fn normalize_optional_plugin_id(
     }
 }
 
-fn plugin_manifest_available(plugin: &InstalledPluginInfo) -> bool {
+pub(super) fn plugin_manifest_available(plugin: &InstalledPluginInfo) -> bool {
     !plugin.warnings.iter().any(|warning| {
         warning.starts_with(crate::persist::plugin_registry::MANIFEST_UNAVAILABLE_WARNING_PREFIX)
     })

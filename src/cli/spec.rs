@@ -48,6 +48,7 @@ pub(super) fn command() -> Command {
         .subcommand(session_command())
         .subcommand(integration_command())
         .subcommand(upstream_command())
+        .subcommand(job_command())
         .subcommand(plugin_command());
     configure_help(command, 0)
 }
@@ -185,6 +186,60 @@ fn upstream_command() -> Command {
                 .about("Merge a verified sync branch into flockr and rebuild")
                 .arg(required_tag_arg())
                 .arg(flag("yes").help("Apply without the interactive confirmation")),
+        )
+}
+
+fn job_command() -> Command {
+    let job_id = || {
+        Arg::new("id")
+            .value_name("ID")
+            .required(true)
+            .help("Job id, such as workbox-sync")
+    };
+    Command::new("job")
+        .about("Inspect and control scheduled jobs")
+        .subcommand(
+            Command::new("list")
+                .about("List jobs with their state, schedule and last result")
+                .arg(json_flag()),
+        )
+        .subcommand(
+            Command::new("status")
+                .about("Show a job's settings and recent runs")
+                .arg(job_id()),
+        )
+        .subcommand(
+            Command::new("run")
+                .about("Run a job now")
+                .arg(job_id())
+                .arg(flag("wait").help("Wait for the run and exit non-zero if it fails")),
+        )
+        .subcommand(
+            Command::new("logs")
+                .about("Show the output of a job's last run")
+                .arg(job_id())
+                .arg(
+                    option("lines", "LINES")
+                        .short('n')
+                        .help("Show only the last LINES lines of each stream"),
+                ),
+        )
+        .subcommand(
+            Command::new("enable")
+                .about("Enable a job (overrides `enabled` in job.toml)")
+                .arg(job_id()),
+        )
+        .subcommand(
+            Command::new("disable")
+                .about("Disable a job (overrides `enabled` in job.toml)")
+                .arg(job_id()),
+        )
+        .subcommand(
+            Command::new("env")
+                .about("Manage the login-shell environment jobs run with")
+                .subcommand(
+                    Command::new("refresh").about("Capture the login-shell environment again now"),
+                ),
         )
 }
 

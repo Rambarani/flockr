@@ -17,6 +17,11 @@ const CLIENT_SHELL_METHODS: &[&str] = &[
     "command.invoke",
     "integration.install",
     "integration.list",
+    "job.get",
+    "job.list",
+    "job.logs",
+    "job.run",
+    "job.set_enabled",
     "layout.set_split_ratio",
     "pane.clear",
     "pane.close",
@@ -302,6 +307,31 @@ mod tests {
             actual.remove("pane.read").as_deref(),
             Some("85dbb95417f7b04684f24c8fa9dbfa5c7a218c9829bcace71dce17ec03044960")
         );
+        // Jobs methods: frozen from their first release.
+        for (method, digest) in [
+            (
+                "job.get",
+                "46f745e004970add6997c1def0bc8e75d73399dcd084a4873fdd5659b7561bc2",
+            ),
+            (
+                "job.list",
+                "4e9f8ffc4474809883dd1751d8ac65c4c8dad5ce98eb41fb72afd44f349ec824",
+            ),
+            (
+                "job.logs",
+                "dc0a0a77015c44636e8bf8bc13df2ce4d3096031493c1c5f2fbd9e452adc29ac",
+            ),
+            (
+                "job.run",
+                "2d9150827910a1701b5c7506bc14895b9356c6e2475d484ef852701247c0b045",
+            ),
+            (
+                "job.set_enabled",
+                "f7b106f68f8bcf22c99249df59fdd02e6576eb0f067a091bf56801ed4d0f2ff0",
+            ),
+        ] {
+            assert_eq!(actual.remove(method).as_deref(), Some(digest), "{method}");
+        }
 
         assert_eq!(
             actual, expected,

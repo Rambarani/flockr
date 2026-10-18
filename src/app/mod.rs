@@ -75,6 +75,8 @@ pub(crate) struct AppPolicy {
     pub(crate) persist_session: bool,
     pub(crate) persist_plugin_registry: bool,
     pub(crate) background_updates: bool,
+    /// Load job files and run scheduled jobs.
+    pub(crate) jobs: bool,
 }
 
 impl AppPolicy {
@@ -83,6 +85,7 @@ impl AppPolicy {
         persist_session: true,
         persist_plugin_registry: true,
         background_updates: true,
+        jobs: true,
     };
 
     #[cfg(test)]
@@ -91,6 +94,7 @@ impl AppPolicy {
         persist_session: false,
         persist_plugin_registry: false,
         background_updates: false,
+        jobs: false,
     };
 
     #[cfg(unix)]
@@ -99,6 +103,7 @@ impl AppPolicy {
         persist_session: true,
         persist_plugin_registry: true,
         background_updates: true,
+        jobs: true,
     };
 }
 
@@ -138,6 +143,15 @@ pub struct App {
     /// Next poll of the upstream herdr watcher. The watcher itself only hits
     /// the network once per `[upstream] check_interval_hours`.
     pub(crate) next_upstream_check: Option<Instant>,
+    /// Next scheduler pass over the jobs: the earliest due job, a hot-reload
+    /// check at most every 30 seconds, or a queued toast waiting its turn.
+    pub(crate) next_jobs_tick: Option<Instant>,
+    pub(crate) jobs: crate::jobs::JobsManager,
+    /// Job results waiting for the in-frame toast slot.
+    pub(crate) pending_job_notices: std::collections::VecDeque<crate::jobs::manager::Notice>,
+    /// Job results for terminal or system delivery, forwarded to clients by
+    /// the server.
+    pub(crate) job_client_notices: Vec<crate::jobs::manager::Notice>,
     pub(crate) upstream_config: crate::config::UpstreamConfig,
     pub(crate) update_version_check_enabled: bool,
     pub(crate) update_manifest_check_enabled: bool,
@@ -663,6 +677,14 @@ impl App {
                 .then_some(Instant::now() + AUTO_UPDATE_CHECK_INTERVAL),
             next_upstream_check: upstream_check_enabled
                 .then_some(Instant::now() + AUTO_UPDATE_CHECK_INTERVAL),
+            next_jobs_tick: policy.jobs.then(Instant::now),
+            jobs: crate::jobs::JobsManager::new(
+                crate::jobs::JobsPaths::system(),
+                std::sync::Arc::new(crate::jobs::env::LoginEnvCache::system()),
+                policy.jobs,
+            ),
+            pending_job_notices: std::collections::VecDeque::new(),
+            job_client_notices: Vec::new(),
             upstream_config: config.upstream.clone(),
             update_version_check_enabled: config.update.version_check,
             update_manifest_check_enabled: config.update.manifest_check,
@@ -827,7 +849,9 @@ impl App {
     }
 
     pub(crate) fn reload_config(&mut self) -> crate::config::ConfigReloadReport {
-        self.apply_config_from_disk(true)
+        let report = self.apply_config_from_disk(true);
+        self.reload_jobs_now();
+        report
     }
 
     pub(crate) fn take_config_reloaded_from_disk(&mut self) -> bool {

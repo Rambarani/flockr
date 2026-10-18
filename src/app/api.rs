@@ -4,6 +4,7 @@ mod agent_view;
 mod agents;
 mod env;
 mod integrations;
+mod jobs;
 mod layouts;
 mod panes;
 pub(crate) mod plugins;
@@ -191,6 +192,11 @@ impl App {
                     crate::api::schema::PluginCommandStatus::Failed
                 };
             }
+            return Vec::new();
+        }
+
+        if let AppEvent::JobRunFinished(result) = ev {
+            self.finish_job_run(*result);
             return Vec::new();
         }
 
@@ -1272,6 +1278,14 @@ impl App {
             Method::PluginPaneClose(params) => {
                 return self.handle_plugin_pane_close(request.id, params);
             }
+            Method::JobList(params) => return self.handle_job_list(request.id, params),
+            Method::JobGet(params) => return self.handle_job_get(request.id, params),
+            Method::JobRun(params) => return self.handle_job_run(request.id, params),
+            Method::JobSetEnabled(params) => {
+                return self.handle_job_set_enabled(request.id, params);
+            }
+            Method::JobLogs(params) => return self.handle_job_logs(request.id, params),
+            Method::JobEnvRefresh(_) => return self.handle_job_env_refresh(request.id),
             _ => {
                 return responses::encode_error(
                     request.id,

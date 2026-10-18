@@ -8443,3 +8443,100 @@ fn no_handle_internal_event_bypass_in_module() {
         bypass_lines.join("\n  ")
     );
 }
+
+#[test]
+fn failed_job_runs_reach_client_shells_as_semantic_notifications() {
+    use crate::api::schema::{JobRunInfo, JobRunStatus, JobRunTrigger};
+    use crate::jobs::state::RunRecord;
+
+    let root = std::env::temp_dir().join(format!(
+        "flockr-headless-jobs-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    std::fs::create_dir_all(root.join("config/sync")).unwrap();
+    std::fs::write(
+        root.join("config/sync/job.toml"),
+        "title = \"Sync\"\ncommand = [\"true\"]\nevery = \"1h\"\n",
+    )
+    .unwrap();
+    let mut server = test_headless_server();
+    server.app.jobs = crate::jobs::JobsManager::new(
+        crate::jobs::JobsPaths {
+            config_dir: root.join("config"),
+            state_root: root.join("state"),
+        },
+        std::sync::Arc::new(crate::jobs::env::LoginEnvCache::new(Box::new(|| {
+            Ok(Vec::new())
+        }))),
+        true,
+    );
+    server.app.jobs.reload(0, &[], false);
+    let plan = server
+        .app
+        .jobs
+        .begin_run("sync", JobRunTrigger::Manual, crate::jobs::now_unix_ms())
+        .unwrap();
+    let (client_tx, client_control_rx, _client_rx) = test_client_writer();
+    server.clients.insert(
+        1,
+        ClientConnection::new(
+            (80, 24),
+            crate::kitty_graphics::HostCellSize::default(),
+            1,
+            RenderEncoding::SemanticFrame,
+            Some(client_tx),
+        ),
+    );
+    server.foreground_client_id = Some(1);
+    server.app.state.toast_config.delivery = crate::config::ToastDelivery::Terminal;
+    let record = RunRecord {
+        info: JobRunInfo {
+            run_id: plan.run_id,
+            trigger: JobRunTrigger::Manual,
+            status: JobRunStatus::Failed,
+            started_unix_ms: plan.started_unix_ms,
+            finished_unix_ms: plan.started_unix_ms + 5,
+            duration_ms: 5,
+            exit_code: Some(2),
+            summary: "exit 2".into(),
+            error: None,
+            skipped_count: 0,
+            env_note: None,
+        },
+        stdout_tail: String::new(),
+        stderr_tail: "disk full\n".into(),
+        stdout_truncated: false,
+        stderr_truncated: false,
+        handoff: None,
+    };
+
+    server.handle_internal_event_with_forwarding(AppEvent::JobRunFinished(Box::new(
+        crate::jobs::JobRunResult {
+            job_id: "sync".into(),
+            record,
+        },
+    )));
+
+    match read_server_message(
+        client_control_rx
+            .recv_timeout(Duration::from_millis(100))
+            .expect("semantic notification"),
+    ) {
+        ServerMessage::SemanticNotification(notification) => {
+            assert_eq!(
+                notification.kind,
+                protocol::SemanticNotificationKind::NeedsAttention
+            );
+            assert_eq!(notification.title, "Sync");
+            assert!(notification.body.as_deref().is_some_and(|body| body
+                .starts_with("failed (exit 2)")
+                && body.ends_with("disk full")));
+        }
+        other => panic!("expected semantic job notification, got {other:?}"),
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}

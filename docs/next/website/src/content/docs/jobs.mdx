@@ -1,0 +1,164 @@
+---
+title: Jobs
+description: Run commands on a cron schedule or an interval, with the result recorded and shown inside Flockr.
+---
+
+A job is a command that Flockr runs for you on a schedule: sync a tracker every hour, check a build every morning, refresh a cache. The server schedules the job, runs it in the background with a timeout, records the result, and can tell you when it fails. Jobs are global per user, not per workspace.
+
+## Overview
+
+- Each job lives in `~/.config/flockr/jobs/<id>/job.toml`. Debug builds use `flockr-dev` instead of `flockr`.
+- `flockr job list` shows every job. `prefix+t` opens the Jobs overlay inside Flockr.
+- A job runs with your login-shell environment by default, so credentials you keep in `~/.zshrc` are available.
+- If Flockr was not running when a job was due, the job runs once when the server starts.
+
+## Define a job
+
+```toml
+# ~/.config/flockr/jobs/workbox-sync/job.toml
+title = "workbox sync"
+command = ["workbox", "sync"]      # argv; use ["sh", "-c", "..."] for a shell command
+schedule = "0 10 * * 1-5"          # cron, five fields, local time  (or: every = "1h")
+timeout = "10m"
+enabled = true
+notify = "on_failure"              # never | on_failure | on_change | always
+```
+
+| Key | Meaning |
+| --- | --- |
+| `id` | Optional. When present it must equal the directory name. Letters, digits, `.`, `_` and `-`, up to 120 characters, starting with a letter or digit. |
+| `title` | Name shown in lists and toasts. Defaults to the id. |
+| `command` | Required argv array. The first element is the program. Flockr does not run a shell unless you do. |
+| `schedule` or `every` | Required: exactly one of them. See [Schedules](#schedules). |
+| `timeout` | Default `10m`, minimum `1s`, maximum `24h`. When it expires Flockr stops the command and everything it started. |
+| `enabled` | Default `true`. |
+| `env`, `env_file`, `[env]` | See [Environment](#environment). |
+| `cwd` | Working directory. Defaults to the job directory. `~` and relative paths (relative to the job directory) work. |
+| `notify` | See [Notifications](#notifications). Default `on_failure`. |
+| `feed` | Reserved for a later release. It is validated (`command` is required) and otherwise ignored. |
+| `handoff` | Reserved for a later release. `when` is validated; nothing acts on it yet. |
+
+Unknown keys are errors, so a typo such as `evry` is reported instead of ignored. Problems are listed together, with the file and the key, in `flockr job list` and in the Jobs overlay:
+
+```text
+broken   invalid   -   -   schedule: invalid cron "0 10 * *": expected 5 fields (minute hour day-of-month month day-of-week), found 4
+```
+
+Edits are picked up within about 30 seconds, or at once by `flockr server reload-config`.
+
+## Schedules
+
+`every` takes `30s`-style durations such as `5m`, `1h`, `1h30m` or `1d`. The minimum is `1m`. The next run is one interval after the previous run started.
+
+`schedule` is a five-field cron expression in local time: `minute hour day-of-month month day-of-week`.
+
+- Each field accepts `*`, a value, a range `a-b`, a list `a,b`, and steps `*/n` or `a-b/n`.
+- Month and weekday names work (`jan`, `mon-fri`). Weekday `7` is Sunday.
+- When both day fields are restricted, a day matches if either does (`0 0 1 * mon` is the 1st and every Monday).
+- `@daily`-style macros are not supported.
+
+Daylight saving time: a time that does not exist (spring forward) runs at the instant the clock jumps, and a time that happens twice (fall back) runs once, on its first pass. The schedule follows the wall clock forward, so the repeated hour is not scheduled again.
+
+Missed runs: when the server starts, a job whose last scheduled time passed since its last run starts once, however many times it was missed. A job that has never run counts from when its `job.toml` was written.
+
+A job never overlaps itself. If a run is still going when the next one is due, the new run is skipped and recorded as `skipped: still running`.
+
+## Environment
+
+`env = "login-shell"` is the default. Flockr runs `$SHELL -l -i -c` once, with a marker around `env -0`, and gives jobs the resulting variables. The shell is interactive (`-i`) because zsh reads `~/.zshrc` only for interactive shells. Only the text between the markers is used, so banners and prompt frameworks cannot corrupt it.
+
+- The capture has a 5 second timeout and is cached for 10 minutes. `flockr job env refresh` captures again at once.
+- If the capture fails or times out, jobs use the server environment and the run record says why.
+- Values are kept in memory only. They are never written to disk, to logs, or to API responses. Run records store a count such as `login-shell (214 variables)`.
+- Job output is stored, though. Do not print secrets from a job.
+
+`env = "server"` uses the environment of the Flockr server process. A job file cannot hold both `env = "..."` and an `[env]` table, so with a table put the mode inside it:
+
+```toml
+env_file = "secrets.env"          # KEY=VALUE lines; relative to the job directory
+
+[env]
+mode = "server"                   # optional; default login-shell
+LOG_LEVEL = "debug"               # non-secret overrides
+```
+
+Order of precedence, last wins: the base environment, `env_file`, the `[env]` table, then the variables Flockr always sets: `FLOCKR_ENV`, `FLOCKR_SOCKET_PATH`, `FLOCKR_BIN_PATH`, `FLOCKR_JOB_ID`, `FLOCKR_JOB_DIR` and `FLOCKR_JOB_STATE_DIR`. A variable literally named `mode` cannot be set in the `[env]` table.
+
+## Notifications
+
+`notify` decides when a finished run shows a toast, through the same path as other Flockr toasts and `[ui.toast] delivery`:
+
+| Value | Toast when |
+| --- | --- |
+| `never` | Never. |
+| `on_failure` | The run failed, timed out or could not start. This is the default. |
+| `on_change` | The status or the stdout text differs from the previous run. The first run only when it failed. |
+| `always` | Every run. |
+
+The toast shows the job title and a short result such as `ok in 1.2s · 3 items` or `failed (exit 3) in 4.1s · connection refused`.
+
+## Runs and state
+
+State lives in `<state dir>/jobs/<id>/state.json`, written atomically. It holds the last 20 runs with start, duration, exit code, and the last 16 KiB of stdout and stderr of each, plus any `flockr job enable/disable` override. Output beyond the cap keeps the end.
+
+`flockr job enable` and `disable` override `enabled` in the file until you set the file's value again. Enabling restarts the schedule from now, so a job that was off for a week does not run at once. `flockr job run` works for disabled jobs too.
+
+A stdout line that starts with `{"flockr_handoff":` is kept verbatim in the run record for a later release.
+
+## Command line
+
+```sh
+flockr job list [--json]          # state, schedule, next run, last result
+flockr job status <id>            # settings and recent runs
+flockr job run <id> [--wait]      # run now; --wait exits non-zero if the run fails
+flockr job logs <id> [-n LINES]   # stdout then stderr of the last run
+flockr job enable <id>
+flockr job disable <id>
+flockr job env refresh            # capture the login-shell environment again
+```
+
+## Jobs overlay
+
+`prefix+t` (`keys.jobs`), the global menu entry **jobs**, or **jobs** in the command palette opens a full-screen table: a state dot, the job id and title, the schedule, the next run, and the last result with its duration.
+
+| Key | Action |
+| --- | --- |
+| `↑`/`↓`, `j`/`k`, `g`/`G` | Move |
+| `r` | Run the selected job now |
+| `l` or `enter` | Show the last run's output (scroll with `j`/`k`, `pgup`/`pgdn`, `g`/`G`; `esc` goes back) |
+| `e` | Enable or disable the job |
+| `esc` or `q` | Close |
+
+The command palette also lists **run job &lt;id&gt;** for every job. Servers without job support show a short explanation instead.
+
+## Plugin jobs
+
+A plugin manifest can declare jobs with `[[jobs]]` tables. They take the same keys as `job.toml`, except `id` is required. The job id is `<plugin id>:<id>`, the working directory is the plugin root, and the job runs with the plugin variables (`FLOCKR_PLUGIN_ID`, `FLOCKR_PLUGIN_ROOT`, `FLOCKR_PLUGIN_CONFIG_DIR`, `FLOCKR_PLUGIN_STATE_DIR`) like plugin actions do. Disabled plugins contribute no jobs.
+
+```toml
+[[jobs]]
+id = "refresh"
+command = ["./refresh.sh"]
+every = "30m"
+```
+
+## Socket API
+
+| Method | Purpose |
+| --- | --- |
+| `job.list` | All jobs, a `revision`, and the environment capture status. With `since_revision` equal to the current one it answers `unchanged: true` without the list. |
+| `job.get` | One job and its history without output. |
+| `job.run` | Start a run: `started: false` when one is already going. |
+| `job.set_enabled` | Set the enabled override. |
+| `job.logs` | The stdout and stderr tails of a run (`run_id`, `lines` optional). |
+| `job.env_refresh` | Start recapturing the login-shell environment in the background. |
+
+Subscribe to `job.run_finished` for `job_id`, `title` and the run record (without output). `job.list`, `job.get`, `job.logs`, `job.run` and `job.set_enabled` are also available to the Flockr client on the endpoint command lane.
+
+## Limits
+
+- Interval jobs run at most once a minute; a run is bounded by `timeout` (at most 24 hours).
+- Jobs run on the server's machine. Remote machines run their own jobs.
+- Output is stored as the last 16 KiB per stream per run, and 20 runs per job.
+- Cron time zones follow the machine's local time. On Windows the current UTC offset is used for daylight-saving changes.
+- A server restart does not stop a job that is still running; its result is not recorded.

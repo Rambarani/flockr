@@ -505,7 +505,10 @@ impl ClientShellState {
     ) {
         use crossterm::event::KeyModifiers;
 
-        if self.route_palette_key(key, outcome) || self.route_dashboard_key(key, outcome) {
+        if self.route_palette_key(key, outcome)
+            || self.route_dashboard_key(key, outcome)
+            || self.route_jobs_key(key, outcome)
+        {
             return;
         }
 

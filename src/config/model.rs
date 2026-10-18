@@ -471,6 +471,8 @@ pub struct KeysConfig {
     pub rename_agent: BindingConfig,
     /// Open the agent dashboard, a full-screen table of every agent on every machine. Default: "prefix+d".
     pub agent_dashboard: BindingConfig,
+    /// Open the Jobs overlay: scheduled jobs with their state, next run and last result. Default: "prefix+t".
+    pub jobs: BindingConfig,
     /// Preview the agent in the focused pane in a popup with its recent screen lines, state and time in state. Default: "prefix+i".
     pub preview_agent: BindingConfig,
     /// Open the command palette, a fuzzy-searchable list of actions, workspaces, agents, tabs, panes, settings and custom commands. Default: "prefix+:".
@@ -623,6 +625,8 @@ pub(crate) struct KeysConfigOverlay {
     #[serde(skip_serializing_if = "Option::is_none")]
     agent_dashboard: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    jobs: Option<BindingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     preview_agent: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     command_palette: Option<BindingConfig>,
@@ -766,6 +770,7 @@ impl<'de> Deserialize<'de> for KeysConfig {
         apply_field!(toggle_agent_group);
         apply_field!(rename_agent);
         apply_field!(agent_dashboard);
+        apply_field!(jobs);
         apply_field!(preview_agent);
         apply_field!(command_palette);
         apply_field!(edit_scrollback);
@@ -878,6 +883,7 @@ impl KeysConfig {
         copy_effective_action_field!(toggle_agent_group, keybinds.toggle_agent_group);
         copy_effective_action_field!(rename_agent, keybinds.rename_agent);
         copy_effective_action_field!(agent_dashboard, keybinds.agent_dashboard);
+        copy_effective_action_field!(jobs, keybinds.jobs);
         copy_effective_action_field!(preview_agent, keybinds.preview_agent);
         copy_effective_action_field!(command_palette, keybinds.command_palette);
         copy_effective_action_field!(edit_scrollback, keybinds.edit_scrollback);
@@ -1261,6 +1267,7 @@ impl Default for KeysConfig {
             toggle_agent_group: BindingConfig::one("prefix+shift+e"),
             rename_agent: BindingConfig::one("prefix+shift+a"),
             agent_dashboard: BindingConfig::one("prefix+d"),
+            jobs: BindingConfig::one("prefix+t"),
             preview_agent: BindingConfig::one("prefix+i"),
             command_palette: BindingConfig::one("prefix+:"),
             edit_scrollback: BindingConfig::one("prefix+e"),

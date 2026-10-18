@@ -170,7 +170,8 @@ impl ChildExitReason {
 
 #[cfg(unix)]
 pub(crate) use unix_common::{
-    classify_child_exit, poll_fd_readable, read_fd, shared_ssh_control_path,
+    classify_child_exit, configure_detached_session_command, configure_job_command, local_civil_at,
+    poll_fd_readable, read_fd, shared_ssh_control_path, terminate_process_group,
 };
 
 #[cfg(not(any(unix, windows)))]

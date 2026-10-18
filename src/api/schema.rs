@@ -5,6 +5,7 @@ pub mod commands;
 pub mod common;
 pub mod events;
 pub mod integrations;
+pub mod jobs;
 pub mod panes;
 pub mod plugins;
 pub mod response;
@@ -19,6 +20,7 @@ pub use commands::*;
 pub use common::*;
 pub use events::*;
 pub use integrations::*;
+pub use jobs::*;
 pub use panes::*;
 pub use plugins::*;
 pub use response::*;
@@ -249,6 +251,18 @@ pub enum Method {
     PluginPaneFocus(PluginPaneFocusParams),
     #[serde(rename = "plugin.pane.close")]
     PluginPaneClose(PluginPaneCloseParams),
+    #[serde(rename = "job.list")]
+    JobList(JobListParams),
+    #[serde(rename = "job.get")]
+    JobGet(JobTarget),
+    #[serde(rename = "job.run")]
+    JobRun(JobTarget),
+    #[serde(rename = "job.set_enabled")]
+    JobSetEnabled(JobSetEnabledParams),
+    #[serde(rename = "job.logs")]
+    JobLogs(JobLogsParams),
+    #[serde(rename = "job.env_refresh")]
+    JobEnvRefresh(EmptyParams),
 }
 
 #[cfg(test)]

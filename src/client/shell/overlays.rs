@@ -87,7 +87,8 @@ pub(crate) fn render_client_overlay(
         ClientShellOverlay::ContextMenu(_)
         | ClientShellOverlay::GlobalMenu(_)
         | ClientShellOverlay::Palette(_)
-        | ClientShellOverlay::Dashboard(_) => None,
+        | ClientShellOverlay::Dashboard(_)
+        | ClientShellOverlay::Jobs(_) => None,
     }
 }
 

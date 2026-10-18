@@ -86,6 +86,7 @@ pub(crate) fn keybind_help_groups(
                 entry(binding_label(&keybinds.detach), "detach"),
                 entry(binding_label(&keybinds.reload_config), "reload config"),
                 entry(binding_label(&keybinds.agent_dashboard), "agent dashboard"),
+                entry(binding_label(&keybinds.jobs), "jobs"),
                 entry(binding_label(&keybinds.preview_agent), "preview agent"),
                 entry(binding_label(&keybinds.command_palette), "command palette"),
                 entry(

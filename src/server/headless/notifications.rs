@@ -210,6 +210,40 @@ impl HeadlessServer {
         })
     }
 
+    /// Job results go to client shells as semantic notifications (each shell
+    /// presents them per `[ui.toast] delivery`) and, for terminal or system
+    /// delivery, to a foreground non-shell client as a flat notification.
+    pub(super) fn forward_job_notices(&mut self) {
+        for notice in self.app.take_job_client_notices() {
+            self.send_to_client_shells(ServerMessage::SemanticNotification(
+                protocol::SemanticNotification {
+                    // `Finished` without a pane is discarded by shells, so
+                    // successes use the neutral custom kind.
+                    kind: if notice.failed {
+                        protocol::SemanticNotificationKind::NeedsAttention
+                    } else {
+                        protocol::SemanticNotificationKind::Custom
+                    },
+                    title: notice.title.clone(),
+                    body: non_empty_body(&notice.body),
+                    sound: None,
+                    agent: None,
+                    workspace_id: None,
+                    tab_id: None,
+                    pane_id: None,
+                    position: None,
+                },
+            ));
+            if let Some(kind) = toast_notify_kind(self.app.state.toast_config.delivery) {
+                self.send_notify_to_foreground_client(
+                    kind,
+                    &notice.title,
+                    non_empty_body(&notice.body),
+                );
+            }
+        }
+    }
+
     pub(super) fn send_flat_toast_to_foreground_client(
         &mut self,
         kind: protocol::NotifyKind,
@@ -573,6 +607,11 @@ impl HeadlessServer {
                 }
 
                 true
+            }
+            AppEvent::JobRunFinished(_) => {
+                let changed = self.app.handle_internal_event_with_render_impact(ev);
+                self.forward_job_notices();
+                changed
             }
             AppEvent::UpstreamUpdatesAvailable { title, context } => {
                 let title = title.clone();

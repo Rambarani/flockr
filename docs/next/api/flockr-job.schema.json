@@ -1,0 +1,247 @@
+{
+  "$defs": {
+    "feed": {
+      "additionalProperties": false,
+      "description": "Gives the job a feed: a list of items shown in the Feed overlay and a sidebar section. The command runs after every successful run, on demand and at server start, and must print one feed v1 JSON object (see flockr-feed.schema.json).",
+      "properties": {
+        "command": {
+          "description": "Required argv array whose stdout is the feed JSON and nothing else.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "title": {
+          "description": "Section title; wins over the feed's own title.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
+    "handoff": {
+      "additionalProperties": false,
+      "description": "After a run the job may ask whether to start an agent tab; nothing starts until the user answers. Template variables in ask, tab_title, cwd, agent_command, prompt and the prompt file: {{stdout}} {{stderr_tail}} {{exit_code}} {{feed_json}} {{count}} {{date}} {{job.id}} {{job.title}} {{run.id}} and {{context.<path>}} (from a dynamic flockr_handoff line's context object). Substitution is a single pass, so job output cannot inject further placeholders; an unknown or missing variable renders empty with a warning.",
+      "not": {
+        "required": [
+          "prompt",
+          "prompt_file"
+        ]
+      },
+      "properties": {
+        "agent_command": {
+          "default": "claude",
+          "description": "The agent CLI, run in a new tab. Add {prompt_file} to pass the rendered prompt file anywhere; otherwise the prompt becomes the first argument.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "ask": {
+          "description": "The question shown in the toast and the Decisions tab (templated; one line, cut to this length).",
+          "maxLength": 200,
+          "type": "string"
+        },
+        "cwd": {
+          "description": "Directory of the new tab; ~ and templates work. Default: the job directory.",
+          "type": "string"
+        },
+        "prompt": {
+          "description": "Inline prompt template; use this or prompt_file, not both.",
+          "type": "string"
+        },
+        "prompt_file": {
+          "description": "Prompt template, relative to the job directory. The rendered prompt is capped at 200000 characters; {{stdout}} at 12000, {{stderr_tail}} at 4000, {{feed_json}} at 48000, each context value at 8000.",
+          "type": "string"
+        },
+        "tab_title": {
+          "description": "Title of the new tab (templated; cut to this length).",
+          "maxLength": 60,
+          "type": "string"
+        },
+        "when": {
+          "anyOf": [
+            {
+              "enum": [
+                "on_success",
+                "on_change",
+                "on_failure",
+                "always"
+              ]
+            },
+            {
+              "pattern": "^exit:-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": "on_change",
+          "description": "When a finished run asks. on_change compares stdout and the feed with the previous run. exit:<code> matches one exit code."
+        }
+      },
+      "type": "object"
+    },
+    "jobsConfig": {
+      "additionalProperties": false,
+      "description": "The [jobs] section of config.toml. User jobs live in job.toml files; this section only tunes the jobs flockr ships with, keyed by name without the `system.` prefix.",
+      "properties": {
+        "system": {
+          "additionalProperties": false,
+          "properties": {
+            "upstream-herdr": {
+              "$ref": "#/$defs/systemJob"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "systemJob": {
+      "additionalProperties": false,
+      "description": "Overrides for one built-in job.",
+      "not": {
+        "required": [
+          "every",
+          "schedule"
+        ]
+      },
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "every": {
+          "description": "Interval such as \"24h\" (minimum 1m). Set this or schedule, not both.",
+          "pattern": "^([0-9]+[smhd])+$",
+          "type": "string"
+        },
+        "notify": {
+          "enum": [
+            "never",
+            "on_failure",
+            "on_change",
+            "always"
+          ]
+        },
+        "schedule": {
+          "description": "Five-field cron expression in local time. Set this or every, not both.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A scheduled job: ~/.config/flockr/jobs/<id>/job.toml. Unknown keys are errors. The [jobs.system.*] section described under $defs.jobsConfig is not part of job.toml; it belongs in config.toml.",
+  "oneOf": [
+    {
+      "required": [
+        "schedule"
+      ]
+    },
+    {
+      "required": [
+        "every"
+      ]
+    }
+  ],
+  "properties": {
+    "command": {
+      "description": "Required argv array; the first element is the program. Flockr does not run a shell unless you do ([\"sh\", \"-c\", \"...\"]).",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "cwd": {
+      "description": "Working directory. Default: the job directory.",
+      "type": "string"
+    },
+    "enabled": {
+      "default": true,
+      "description": "`flockr job new` writes false. `flockr job enable` overrides this value.",
+      "type": "boolean"
+    },
+    "env": {
+      "description": "Where the environment comes from. A string sets the mode. A table holds non-secret KEY = \"value\" overrides applied after env_file, with the reserved key `mode` setting the mode (TOML cannot hold both an env string and an [env] table). Values are always strings.",
+      "oneOf": [
+        {
+          "enum": [
+            "login-shell",
+            "server"
+          ]
+        },
+        {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "properties": {
+            "mode": {
+              "default": "login-shell",
+              "enum": [
+                "login-shell",
+                "server"
+              ]
+            }
+          },
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "type": "object"
+        }
+      ]
+    },
+    "env_file": {
+      "description": "KEY=VALUE lines added to the environment; relative to the job directory.",
+      "type": "string"
+    },
+    "every": {
+      "description": "Interval such as 30m, 1h or 1h30m (units s, m, h, d; minimum 1m). Exactly one of schedule and every.",
+      "pattern": "^([0-9]+[smhd])+$",
+      "type": "string"
+    },
+    "feed": {
+      "$ref": "#/$defs/feed"
+    },
+    "handoff": {
+      "$ref": "#/$defs/handoff"
+    },
+    "id": {
+      "description": "Optional. Must equal the job directory's name when present.",
+      "maxLength": 120,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "type": "string"
+    },
+    "notify": {
+      "default": "on_failure",
+      "description": "When a finished run shows a toast.",
+      "enum": [
+        "never",
+        "on_failure",
+        "on_change",
+        "always"
+      ]
+    },
+    "schedule": {
+      "description": "Five-field cron expression in local time (minute hour day-of-month month day-of-week). Exactly one of schedule and every.",
+      "type": "string"
+    },
+    "timeout": {
+      "default": "10m",
+      "description": "Longest a run may take (minimum 1s, maximum 1d). On expiry the command and its process group are stopped.",
+      "pattern": "^([0-9]+[smhd])+$",
+      "type": "string"
+    },
+    "title": {
+      "description": "Name shown in lists and toasts. Default: the id.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "command"
+  ],
+  "title": "flockr job.toml",
+  "type": "object"
+}

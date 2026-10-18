@@ -217,7 +217,16 @@ fn job_command() -> Command {
             Command::new("run")
                 .about("Run a job now")
                 .arg(job_id())
-                .arg(flag("wait").help("Wait for the run and exit non-zero if it fails")),
+                .arg(flag("wait").help("Wait for the run and exit non-zero if it fails"))
+                .arg(
+                    flag("dry-run")
+                        .help("Run it here without recording anything, notifying or creating decisions, and show the feed and handoff it would produce"),
+                )
+                .arg(
+                    flag("no-exec")
+                        .requires("dry-run")
+                        .help("With --dry-run, do not run anything: render the handoff for a successful run with empty stdout"),
+                ),
         )
         .subcommand(
             Command::new("logs")
@@ -250,6 +259,53 @@ fn job_command() -> Command {
                         .num_args(1..)
                         .help("`every 2h` (or `2h`), or a 5-field cron expression such as `0 9 * * 1-5`"),
                 ),
+        )
+        .subcommand(
+            Command::new("new")
+                .about("Create a starter job in the jobs directory (disabled)")
+                .arg(
+                    Arg::new("id")
+                        .value_name("ID")
+                        .required(true)
+                        .help("Job id; becomes the directory name"),
+                )
+                .arg(
+                    option("template", "TEMPLATE")
+                        .value_parser(["shell", "python", "rust", "workbox"])
+                        .help("Starter to write (default: shell)"),
+                )
+                .arg(option("every", "INTERVAL").help("Run on an interval such as 1h (default 1h)"))
+                .arg(
+                    option("schedule", "CRON")
+                        .conflicts_with("every")
+                        .help("Run on a five-field cron expression such as \"0 9 * * 1-5\""),
+                )
+                .arg(flag("feed").help("Add a feed command that prints a valid feed"))
+                .arg(flag("handoff").help("Add a [handoff] table and a prompt.md")),
+        )
+        .subcommand(
+            Command::new("validate")
+                .about("Check a job file, its command, files and templates")
+                .arg(
+                    Arg::new("target")
+                        .value_name("ID-OR-PATH")
+                        .help("A job id or a path to a job directory or job.toml (default: every job)"),
+                )
+                .arg(flag("run-feed").help("Run each feed command and check its output"))
+                .arg(json_flag()),
+        )
+        .subcommand(
+            Command::new("build")
+                .about("Pre-compile a rust job so its first scheduled run is fast")
+                .arg(job_id()),
+        )
+        .subcommand(
+            Command::new("schema")
+                .about("Print the JSON Schema for job.toml, or for the feed format")
+                .arg(flag("feed").help("Print the feed format schema instead")),
+        )
+        .subcommand(
+            Command::new("skill").about("Print the Claude skill for authoring jobs and feeds"),
         )
         .subcommand(
             Command::new("env")

@@ -8,6 +8,7 @@
 //! it from a single deadline, and runs jobs on named worker threads that
 //! report through `AppEvent::JobRunFinished`.
 
+pub(crate) mod authoring;
 pub(crate) mod cron;
 pub(crate) mod decisions;
 pub(crate) mod definition;

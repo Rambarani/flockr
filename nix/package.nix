@@ -43,6 +43,9 @@ rustPlatform.buildRustPackage {
         ../crates
         ../distribution/install.ps1
         ../docs/next/api/flockr-api.schema.json
+        ../docs/next/api/flockr-job.schema.json
+        ../docs/next/api/flockr-feed.schema.json
+        ../examples/jobs/workbox-sync
         ../src
         ../vendor/libghostty-vt
         ../vendor/libghostty-vt.vendor.json
@@ -51,6 +54,7 @@ rustPlatform.buildRustPackage {
         ../Cargo.lock
         ../Cargo.toml
         ../skills/flockr/SKILL.md
+        ../skills/flockr-jobs/SKILL.md
       ]
     );
   };

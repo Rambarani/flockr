@@ -9,7 +9,7 @@ use crate::api::schema::{
 };
 use crate::jobs::display;
 
-const USAGE: &str = "usage: flockr job <list [--json]|status <id>|run <id> [--wait]|logs <id> [-n LINES]|enable <id>|disable <id>|schedule <id> <every 2h|CRON>|env refresh>";
+const USAGE: &str = "usage: flockr job <list [--json]|status <id>|run <id> [--wait|--dry-run [--no-exec]]|logs <id> [-n LINES]|enable <id>|disable <id>|schedule <id> <every 2h|CRON>|env refresh|new <id> [--template T]|validate [<id>|<path>]|build <id>|schema [--feed]|skill>";
 const WAIT_POLL: Duration = Duration::from_millis(250);
 const ENV_REFRESH_WAIT: Duration = Duration::from_secs(20);
 
@@ -28,6 +28,11 @@ pub(super) fn run_job_command(args: &[String]) -> std::io::Result<i32> {
         "disable" => job_set_enabled(rest, false),
         "schedule" => job_schedule(rest),
         "env" => job_env(rest),
+        "new" => super::job_authoring::job_new(rest),
+        "validate" => super::job_authoring::job_validate(rest),
+        "build" => super::job_authoring::job_build(rest),
+        "schema" => super::job_authoring::job_schema(rest),
+        "skill" => super::job_authoring::job_skill(rest),
         "help" | "--help" | "-h" => {
             eprintln!("{USAGE}");
             Ok(0)
@@ -199,6 +204,16 @@ fn job_status(args: &[String]) -> std::io::Result<i32> {
 }
 
 fn job_run(args: &[String]) -> std::io::Result<i32> {
+    if args.iter().any(|arg| arg == "--dry-run") {
+        return super::job_authoring::job_dry_run(args);
+    }
+    if args.iter().any(|arg| arg == "--no-exec") {
+        eprintln!(
+            "--no-exec only works with --dry-run\n{}",
+            super::job_authoring::DRY_RUN_USAGE
+        );
+        return Ok(2);
+    }
     let (id, wait) = match args {
         [id] if !id.starts_with('-') => (id.as_str(), false),
         [id, flag] | [flag, id] if flag == "--wait" && !id.starts_with('-') => (id.as_str(), true),

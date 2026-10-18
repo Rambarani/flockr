@@ -18,7 +18,7 @@
                 "type": "array"
               },
               "key": {
-                "description": "One visible character, unique per item. Reserved for the overlay: 'j' 'k' 'q' 'g' 'G' 'R' '/' and these key names: enter, return, esc, escape, up, down, left, right, tab, backtab, pageup, pagedown, home, end, backspace, delete, space.",
+                "description": "One visible character, unique per item. Reserved for the overlay: 'j' 'k' 'q' 'g' 'G' 'R' 'S' '/' and these key names: enter, return, esc, escape, up, down, left, right, tab, backtab, pageup, pagedown, home, end, backspace, delete, space.",
                 "maxLength": 1,
                 "minLength": 1,
                 "not": {
@@ -29,6 +29,7 @@
                     "g",
                     "G",
                     "R",
+                    "S",
                     "/"
                   ]
                 },
@@ -53,6 +54,34 @@
           "description": "Short tag such as a ticket key.",
           "maxLength": 40,
           "type": "string"
+        },
+        "body": {
+          "description": "Plain text for the detail pane; line breaks are kept, other control characters are removed. Cut at 8 KiB (bytes of UTF-8).",
+          "type": "string"
+        },
+        "fields": {
+          "description": "Labelled values for the detail pane, shown as a table in order. An entry without a non-empty label and value is dropped.",
+          "items": {
+            "properties": {
+              "label": {
+                "description": "Left column.",
+                "maxLength": 40,
+                "type": "string"
+              },
+              "value": {
+                "description": "Right column; wrapped.",
+                "maxLength": 500,
+                "type": "string"
+              }
+            },
+            "required": [
+              "label",
+              "value"
+            ],
+            "type": "object"
+          },
+          "maxItems": 12,
+          "type": "array"
         },
         "id": {
           "description": "Unique within the feed (a repeated id keeps the first).",

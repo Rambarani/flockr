@@ -12,11 +12,13 @@
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
+use super::jobs_overlay::JobsRequest;
 use super::*;
 use crate::api::schema::{
     FeedGetParams, FeedItemInfo, FeedListParams, FeedRunActionParams, FeedSummary, FeedTarget,
-    Method, ResponseResult,
+    JobListParams, JobRunStatus, JobState, JobTarget, Method, ResponseResult,
 };
+use crate::jobs::display;
 
 /// How often the sidebar section asks the server for changes.
 pub(super) const SIDEBAR_POLL: Duration = Duration::from_secs(5);
@@ -26,6 +28,12 @@ const FAST_POLL: Duration = Duration::from_secs(1);
 const FAST_WINDOW: Duration = Duration::from_secs(30);
 /// The palette's feed entries refresh when the cached list is older.
 const CACHE_MAX_AGE: Duration = Duration::from_secs(10);
+/// How often a sync asks the server whether its run has finished.
+const SYNC_CHECK_GAP: Duration = Duration::from_secs(1);
+/// A finished run's feed refresh gets this long before the sync is called done.
+const SYNC_REFRESH_GRACE: Duration = Duration::from_secs(30);
+/// A sync that never reports back is forgotten after this long.
+const SYNC_GIVE_UP: Duration = Duration::from_secs(10 * 60);
 
 /// Where a refresh or action was asked for, so its answer shows in the right place.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,6 +61,23 @@ pub(super) enum FeedRequest {
     },
 }
 
+/// A "sync now" this client asked for: the feed's job runs, then the server
+/// refreshes the feed.
+#[derive(Debug, Clone)]
+pub(super) struct FeedSync {
+    job_id: String,
+    /// The feed's `fetched_unix_ms` when the sync began; a newer one means
+    /// the refresh after the run landed.
+    baseline_fetched: Option<u64>,
+    /// The server accepted `job.run`.
+    accepted: bool,
+    run_id: Option<u64>,
+    started_at: Instant,
+    last_check: Option<Instant>,
+    /// When the job's run was seen finished successfully.
+    run_finished_at: Option<Instant>,
+}
+
 #[derive(Debug, Default)]
 pub(super) struct FeedItems {
     pub(super) revision: u64,
@@ -76,11 +101,18 @@ pub(super) struct FeedClientState {
     /// An action this client asked for and has not seen the outcome of:
     /// the job and the `finished_unix_ms` it must beat.
     awaiting_action: Option<(String, u64)>,
+    /// A sync now that has not finished.
+    sync: Option<FeedSync>,
 }
 
 impl FeedClientState {
     pub(super) fn summary(&self, job_id: &str) -> Option<&FeedSummary> {
         self.feeds.iter().find(|feed| feed.job_id == job_id)
+    }
+
+    /// A sync now for this job is running.
+    pub(super) fn is_syncing(&self, job_id: &str) -> bool {
+        self.sync.as_ref().is_some_and(|sync| sync.job_id == job_id)
     }
 
     pub(super) fn items_of(&self, job_id: &str) -> &[FeedItemInfo] {
@@ -221,6 +253,7 @@ impl ClientShellState {
             let endpoint = self.active_endpoint_id.clone();
             self.feeds.reset_for(endpoint);
         }
+        self.tick_feed_sync(now, outcome);
         let overlay_open = self.feed_overlay_open();
         let palette_open = matches!(self.overlay, Some(ClientShellOverlay::Palette(_)));
         let sidebar = self.feeds.sidebar_visible && self.config.feeds.enabled;
@@ -251,6 +284,220 @@ impl ClientShellState {
         let was_unsupported = self.feeds.unsupported;
         self.request_feed_list(outcome);
         self.feeds.unsupported != was_unsupported
+    }
+
+    /// Ask whether the sync's run has finished, about once a second.
+    fn tick_feed_sync(&mut self, now: Instant, outcome: &mut ClientShellInput) {
+        let Some(sync) = self.feeds.sync.clone() else {
+            return;
+        };
+        if now.saturating_duration_since(sync.started_at) > SYNC_GIVE_UP {
+            self.feeds.sync = None;
+            return;
+        }
+        let in_flight = self.pending_requests.values().any(|pending| {
+            matches!(
+                pending.kind,
+                PendingEndpointKind::Jobs {
+                    request: JobsRequest::FeedSyncCheck { .. }
+                }
+            )
+        });
+        let due = sync
+            .last_check
+            .is_none_or(|at| now.saturating_duration_since(at) >= SYNC_CHECK_GAP);
+        if !sync.accepted || in_flight || !due || !self.endpoint_is_online(&self.active_endpoint_id)
+        {
+            return;
+        }
+        if let Some(sync) = self.feeds.sync.as_mut() {
+            sync.last_check = Some(now);
+        }
+        self.push_jobs_request(
+            Method::JobList(JobListParams {
+                since_revision: None,
+            }),
+            JobsRequest::FeedSyncCheck {
+                job_id: sync.job_id,
+            },
+            outcome,
+        );
+    }
+
+    /// Run the feed's job now. The server refreshes the feed itself after a
+    /// successful run; the client watches `job.list` until the run is done
+    /// and the new items are in.
+    pub(super) fn sync_feed_now(
+        &mut self,
+        job_id: String,
+        origin: FeedOrigin,
+        outcome: &mut ClientShellInput,
+    ) {
+        if self.feeds.is_syncing(&job_id) {
+            self.show_feed_message(
+                origin,
+                "feed.sync",
+                "Feed already syncing",
+                format!("{job_id}: already syncing"),
+            );
+            return;
+        }
+        let baseline_fetched = self
+            .feeds
+            .summary(&job_id)
+            .and_then(|feed| feed.fetched_unix_ms);
+        self.feeds.sync = Some(FeedSync {
+            job_id: job_id.clone(),
+            baseline_fetched,
+            accepted: false,
+            run_id: None,
+            started_at: Instant::now(),
+            last_check: None,
+            run_finished_at: None,
+        });
+        if let Some(ClientShellOverlay::Feed(overlay)) = self.overlay.as_mut() {
+            overlay.status = Some(format!("syncing {job_id}…"));
+        }
+        let sent = self.push_jobs_request(
+            Method::JobRun(JobTarget {
+                job_id: job_id.clone(),
+            }),
+            JobsRequest::FeedSync { job_id, origin },
+            outcome,
+        );
+        if !sent {
+            self.feeds.sync = None;
+            if let Some(ClientShellOverlay::Feed(overlay)) = self.overlay.as_mut() {
+                overlay.status = Some("this server cannot run jobs".to_owned());
+            }
+        }
+        outcome.repaint = true;
+    }
+
+    /// The answer to `job.run` for a sync.
+    pub(super) fn complete_feed_sync_start(
+        &mut self,
+        job_id: String,
+        origin: FeedOrigin,
+        result: Result<ResponseResult, ClientShellEndpointError>,
+    ) -> bool {
+        match result {
+            Ok(ResponseResult::JobRunRequested {
+                started: true,
+                run_id,
+                ..
+            }) => {
+                if let Some(sync) = self
+                    .feeds
+                    .sync
+                    .as_mut()
+                    .filter(|sync| sync.job_id == job_id)
+                {
+                    sync.accepted = true;
+                    sync.run_id = run_id;
+                }
+                self.feeds.poll_soon(Instant::now());
+            }
+            Ok(ResponseResult::JobRunRequested { reason, .. }) => {
+                self.feeds.sync = None;
+                let text = format!(
+                    "{job_id}: {}",
+                    reason.unwrap_or_else(|| "not started".into())
+                );
+                self.show_feed_message(origin, "feed.sync", "Feed not synced", text);
+            }
+            Ok(_) => self.feeds.sync = None,
+            Err(error) => {
+                self.feeds.sync = None;
+                self.show_feed_message(origin, "feed.sync", "Feed not synced", error.message);
+            }
+        }
+        true
+    }
+
+    /// The answer to a sync's `job.list` check: is the run done, and did the
+    /// feed refresh after it?
+    pub(super) fn complete_feed_sync_check(
+        &mut self,
+        job_id: &str,
+        result: Result<ResponseResult, ClientShellEndpointError>,
+    ) -> bool {
+        let Some(sync) = self.feeds.sync.clone().filter(|sync| sync.job_id == job_id) else {
+            return false;
+        };
+        let Ok(ResponseResult::JobList { jobs, .. }) = result else {
+            return false;
+        };
+        let Some(job) = jobs.iter().find(|job| job.job_id == job_id) else {
+            self.finish_feed_sync(&sync, false, format!("{job_id}: the job is gone"));
+            return true;
+        };
+        let run = job.last_run.as_ref().filter(|run| match sync.run_id {
+            Some(id) => run.run_id >= id && job.state != JobState::Running,
+            None => {
+                job.state != JobState::Running && sync.started_at.elapsed() > Duration::from_secs(2)
+            }
+        });
+        let Some(run) = run else {
+            return false;
+        };
+        if run.status != JobRunStatus::Success {
+            let text = format!(
+                "sync failed: {}: {}",
+                display::status_word(run.status),
+                run.summary
+            );
+            self.finish_feed_sync(&sync, false, text);
+            return true;
+        }
+        let summary = self.feeds.summary(job_id).cloned();
+        let refreshed = summary.as_ref().is_some_and(|feed| {
+            !feed.refreshing
+                && feed.fetched_unix_ms.is_some()
+                && feed.fetched_unix_ms > sync.baseline_fetched
+        });
+        if !job.has_feed {
+            self.finish_feed_sync(&sync, true, format!("ran {job_id}: ok"));
+            return true;
+        }
+        if refreshed {
+            let count = summary.map_or(0, |feed| feed.count);
+            self.finish_feed_sync(&sync, true, format!("synced {job_id}: {count} items"));
+            return true;
+        }
+        let finished_at = sync.run_finished_at.unwrap_or_else(Instant::now);
+        if let Some(sync) = self.feeds.sync.as_mut() {
+            sync.run_finished_at = Some(finished_at);
+        }
+        if finished_at.elapsed() > SYNC_REFRESH_GRACE {
+            self.finish_feed_sync(
+                &sync,
+                false,
+                format!("{job_id}: ran, but the feed did not refresh"),
+            );
+            return true;
+        }
+        if let Some(ClientShellOverlay::Feed(overlay)) = self.overlay.as_mut() {
+            overlay.status = Some(format!("syncing {job_id}: refreshing the feed…"));
+        }
+        true
+    }
+
+    /// End a sync and say how it went: in the overlay's status line, or as
+    /// a notice for a failure when no overlay is open.
+    fn finish_feed_sync(&mut self, sync: &FeedSync, ok: bool, text: String) {
+        self.feeds.sync = None;
+        self.feeds.poll_soon(Instant::now());
+        if let Some(ClientShellOverlay::Feed(overlay)) = self.overlay.as_mut() {
+            overlay.status = Some(text);
+        } else if !ok {
+            self.push_endpoint_notice(
+                ClientEndpointNoticeKind::Rejected,
+                format!("feed.sync:{}", sync.job_id),
+                "Feed sync failed",
+                text,
+            );
+        }
     }
 
     /// Refresh a feed on the server.
@@ -450,7 +697,13 @@ impl ClientShellState {
 
     /// Show a message where the user asked: in the overlay's status line, or
     /// as one notice when no overlay is open.
-    fn show_feed_message(&mut self, origin: FeedOrigin, code: &str, title: &str, text: String) {
+    pub(super) fn show_feed_message(
+        &mut self,
+        origin: FeedOrigin,
+        code: &str,
+        title: &str,
+        text: String,
+    ) {
         if let Some(ClientShellOverlay::Feed(overlay)) = self.overlay.as_mut() {
             overlay.status = Some(text);
         } else if origin == FeedOrigin::Elsewhere || self.overlay.is_none() {

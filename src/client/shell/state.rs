@@ -562,6 +562,8 @@ pub(super) enum ClientContextMenuAction {
     /// Run the item's action at this index.
     FeedRunAction(usize),
     FeedRefresh,
+    /// Run the feed's job now (`job.run`); the feed refreshes after it.
+    FeedSyncNow,
     FeedToggle,
     FeedOpenOverlay,
 }

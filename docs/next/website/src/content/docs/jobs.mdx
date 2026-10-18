@@ -359,6 +359,8 @@ The command prints one JSON object on stdout (at most 4 MiB):
    "subtitle": "jira · mention", "state": "unread", "badge": "NH-1412",
    "url": "https://example.atlassian.net/browse/NH-1412",
    "updated_at": "2026-10-18T08:30:00Z",
+   "body": "Can you look at the redirect?\nIt blocks the release.",
+   "fields": [{"label": "Source", "value": "jira"}, {"label": "Status", "value": "In Progress"}],
    "actions": [
      {"key": "d", "title": "done", "command": ["workbox", "mark", "jira:NH-1412", "done"]}
    ]}
@@ -375,15 +377,17 @@ The command prints one JSON object on stdout (at most 4 MiB):
 | `items[].state` | `unread`, `read` (default), `done`, `warn` or `error`. It sets the dot and the unread count. An unknown state becomes `read`. |
 | `items[].url` | An `http://` or `https://` link. Other schemes are ignored. |
 | `items[].updated_at` | RFC 3339 time, shown as an age in the overlay. |
+| `items[].body` | Optional plain text for the detail pane. Line breaks are kept; it is cut at 8 KiB. |
+| `items[].fields` | Optional list of up to 12 `{"label", "value"}` pairs, shown as a table in the detail pane (labels up to 40 characters, values up to 500). An entry without both is dropped with a note. |
 | `items[].actions` | Up to 8 actions, see [Actions](#actions). |
 
-Unknown fields are ignored, so newer producers keep working. Limits: 500 items (the rest are dropped), 200 characters for `id` and `title`, 300 for `subtitle`, 40 for `badge`, 2048 for `url`. Control characters are removed and line breaks become spaces. A bad item (no `id`) or a bad action is dropped with a note instead of failing the feed; the notes show in `flockr feed show` and in the `diagnostics` of the API.
+Unknown fields are ignored, so newer producers keep working. Limits: 500 items (the rest are dropped), 200 characters for `id` and `title`, 300 for `subtitle`, 40 for `badge`, 2048 for `url`. Control characters are removed and line breaks become spaces (except in `body`). `body` and `fields` were added after the first release of version 1: they are optional, a feed without them stays valid, and an older Flockr ignores them. A bad item (no `id`) or a bad action is dropped with a note instead of failing the feed; the notes show in `flockr feed show` and in the `diagnostics` of the API.
 
 ### Actions
 
 An action is `{"key", "title", "command"}`: a single visible character that triggers it in the overlay, a label, and an argv array.
 
-- `key` cannot be `Enter`, `esc`, the arrow keys, `tab`, `space` or any other named key, nor one of `j`, `k`, `q`, `g`, `G`, `R` and `/`, which the overlay uses. Keys must be unique within an item. An invalid action is dropped with a note.
+- `key` cannot be `Enter`, `esc`, the arrow keys, `tab`, `space` or any other named key, nor one of `j`, `k`, `q`, `g`, `G`, `R`, `S` and `/`, which the overlay uses. Keys must be unique within an item. An invalid action is dropped with a note.
 - Running an action starts its command with the job's environment, plus `FLOCKR_FEED_ITEM_ID` and `FLOCKR_FEED_ACTION_KEY`. It gets at most 60 seconds (or the job's timeout when that is shorter). Then the feed command runs again, so the list shows the result. The refresh also runs when the action fails.
 - Commands stay on the server: clients send only the job, the item id and the key, and the server looks the command up in the stored feed. A feed that changed since the client looked answers `feed_item_not_found` instead of running something else.
 - The outcome (`ok`, or why it failed) is recorded as `last_action` and shown in the overlay's status line, or as a notice when you started the action from the sidebar.
@@ -397,7 +401,7 @@ workbox list --json | flockr feed adapt workbox --title "Today (workbox)"
 workbox list --tab today --json | flockr feed adapt workbox     # only the today tab
 ```
 
-Each workbox item becomes a feed item: `id` is the workbox item id, `badge` its key, `state` is `unread` or `read`, `url` and `updated_at` pass through, and `subtitle` is `<source> · <reason>` followed by ` · <where>` when there is one (underscores in the reason become spaces). The actions are `d` done (`workbox mark <id> done`), `s` seen (`workbox mark <id> seen`) and `t` today, which becomes `untoday` for items already on the today list. `--title` sets the title (default `workbox`) and `--bin` the program the actions run (default `workbox`, resolved on the job's `PATH`). Items without an id are skipped with a warning on stderr; input that is not an array is an error and exits non-zero, so the feed is marked stale instead of emptied.
+Each workbox item becomes a feed item: `id` is the workbox item id, `badge` its key, `state` is `unread` or `read`, `url` and `updated_at` pass through, and `subtitle` is `<source> · <reason>` followed by ` · <where>` when there is one (underscores in the reason become spaces). The detail pane gets `fields` for Source, Reason, Where, Status, From (workbox's actor), Key, Snoozed until and Today (yes or no), leaving out the ones the item does not have, and the snippet as `body`; `updated_at` is shown by the pane itself in local time. The actions are `d` done (`workbox mark <id> done`), `s` seen (`workbox mark <id> seen`) and `t` today, which becomes `untoday` for items already on the today list. `--title` sets the title (default `workbox`) and `--bin` the program the actions run (default `workbox`, resolved on the job's `PATH`). Items without an id are skipped with a warning on stderr; input that is not an array is an error and exits non-zero, so the feed is marked stale instead of emptied.
 
 ### Sidebar section
 
@@ -413,7 +417,7 @@ Below the agent list, each feed gets a collapsible section, once the feed has be
 ```
 
 - The header shows the feed title and its unread count (a dimmed total in parentheses when nothing is unread). `!` marks a stale feed, `…` a refresh in progress.
-- Rows show a state dot, the badge and the title. **Click a row** to open its link; an item without a link opens its action menu. **Right-click a row** for **Open link**, one entry per action, **Refresh feed**, **Open feed** and **Collapse**.
+- Rows show a state dot, the badge and the title. **Click a row** to open its link; an item without a link opens its action menu. **Right-click a row** for **Open link**, one entry per action, **Refresh feed**, **Sync now (run job)**, **Open feed** and **Collapse**; the header's menu has the same last four.
 - **Click the header** to collapse or expand the section. The choice is remembered with the other sidebar state (key `feed:<job id>`).
 - **Click `+N more`** to open the Feed overlay on that feed.
 - The section takes rows from the bottom of the sidebar's lower half and never squeezes the agent list below its minimum height: on a short terminal it shrinks to headers, or disappears. The agent list keeps its position, clicks and keys either way.
@@ -430,16 +434,21 @@ The section is client presentation only: it draws data the server already stores
 
 ### Feed overlay
 
-`prefix+f` (`keys.feed`) or **feed** in the command palette opens the full list. With several feeds, a row of tabs at the top lets you pick one. **feed: &lt;title&gt;** in the palette opens a specific feed.
+`prefix+f` (`keys.feed`) or **feed** in the command palette opens a master-detail view. With several feeds, a row of tabs at the top lets you pick one. **feed: &lt;title&gt;** in the palette opens a specific feed.
+
+The list is on the left (state dot, badge, title, age) and the detail pane on the right follows the selection, whether you move with the keys, the wheel or a click. The pane shows the title, the badge and state, the subtitle, the updated time in local time with its age, the link, the item's `fields` as a table and its `body`, and the item's action keys on its last row. The panel needs 100 columns to go side by side; narrower panels stack the pane under the list, and a very short panel shows the list alone until you zoom the pane with `space`.
 
 | Key | Action |
 | --- | --- |
 | `↑`/`↓`, `j`/`k`, `g`/`G` | Move |
 | `tab`, `shift+tab`, `←`/`→` | Switch feed |
+| `ctrl+d`, `ctrl+u` | Scroll the detail pane (the wheel over the pane does too) |
+| `space` | Zoom the detail pane over the whole body and back (`esc` also leaves the zoom) |
 | `enter` | Open the item's link |
 | `/` | Filter by title, subtitle, badge or id (`enter` keeps it, `esc` clears it) |
-| item action keys | Run that action on the selected item (the selected item's actions are listed under the list) |
-| `R` | Refresh the feed |
+| item action keys | Run that action on the selected item (the selected item's actions are listed at the bottom of the pane) |
+| `R` | Refresh the feed (run the feed command again) |
+| `S` | Sync now: run the feed's job, then the feed refreshes when the run succeeds. The header shows `syncing…`, and the status line the result |
 | `esc` or `q` | Clear the filter, then close |
 
 The overlay polls every 2 seconds while it is open. Clicking a row selects it, and clicking the selected row opens its link.
@@ -486,12 +495,14 @@ flockr feed adapt workbox [--title T] [--bin PROGRAM]   # stdin: workbox JSON, s
 | Key | Action |
 | --- | --- |
 | `↑`/`↓`, `j`/`k`, `g`/`G` | Move |
-| `r` | Run the selected job now |
+| `r` | Run the selected job now (also the `▶ run` button at the end of each row, which a click presses) |
 | `l` or `enter` | Show the last run's output (scroll with `j`/`k`, `pgup`/`pgdn`, `g`/`G`; `esc` goes back) |
 | `e` | Enable or disable the job |
 | `t` | Change the schedule ([how](#change-when-a-job-runs)) |
 | `tab` | Switch to the [Decisions](#decisions) list |
 | `esc` or `q` | Close |
+
+The footer lists the keys (`r run now · l logs · e enable · t schedule · tab decisions · esc`). A running job shows a turning `◐ run` in place of `▶ run`, its elapsed time in the `next` column and, once the run is over, its result in the status line; the list is asked for every second while a job runs.
 
 The title shows how many decisions are waiting, `[jobs]  decisions (2)`, and a job with decisions pending has a `●N` after its name. The command palette also lists **run job &lt;id&gt;** for every job and **decisions (N)**. Servers without job support show a short explanation instead, and a server without the decision methods only loses the Decisions tab and `t`.
 

@@ -1,7 +1,11 @@
-//! Feed overlay: the full list of a job feed, with a picker when there are
-//! several feeds. Enter opens the selected item's link, the item's action
-//! keys run its actions, `/` filters, `R` refreshes the feed, Tab or the
-//! arrow keys switch feeds, and Esc closes.
+//! Feed overlay: a master-detail view of a job feed, with a picker when there
+//! are several feeds. The list is on the left (stacked on top when the panel
+//! is narrow) and the detail pane follows the selection: title, state, link,
+//! the item's fields and body. Enter opens the selected item's link, the
+//! item's action keys run its actions, `/` filters, `R` refreshes the feed,
+//! `S` runs the feed's job now, Ctrl-D and Ctrl-U (or the wheel over the
+//! pane) scroll the detail, Space zooms the detail, Tab or the arrow keys
+//! switch feeds, and Esc closes.
 //!
 //! The data is the client's cached copy of the server's `feed.*` answers (see
 //! `feed_state`); while the overlay is open it is polled every two seconds
@@ -23,8 +27,8 @@ const MIN_PANEL_WIDTH: u16 = 30;
 const MIN_PANEL_HEIGHT: u16 = 9;
 /// Rows above the list: tabs or title, info, filter.
 const HEADER_ROWS: u16 = 3;
-/// Rows below the list: selected item detail, status, hint.
-const FOOTER_ROWS: u16 = 3;
+/// Rows below the body: status, hint.
+const FOOTER_ROWS: u16 = 2;
 const MAX_BADGE_WIDTH: usize = 14;
 const AGE_WIDTH: usize = 8;
 
@@ -38,6 +42,11 @@ pub(super) struct ClientFeedOverlay {
     pub(super) filter: String,
     pub(super) filtering: bool,
     pub(super) status: Option<String>,
+    /// First visible line of the detail pane; it follows the selection, so a
+    /// new selection starts at the top.
+    pub(super) detail_scroll: usize,
+    /// The detail pane takes the whole body (toggled with space).
+    pub(super) zoom: bool,
 }
 
 #[derive(Default)]
@@ -47,6 +56,10 @@ pub(super) struct FeedOverlayHits {
     pub(super) rows: Vec<(Rect, usize)>,
     pub(super) viewport_rows: usize,
     pub(super) offset: usize,
+    /// The detail pane (empty when it is not drawn) and how far it can scroll.
+    pub(super) detail: Rect,
+    pub(super) detail_max_scroll: usize,
+    pub(super) detail_viewport: usize,
 }
 
 pub(super) struct FeedRender {
@@ -55,6 +68,9 @@ pub(super) struct FeedRender {
     pub(super) rows: Vec<(Rect, usize)>,
     pub(super) viewport_rows: usize,
     pub(super) offset: usize,
+    pub(super) detail: Rect,
+    pub(super) detail_max_scroll: usize,
+    pub(super) detail_viewport: usize,
 }
 
 fn matches_filter(item: &FeedItemInfo, filter: &str) -> bool {
@@ -105,6 +121,8 @@ impl ClientShellState {
             filter: String::new(),
             filtering: false,
             status: None,
+            detail_scroll: 0,
+            zoom: false,
         }));
         // Fetch right away, then at the overlay's own pace.
         self.feeds.poll_soon(std::time::Instant::now());
@@ -160,6 +178,25 @@ impl ClientShellState {
             .map(|item| (*item).clone())
     }
 
+    /// Select an item by id; a different item shows from the top of its detail.
+    fn set_feed_selection(&mut self, id: String) {
+        if let Some(overlay) = self.feed_overlay_mut() {
+            if overlay.selected.as_ref() != Some(&id) {
+                overlay.detail_scroll = 0;
+            }
+            overlay.selected = Some(id);
+        }
+    }
+
+    /// Scroll the detail pane by `delta` lines, within what the last frame drew.
+    fn scroll_feed_detail(&mut self, delta: isize) {
+        let max = self.hits.feed_overlay.detail_max_scroll;
+        if let Some(overlay) = self.feed_overlay_mut() {
+            let current = overlay.detail_scroll.min(max) as isize;
+            overlay.detail_scroll = (current + delta).clamp(0, max as isize) as usize;
+        }
+    }
+
     fn move_feed_selection(&mut self, delta: isize) {
         let viewport = self.hits.feed_overlay.viewport_rows.max(1);
         let offset = self.hits.feed_overlay.offset;
@@ -177,8 +214,8 @@ impl ClientShellState {
         } else {
             offset
         };
+        self.set_feed_selection(id);
         if let Some(overlay) = self.feed_overlay_mut() {
-            overlay.selected = Some(id);
             overlay.scroll = scroll;
         }
     }
@@ -207,6 +244,7 @@ impl ClientShellState {
             overlay.job_id = Some(job_id);
             overlay.selected = None;
             overlay.scroll = 0;
+            overlay.detail_scroll = 0;
             overlay.filter.clear();
             overlay.filtering = false;
             overlay.status = None;
@@ -248,6 +286,14 @@ impl ClientShellState {
         true
     }
 
+    /// `S`: run the feed's job now; the server refreshes the feed when the
+    /// run succeeds.
+    fn sync_current_feed(&mut self, outcome: &mut ClientShellInput) {
+        if let Some(job_id) = self.current_feed().map(|feed| feed.job_id.clone()) {
+            self.sync_feed_now(job_id, FeedOrigin::Overlay, outcome);
+        }
+    }
+
     fn refresh_current_feed(&mut self, outcome: &mut ClientShellInput) {
         if let Some(job_id) = self.current_feed().map(|feed| feed.job_id.clone()) {
             self.refresh_feed(job_id, FeedOrigin::Overlay, outcome);
@@ -260,6 +306,9 @@ impl ClientShellState {
             .first()
             .map(|item| item.id.clone());
         if let Some(overlay) = self.feed_overlay_mut() {
+            if overlay.selected != first {
+                overlay.detail_scroll = 0;
+            }
             overlay.selected = first;
             overlay.scroll = 0;
         }
@@ -281,6 +330,7 @@ impl ClientShellState {
         let plain = modifiers.is_empty();
         let ctrl = modifiers == KeyModifiers::CONTROL;
         let page = self.hits.feed_overlay.viewport_rows.max(1) as isize;
+        let half_detail = (self.hits.feed_overlay.detail_viewport / 2).max(1) as isize;
         outcome.repaint = true;
         let typed = {
             let shifted_without_evidence = key.modifiers.contains(KeyModifiers::SHIFT)
@@ -305,6 +355,20 @@ impl ClientShellState {
         if let Some(delta) = moved {
             self.move_feed_selection(delta);
             return true;
+        }
+        // The detail pane scrolls on its own, also while filtering.
+        if ctrl {
+            match code {
+                KeyCode::Char('d') => {
+                    self.scroll_feed_detail(half_detail);
+                    return true;
+                }
+                KeyCode::Char('u') => {
+                    self.scroll_feed_detail(-half_detail);
+                    return true;
+                }
+                _ => {}
+            }
         }
         if filtering {
             match code {
@@ -340,10 +404,15 @@ impl ClientShellState {
         }
         match code {
             KeyCode::Esc => {
+                let zoomed = self.feed_overlay().is_some_and(|overlay| overlay.zoom);
                 let has_filter = self
                     .feed_overlay()
                     .is_some_and(|overlay| !overlay.filter.is_empty());
-                if has_filter {
+                if zoomed {
+                    if let Some(overlay) = self.feed_overlay_mut() {
+                        overlay.zoom = false;
+                    }
+                } else if has_filter {
                     if let Some(overlay) = self.feed_overlay_mut() {
                         overlay.filter.clear();
                     }
@@ -353,6 +422,11 @@ impl ClientShellState {
                 }
             }
             KeyCode::Enter if plain => self.open_selected_feed_item(outcome),
+            KeyCode::Char(' ') if plain || modifiers == KeyModifiers::SHIFT => {
+                if let Some(overlay) = self.feed_overlay_mut() {
+                    overlay.zoom = !overlay.zoom;
+                }
+            }
             KeyCode::Tab if plain => self.switch_feed(1, outcome),
             KeyCode::BackTab => self.switch_feed(-1, outcome),
             KeyCode::Tab if modifiers == KeyModifiers::SHIFT => self.switch_feed(-1, outcome),
@@ -366,6 +440,7 @@ impl ClientShellState {
                     }
                 }
                 Some('R') => self.refresh_current_feed(outcome),
+                Some('S') => self.sync_current_feed(outcome),
                 Some('j') => self.move_feed_selection(1),
                 Some('k') => self.move_feed_selection(-1),
                 Some('g') => self.move_feed_selection(isize::MIN / 2),
@@ -423,9 +498,7 @@ impl ClientShellState {
                                 .get(self.selected_feed_index(&items))
                                 .map(|item| item.id.clone());
                     if let Some(id) = clicked {
-                        if let Some(overlay) = self.feed_overlay_mut() {
-                            overlay.selected = Some(id);
-                        }
+                        self.set_feed_selection(id);
                         // A second click on the selected row opens it.
                         if already {
                             self.open_selected_feed_item(outcome);
@@ -435,11 +508,19 @@ impl ClientShellState {
                 outcome.repaint = true;
             }
             MouseEventKind::ScrollUp => {
-                self.move_feed_selection(-3);
+                if contains(self.hits.feed_overlay.detail, point) {
+                    self.scroll_feed_detail(-3);
+                } else {
+                    self.move_feed_selection(-3);
+                }
                 outcome.repaint = true;
             }
             MouseEventKind::ScrollDown => {
-                self.move_feed_selection(3);
+                if contains(self.hits.feed_overlay.detail, point) {
+                    self.scroll_feed_detail(3);
+                } else {
+                    self.move_feed_selection(3);
+                }
                 outcome.repaint = true;
             }
             _ => {}
@@ -456,6 +537,80 @@ impl ClientShellState {
             crate::jobs::now_unix_ms(),
             &self.config,
         )
+    }
+}
+
+/// Narrowest panel (inside the border) that puts the list and the detail
+/// side by side; narrower panels stack them.
+const WIDE_MIN_WIDTH: u16 = 100;
+/// Shortest body that can stack a list over a detail pane.
+const STACK_MIN_HEIGHT: u16 = 10;
+/// Share of the width the list gets when side by side.
+const LIST_PERCENT: u16 = 45;
+/// The list is this share of the height when stacked.
+const STACK_LIST_PERCENT: u16 = 40;
+/// Narrowest list that still has room for the age column.
+const AGE_MIN_LIST_WIDTH: u16 = 36;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Divider {
+    /// A vertical rule at this column.
+    Vertical(u16),
+    /// A horizontal rule at this row.
+    Horizontal(u16),
+}
+
+/// Where the list and the detail pane go inside the body area.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct BodyLayout {
+    list: Option<Rect>,
+    detail: Option<Rect>,
+    divider: Option<Divider>,
+}
+
+/// Side by side when the panel is wide, stacked when it is narrow, the
+/// detail alone when zoomed, and the list alone when there is no room for
+/// both.
+fn split_body(body: Rect, zoom: bool, panel_width: u16) -> BodyLayout {
+    if zoom {
+        return BodyLayout {
+            list: None,
+            detail: Some(body),
+            divider: None,
+        };
+    }
+    if panel_width >= WIDE_MIN_WIDTH {
+        let list_width = body.width * LIST_PERCENT / 100;
+        let detail_x = body.x + list_width + 2;
+        return BodyLayout {
+            list: Some(Rect::new(body.x, body.y, list_width, body.height)),
+            detail: Some(Rect::new(
+                detail_x,
+                body.y,
+                body.right().saturating_sub(detail_x),
+                body.height,
+            )),
+            divider: Some(Divider::Vertical(body.x + list_width)),
+        };
+    }
+    if body.height >= STACK_MIN_HEIGHT {
+        let list_height = (body.height * STACK_LIST_PERCENT / 100).max(3);
+        let detail_y = body.y + list_height + 1;
+        return BodyLayout {
+            list: Some(Rect::new(body.x, body.y, body.width, list_height)),
+            detail: Some(Rect::new(
+                body.x,
+                detail_y,
+                body.width,
+                body.bottom().saturating_sub(detail_y),
+            )),
+            divider: Some(Divider::Horizontal(body.y + list_height)),
+        };
+    }
+    BodyLayout {
+        list: Some(body),
+        detail: None,
+        divider: None,
     }
 }
 
@@ -478,6 +633,9 @@ fn render_feed(
         rows: Vec::new(),
         viewport_rows: 1,
         offset: 0,
+        detail: Rect::default(),
+        detail_max_scroll: 0,
+        detail_viewport: 1,
     };
     if inner.height < HEADER_ROWS + FOOTER_ROWS + 1 || inner.width < 20 {
         return Some(empty);
@@ -486,7 +644,6 @@ fn render_feed(
     let x = inner.x + 1;
     let hint_y = inner.bottom() - 1;
     let status_y = inner.bottom() - 2;
-    let detail_y = inner.bottom() - 3;
     let fit = |text: &str, width: u16| crate::ui::truncate_end(text, usize::from(width));
     let feeds = &state.feeds.feeds;
     let current = state.current_feed();
@@ -546,7 +703,9 @@ fn render_feed(
             format!("{} unread", feed.unread),
         ];
         let mut style = dim_style(palette);
-        if feed.refreshing {
+        if state.feeds.is_syncing(&feed.job_id) {
+            parts.push("syncing…".to_owned());
+        } else if feed.refreshing {
             parts.push("refreshing…".to_owned());
         } else if let Some(error) = &feed.error {
             let kind = if feed.stale { "stale" } else { "failed" };
@@ -582,126 +741,154 @@ fn render_feed(
     }
 
     let list_top = inner.y + HEADER_ROWS;
-    let list_height = detail_y.saturating_sub(list_top);
-    let viewport_rows = usize::from(list_height).max(1);
+    let body = Rect::new(x, list_top, text_width, status_y.saturating_sub(list_top));
+    let layout = split_body(body, overlay.zoom, inner.width);
     let items = state.visible_feed_items();
     let selected_index = state.selected_feed_index(&items);
-    let max_scroll = items.len().saturating_sub(viewport_rows);
-    let offset = overlay.scroll.min(max_scroll);
-    let badge_width = items
-        .iter()
-        .filter_map(|item| item.badge.as_deref())
-        .map(|badge| usize::from(display_width(badge)))
-        .max()
-        .unwrap_or(0)
-        .min(MAX_BADGE_WIDTH);
-    let show_age =
-        items.iter().any(|item| item.updated_at.is_some()) && usize::from(text_width) >= 50;
-    let mut rows = Vec::new();
-    for (row, (index, item)) in items
-        .iter()
-        .enumerate()
-        .skip(offset)
-        .take(viewport_rows)
-        .enumerate()
-    {
-        let y = list_top + row as u16;
-        let rect = Rect::new(x, y, text_width, 1);
-        let is_selected = index == selected_index;
-        let plain = if is_selected {
-            selected_style(palette)
-        } else {
-            base_style(palette)
-        };
-        let dim = if is_selected {
-            selected_style(palette)
-        } else {
-            dim_style(palette)
-        };
-        buffer.set_style(rect, plain);
-        let (marker, color) = dot(item.state, palette);
-        let mut cursor_x = rect.x;
-        let right_limit = rect.right();
-        let age = show_age.then(|| age_text(item, now_ms)).flatten();
-        let age_room = if show_age { AGE_WIDTH + 1 } else { 0 };
-        let mut put = |text: &str, style: Style, cursor_x: &mut u16| {
-            let room = right_limit
-                .saturating_sub(*cursor_x)
-                .saturating_sub(age_room as u16);
-            put_text(buffer, *cursor_x, y, room, text, style);
-            *cursor_x = cursor_x.saturating_add(display_width(text).min(room));
-        };
-        put(
-            marker,
-            if is_selected {
-                selected_style(palette)
-            } else {
-                Style::default().fg(color).bg(palette.panel_bg)
-            },
-            &mut cursor_x,
-        );
-        put(" ", plain, &mut cursor_x);
-        if badge_width > 0 {
-            let badge = item.badge.as_deref().unwrap_or("");
-            let badge = crate::ui::truncate_end(badge, badge_width);
-            let pad = badge_width.saturating_sub(usize::from(display_width(&badge)));
-            put(&format!("{badge}{}", " ".repeat(pad)), dim, &mut cursor_x);
-            put(" ", plain, &mut cursor_x);
-        }
-        let title_style = if item.state == FeedItemState::Unread && !is_selected {
-            base_style(palette).add_modifier(Modifier::BOLD)
-        } else {
-            plain
-        };
-        let room = usize::from(
-            right_limit
-                .saturating_sub(cursor_x)
-                .saturating_sub(age_room as u16),
-        );
-        let title = crate::ui::truncate_end(&item.title, room);
-        let title_width = usize::from(display_width(&title));
-        put(&title, title_style, &mut cursor_x);
-        if let Some(subtitle) = &item.subtitle {
-            let left = room.saturating_sub(title_width);
-            if left > 6 {
-                put(
-                    &format!("  {}", crate::ui::truncate_end(subtitle, left - 2)),
-                    dim,
-                    &mut cursor_x,
-                );
+    let empty_message = if state.feeds.unsupported {
+        "This server does not support feeds yet. Update and restart it."
+    } else if feeds.is_empty() {
+        "No feeds. Add a feed table to a job's job.toml (see the Jobs docs)."
+    } else if !overlay.filter.is_empty() {
+        "No items match the filter."
+    } else if current.is_some_and(|feed| feed.error.is_some() && !feed.loaded) {
+        "The feed could not be read yet; see the line above."
+    } else if current.is_some_and(|feed| feed.count > 0) {
+        "loading…"
+    } else {
+        "Nothing here."
+    };
+
+    // The dividing rule.
+    match layout.divider {
+        Some(Divider::Vertical(rule_x)) => {
+            for y in body.y..body.bottom() {
+                put_text(buffer, rule_x, y, 1, "│", dim_style(palette));
             }
         }
-        if let Some(age) = age {
-            let age = crate::ui::truncate_end(&age, AGE_WIDTH);
-            let age_x = rect.right().saturating_sub(display_width(&age));
-            put_text(buffer, age_x, y, display_width(&age), &age, dim);
+        Some(Divider::Horizontal(rule_y)) => {
+            put_text(
+                buffer,
+                body.x,
+                rule_y,
+                body.width,
+                &"─".repeat(usize::from(body.width)),
+                dim_style(palette),
+            );
         }
-        rows.push((rect, index));
+        None => {}
     }
-    if items.is_empty() {
-        let message = if state.feeds.unsupported {
-            "This server does not support feeds yet. Update and restart it."
-        } else if feeds.is_empty() {
-            "No feeds. Add a feed table to a job's job.toml (see the Jobs docs)."
-        } else if !overlay.filter.is_empty() {
-            "No items match the filter."
-        } else if current.is_some_and(|feed| feed.error.is_some() && !feed.loaded) {
-            "The feed could not be read yet; see the line above."
-        } else if current.is_some_and(|feed| feed.count > 0) {
-            "loading…"
-        } else {
-            "Nothing here."
-        };
-        put_text(
-            buffer,
-            x,
-            list_top,
-            text_width,
-            &fit(message, text_width),
-            dim_style(palette),
-        );
+
+    // The list. Beside a detail pane it is compact: dot, badge, title, age.
+    let mut rows = Vec::new();
+    let mut viewport_rows = state.hits.feed_overlay.viewport_rows.max(1);
+    let mut offset = overlay.scroll;
+    if let Some(list) = layout.list {
+        viewport_rows = usize::from(list.height).max(1);
+        let max_scroll = items.len().saturating_sub(viewport_rows);
+        offset = overlay.scroll.min(max_scroll);
+        let compact = layout.detail.is_some();
+        let badge_width = items
+            .iter()
+            .filter_map(|item| item.badge.as_deref())
+            .map(|badge| usize::from(display_width(badge)))
+            .max()
+            .unwrap_or(0)
+            .min(MAX_BADGE_WIDTH);
+        let show_age = items.iter().any(|item| item.updated_at.is_some())
+            && list.width >= if compact { AGE_MIN_LIST_WIDTH } else { 50 };
+        for (row, (index, item)) in items
+            .iter()
+            .enumerate()
+            .skip(offset)
+            .take(viewport_rows)
+            .enumerate()
+        {
+            let y = list.y + row as u16;
+            let rect = Rect::new(list.x, y, list.width, 1);
+            let is_selected = index == selected_index;
+            let plain = if is_selected {
+                selected_style(palette)
+            } else {
+                base_style(palette)
+            };
+            let dim = if is_selected {
+                selected_style(palette)
+            } else {
+                dim_style(palette)
+            };
+            buffer.set_style(rect, plain);
+            let (marker, color) = dot(item.state, palette);
+            let mut cursor_x = rect.x;
+            let right_limit = rect.right();
+            let age = show_age.then(|| age_text(item, now_ms)).flatten();
+            let age_room = if show_age { AGE_WIDTH + 1 } else { 0 };
+            let mut put = |text: &str, style: Style, cursor_x: &mut u16| {
+                let room = right_limit
+                    .saturating_sub(*cursor_x)
+                    .saturating_sub(age_room as u16);
+                put_text(buffer, *cursor_x, y, room, text, style);
+                *cursor_x = cursor_x.saturating_add(display_width(text).min(room));
+            };
+            put(
+                marker,
+                if is_selected {
+                    selected_style(palette)
+                } else {
+                    Style::default().fg(color).bg(palette.panel_bg)
+                },
+                &mut cursor_x,
+            );
+            put(" ", plain, &mut cursor_x);
+            if badge_width > 0 {
+                let badge = item.badge.as_deref().unwrap_or("");
+                let badge = crate::ui::truncate_end(badge, badge_width);
+                let pad = badge_width.saturating_sub(usize::from(display_width(&badge)));
+                put(&format!("{badge}{}", " ".repeat(pad)), dim, &mut cursor_x);
+                put(" ", plain, &mut cursor_x);
+            }
+            let title_style = if item.state == FeedItemState::Unread && !is_selected {
+                base_style(palette).add_modifier(Modifier::BOLD)
+            } else {
+                plain
+            };
+            let room = usize::from(
+                right_limit
+                    .saturating_sub(cursor_x)
+                    .saturating_sub(age_room as u16),
+            );
+            let title = crate::ui::truncate_end(&item.title, room);
+            let title_width = usize::from(display_width(&title));
+            put(&title, title_style, &mut cursor_x);
+            if let (false, Some(subtitle)) = (compact, &item.subtitle) {
+                let left = room.saturating_sub(title_width);
+                if left > 6 {
+                    put(
+                        &format!("  {}", crate::ui::truncate_end(subtitle, left - 2)),
+                        dim,
+                        &mut cursor_x,
+                    );
+                }
+            }
+            if let Some(age) = age {
+                let age = crate::ui::truncate_end(&age, AGE_WIDTH);
+                let age_x = rect.right().saturating_sub(display_width(&age));
+                put_text(buffer, age_x, y, display_width(&age), &age, dim);
+            }
+            rows.push((rect, index));
+        }
+        if items.is_empty() {
+            put_text(
+                buffer,
+                list.x,
+                list.y,
+                list.width,
+                &fit(empty_message, list.width),
+                dim_style(palette),
+            );
+        }
     }
-    if items.len() > viewport_rows {
+    if layout.list.is_some() && items.len() > viewport_rows {
         let position = format!(
             "{}-{} / {}",
             offset + 1,
@@ -719,28 +906,63 @@ fn render_feed(
         );
     }
 
-    // The selected item's actions.
-    if let Some(item) = items.get(selected_index) {
-        let mut cursor_x = x;
-        let mut put = |text: &str, style: Style| {
-            let room = inner.right().saturating_sub(1).saturating_sub(cursor_x);
-            put_text(buffer, cursor_x, detail_y, room, text, style);
-            cursor_x = cursor_x.saturating_add(display_width(text).min(room));
-        };
-        if item.actions.is_empty() {
-            let text = item
-                .url
-                .clone()
-                .or_else(|| item.subtitle.clone())
-                .unwrap_or_default();
-            put(&fit(&text, text_width), dim_style(palette));
-        } else {
+    // The detail pane: the selected item scrolls above a pinned row of key hints.
+    let mut detail_rect = Rect::default();
+    let mut detail_max_scroll = 0;
+    let mut detail_viewport = 1;
+    if let Some(detail) = layout
+        .detail
+        .filter(|rect| rect.width > 0 && rect.height > 0)
+    {
+        detail_rect = detail;
+        let pinned_y = detail.bottom() - 1;
+        let content = Rect::new(
+            detail.x,
+            detail.y,
+            detail.width,
+            detail.height.saturating_sub(1),
+        );
+        detail_viewport = usize::from(content.height).max(1);
+        if let Some(item) = items.get(selected_index) {
+            let lines =
+                super::feed_detail::build_detail(item, usize::from(content.width), now_ms, palette);
+            detail_max_scroll = lines.len().saturating_sub(detail_viewport);
+            let scroll = overlay.detail_scroll.min(detail_max_scroll);
+            super::feed_detail::draw_lines(buffer, content, &lines, scroll);
+            let mut cursor_x = detail.x;
+            let mut put = |text: &str, style: Style| {
+                let room = detail.right().saturating_sub(cursor_x);
+                put_text(buffer, cursor_x, pinned_y, room, text, style);
+                cursor_x = cursor_x.saturating_add(display_width(text).min(room));
+            };
+            if item.url.is_some() {
+                put("enter", key_style(palette));
+                put(" open   ", dim_style(palette));
+            }
             for action in &item.actions {
                 put(&action.key, key_style(palette));
                 put(&format!(" {}   ", action.title), dim_style(palette));
             }
+            if detail_max_scroll > 0 {
+                let more = format!("{}/{}", scroll + 1, detail_max_scroll + 1);
+                let width = display_width(&more);
+                let more_x = detail.right().saturating_sub(width);
+                if more_x > cursor_x {
+                    put_text(buffer, more_x, pinned_y, width, &more, dim_style(palette));
+                }
+            }
+        } else if layout.list.is_none() {
+            put_text(
+                buffer,
+                detail.x,
+                detail.y,
+                detail.width,
+                &fit(empty_message, detail.width),
+                dim_style(palette),
+            );
         }
     }
+
     if let Some(status) = &overlay.status {
         put_text(
             buffer,
@@ -759,17 +981,33 @@ fn render_feed(
             "type to filter   enter keep   esc clear",
             "enter keep   esc clear",
         ]
+    } else if overlay.zoom {
+        &[
+            "↑/↓ j/k item   ctrl-d/u scroll   enter open   S sync   R refresh   space list   esc back",
+            "j/k item   ctrl-d/u scroll   space list   esc back",
+            "space list   esc back",
+        ]
     } else {
         &[
+            "j/k move   ctrl-d/u scroll   enter open   / filter   S sync   R refresh   tab feeds   space zoom   esc close",
+            "j/k move   ctrl-d/u scroll   enter open   / filter   S sync   R refresh   esc close",
             "↑/↓ j/k move   enter open   / filter   R refresh   tab feeds   esc close",
             "enter open   / filter   R refresh   esc close",
             "enter open   R refresh   esc close",
             "esc close",
         ]
     };
+    // Leave room for the "a-b / n" position at the right when it is drawn.
+    let hint_room = usize::from(text_width).saturating_sub(
+        if layout.list.is_some() && items.len() > viewport_rows {
+            16
+        } else {
+            0
+        },
+    );
     let hint = hint
         .iter()
-        .find(|hint| hint.chars().count() <= usize::from(text_width))
+        .find(|hint| hint.chars().count() <= hint_room)
         .copied()
         .unwrap_or("");
     put_text(buffer, x, hint_y, text_width, hint, dim_style(palette));
@@ -779,5 +1017,8 @@ fn render_feed(
         rows,
         viewport_rows,
         offset,
+        detail: detail_rect,
+        detail_max_scroll,
+        detail_viewport,
     })
 }

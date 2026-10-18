@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use super::format::{ItemRecord, ParsedFeed};
 use crate::api::schema::{
-    FeedActionInfo, FeedActionResult, FeedItemInfo, FeedItemState, FeedSummary,
+    FeedActionInfo, FeedActionResult, FeedField, FeedItemInfo, FeedItemState, FeedSummary,
 };
 
 const STORE_VERSION: u32 = 1;
@@ -353,6 +353,15 @@ impl FeedManager {
                 badge: item.badge.clone(),
                 url: item.url.clone(),
                 updated_at: item.updated_at.clone(),
+                body: item.body.clone(),
+                fields: item
+                    .fields
+                    .iter()
+                    .map(|field| FeedField {
+                        label: field.label.clone(),
+                        value: field.value.clone(),
+                    })
+                    .collect(),
                 actions: item
                     .actions
                     .iter()

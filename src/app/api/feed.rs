@@ -498,6 +498,28 @@ mod tests {
     }
 
     #[test]
+    fn feed_get_carries_the_body_and_fields_and_omits_them_when_absent() {
+        const DETAILED: &str = r#"{"version":1,"items":[{"id":"a","title":"A","body":"hello\nworld","fields":[{"label":"Source","value":"jira"}]},{"id":"b","title":"B"}]}"#;
+        let mut fx = Fixture::new("detail_fields");
+        fx.write_job("sync", &feed_job(&format!("printf '%s' '{DETAILED}'")));
+        fx.ok(Method::FeedRefresh(target("sync")));
+        fx.wait_for_feed("sync");
+        let ResponseResult::FeedDetail { items, .. } = fx.ok(Method::FeedGet(FeedGetParams {
+            job_id: "sync".into(),
+            since_revision: None,
+            limit: None,
+        })) else {
+            panic!("expected detail");
+        };
+        assert_eq!(items[0].body.as_deref(), Some("hello\nworld"));
+        assert_eq!(items[0].fields[0].label, "Source");
+        let plain = serde_json::to_value(&items[1]).unwrap();
+        assert!(plain.get("body").is_none() && plain.get("fields").is_none());
+        let rich = serde_json::to_value(&items[0]).unwrap();
+        assert_eq!(rich["fields"][0]["value"], "jira");
+    }
+
+    #[test]
     fn refresh_reads_the_feed_and_since_revision_answers_unchanged() {
         let mut fx = Fixture::new("refresh");
         fx.write_job("sync", &feed_job(&format!("printf '%s' '{FEED}'")));

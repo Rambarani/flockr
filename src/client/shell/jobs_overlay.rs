@@ -38,6 +38,11 @@ const CACHE_MAX_AGE: Duration = Duration::from_secs(10);
 const LOG_LINES: u32 = 1_000;
 const MIN_PANEL_WIDTH: u16 = 30;
 const MIN_PANEL_HEIGHT: u16 = 6;
+/// Width of the per-row "▶ run" affordance (the panel needs room for it).
+const RUN_CELL_WIDTH: u16 = 6;
+const RUN_CELL_MIN_TABLE: u16 = 44;
+/// While a job runs the list is asked for every second, not every two.
+const RUNNING_POLL_GAP: Duration = Duration::from_secs(1);
 
 /// What a pending `job.*` request was for.
 #[derive(Debug, Clone)]
@@ -49,6 +54,15 @@ pub(super) enum JobsRequest {
     Run {
         job_id: String,
         from_palette: bool,
+    },
+    /// `job.run` for the Feed overlay's `S` or a feed menu's "Sync now".
+    FeedSync {
+        job_id: String,
+        origin: super::feed_state::FeedOrigin,
+    },
+    /// `job.list` while a sync waits for its run to finish.
+    FeedSyncCheck {
+        job_id: String,
     },
     Toggle,
     /// `decision.list`: the Decisions tab, or the palette's count.
@@ -150,11 +164,54 @@ pub(super) struct ClientJobsOverlay {
     decision_scroll: usize,
     preview: Option<DecisionPreview>,
     schedule_edit: Option<ScheduleEditor>,
+    /// A run this overlay started, followed until its result is known.
+    watch: Option<RunWatch>,
+}
+
+/// A run started from the overlay: its result replaces "started" in the
+/// status line when the run is over.
+#[derive(Debug, Clone)]
+struct RunWatch {
+    job_id: String,
+    run_id: Option<u64>,
+    seen_running: bool,
+}
+
+impl ClientJobsOverlay {
+    /// Turn "started … running…" into the run's result once it is over.
+    fn follow_watched_run(&mut self) {
+        let Some(watch) = self.watch.as_mut() else {
+            return;
+        };
+        let Some(job) = self.jobs.iter().find(|job| job.job_id == watch.job_id) else {
+            self.watch = None;
+            return;
+        };
+        if job.state == JobState::Running {
+            watch.seen_running = true;
+            return;
+        }
+        let finished = job.last_run.as_ref().filter(|run| match watch.run_id {
+            Some(id) => run.run_id >= id,
+            None => watch.seen_running,
+        });
+        if let Some(run) = finished {
+            self.status = Some(format!(
+                "{}: {} · {}",
+                job.job_id,
+                display::status_word(run.status),
+                run.summary
+            ));
+            self.watch = None;
+        }
+    }
 }
 
 #[derive(Default)]
 pub(super) struct JobsHits {
     pub(super) popup: Rect,
+    /// The "▶ run" cell of each job row, by job index.
+    pub(super) runs: Vec<(Rect, usize)>,
     pub(super) rows: Vec<(Rect, usize)>,
     pub(super) viewport_rows: usize,
     pub(super) offset: usize,
@@ -162,6 +219,7 @@ pub(super) struct JobsHits {
 
 pub(super) struct JobsRender {
     pub(super) area: Rect,
+    pub(super) runs: Vec<(Rect, usize)>,
     pub(super) rows: Vec<(Rect, usize)>,
     pub(super) viewport_rows: usize,
     pub(super) offset: usize,
@@ -283,6 +341,7 @@ impl ClientShellState {
             decision_scroll: 0,
             preview: None,
             schedule_edit: None,
+            watch: None,
         })));
     }
 
@@ -406,7 +465,7 @@ impl ClientShellState {
 
     /// Ask the server for something; a server without the method turns the
     /// overlay into an explanation instead of raising a notice.
-    fn push_jobs_request(
+    pub(super) fn push_jobs_request(
         &mut self,
         method: Method,
         request: JobsRequest,
@@ -606,6 +665,12 @@ impl ClientShellState {
         let Some(job) = self.selected_job() else {
             return;
         };
+        if job.state == JobState::Running {
+            if let Some(overlay) = self.jobs_overlay_mut() {
+                overlay.status = Some(format!("{} is already running", job.job_id));
+            }
+            return;
+        }
         if let Some(overlay) = self.jobs_overlay_mut() {
             overlay.status = Some(format!("starting {}…", job.job_id));
         }
@@ -850,6 +915,29 @@ impl ClientShellState {
                     } else {
                         self.overlay = None;
                     }
+                } else if !in_logs
+                    && self.jobs_overlay().is_some_and(|o| o.tab == JobsTab::Jobs)
+                    && self
+                        .hits
+                        .jobs
+                        .runs
+                        .iter()
+                        .any(|(rect, _)| contains(*rect, point))
+                {
+                    // Clicking "▶ run" selects the row and runs the job now.
+                    let index = self
+                        .hits
+                        .jobs
+                        .runs
+                        .iter()
+                        .find(|(rect, _)| contains(*rect, point))
+                        .map(|(_, index)| *index);
+                    if let Some(overlay) = self.jobs_overlay_mut() {
+                        if let Some(job) = index.and_then(|index| overlay.jobs.get(index)) {
+                            overlay.selected = Some(job.job_id.clone());
+                        }
+                    }
+                    self.run_selected_job(outcome);
                 } else if !in_logs {
                     let row = self
                         .hits
@@ -910,9 +998,18 @@ impl ClientShellState {
             let poll_due = !overlay.unsupported
                 && overlay.logs.is_none()
                 && overlay.preview.is_none()
-                && overlay
-                    .last_poll
-                    .is_none_or(|at| now.saturating_duration_since(at) >= POLL_GAP)
+                && overlay.last_poll.is_none_or(|at| {
+                    let gap = if overlay
+                        .jobs
+                        .iter()
+                        .any(|job| job.state == JobState::Running)
+                    {
+                        RUNNING_POLL_GAP
+                    } else {
+                        POLL_GAP
+                    };
+                    now.saturating_duration_since(at) >= gap
+                })
                 && !self.jobs_list_in_flight();
             let decisions_poll_due =
                 poll_due && !overlay.decisions_unsupported && !self.decisions_in_flight();
@@ -1010,6 +1107,7 @@ impl ClientShellState {
                     if !keep {
                         overlay.selected = overlay.jobs.first().map(|job| job.job_id.clone());
                     }
+                    overlay.follow_watched_run();
                 }
                 (!unchanged, Vec::new())
             }
@@ -1046,11 +1144,14 @@ impl ClientShellState {
                     from_palette,
                 },
                 Ok(ResponseResult::JobRunRequested {
-                    started, reason, ..
+                    started,
+                    reason,
+                    run_id,
+                    ..
                 }),
             ) => {
                 let text = if started {
-                    format!("started {job_id}")
+                    format!("started {job_id} · running…")
                 } else {
                     format!(
                         "{job_id}: {}",
@@ -1061,6 +1162,11 @@ impl ClientShellState {
                     overlay.status = Some(text);
                     overlay.last_poll = None;
                     overlay.revision = None;
+                    overlay.watch = started.then(|| RunWatch {
+                        job_id: job_id.clone(),
+                        run_id,
+                        seen_running: false,
+                    });
                 } else if from_palette && !started {
                     self.push_endpoint_notice(
                         ClientEndpointNoticeKind::Rejected,
@@ -1070,6 +1176,13 @@ impl ClientShellState {
                     );
                 }
                 (true, Vec::new())
+            }
+            (JobsRequest::FeedSync { job_id, origin }, result) => (
+                self.complete_feed_sync_start(job_id, origin, result),
+                Vec::new(),
+            ),
+            (JobsRequest::FeedSyncCheck { job_id }, result) => {
+                (self.complete_feed_sync_check(&job_id, result), Vec::new())
             }
             (JobsRequest::Toggle, Ok(ResponseResult::JobUpdated { job })) => {
                 let Some(overlay) = self.jobs_overlay_mut() else {
@@ -1447,6 +1560,7 @@ fn render_jobs(
     let inner = draw_panel(buffer, area, &title, palette)?;
     let empty = JobsRender {
         area,
+        runs: Vec::new(),
         rows: Vec::new(),
         viewport_rows: 1,
         offset: 0,
@@ -1489,8 +1603,9 @@ fn render_jobs(
         text_width,
         inner.height.saturating_sub(2),
     );
+    let mut runs = Vec::new();
     let (hit_rows, viewport_rows, offset) = match overlay.tab {
-        JobsTab::Jobs => render_jobs_table(buffer, table_area, overlay, now_ms, config),
+        JobsTab::Jobs => render_jobs_table(buffer, table_area, overlay, now_ms, config, &mut runs),
         JobsTab::Decisions => render_decisions_table(buffer, table_area, overlay, now_ms, config),
     };
 
@@ -1547,6 +1662,7 @@ fn render_jobs(
         );
         return Some(JobsRender {
             area,
+            runs,
             rows: hit_rows,
             viewport_rows,
             offset,
@@ -1582,10 +1698,10 @@ fn render_jobs(
     }
     let hints: [&str; 4] = match overlay.tab {
         JobsTab::Jobs => [
-            "↑/↓ j/k move   r run   l logs   e on/off   t schedule   tab decisions   esc close",
-            "r run   l logs   e on/off   t schedule   tab decisions   esc",
-            "r run   l logs   t schedule   tab decisions",
-            "esc close",
+            "r run now · l logs · e enable · t schedule · tab decisions · esc",
+            "r run now · l logs · e enable · t schedule · esc",
+            "r run now · l logs · esc",
+            "r run now · esc",
         ],
         JobsTab::Decisions => [
             "↑/↓ j/k move   ↵/s start   z snooze 1h   x dismiss   p preview   tab jobs   esc close",
@@ -1608,6 +1724,7 @@ fn render_jobs(
     );
     Some(JobsRender {
         area,
+        runs,
         rows: hit_rows,
         viewport_rows,
         offset,
@@ -1624,9 +1741,11 @@ fn render_jobs_table(
     overlay: &ClientJobsOverlay,
     now_ms: u64,
     config: &ClientShellConfig,
+    runs: &mut Vec<(Rect, usize)>,
 ) -> TableLayout {
     let palette = &config.palette;
     let columns = choose_columns(table_area.width);
+    let with_run = table_area.width >= RUN_CELL_MIN_TABLE;
     let mut widths = vec![Constraint::Length(1), Constraint::Length(columns.name)];
     let mut header = vec!["", "job"];
     if let Some(width) = columns.schedule {
@@ -1639,7 +1758,15 @@ fn render_jobs_table(
     }
     widths.push(Constraint::Fill(1));
     header.push("last result");
-    let fixed = 1 + columns.name + columns.schedule.unwrap_or(0) + columns.next.unwrap_or(0);
+    if with_run {
+        widths.push(Constraint::Length(RUN_CELL_WIDTH));
+        header.push("");
+    }
+    let fixed = 1
+        + columns.name
+        + columns.schedule.unwrap_or(0)
+        + columns.next.unwrap_or(0)
+        + if with_run { RUN_CELL_WIDTH } else { 0 };
     let spacing = widths.len() as u16 - 1;
     let last_width = table_area.width.saturating_sub(fixed + spacing).max(1);
     let fit = |text: &str, width: u16| crate::ui::truncate_end(text, usize::from(width));
@@ -1737,6 +1864,21 @@ fn render_jobs_table(
                 fit(&last, last_width),
                 style_for(last_style),
             )));
+            if with_run {
+                // A spinner while it runs; the second hand turns it once a second.
+                let (text, style) = match job.state {
+                    JobState::Running => (
+                        format!("{} run", ["◐", "◓", "◑", "◒"][(now_ms / 1000 % 4) as usize]),
+                        Style::default().fg(palette.yellow).bg(palette.panel_bg),
+                    ),
+                    JobState::Invalid => (String::new(), dim_style(palette)),
+                    _ => (
+                        "▶ run".to_owned(),
+                        Style::default().fg(palette.green).bg(palette.panel_bg),
+                    ),
+                };
+                cells.push(Cell::from(Span::styled(text, style_for(style))));
+            }
             Row::new(cells).style(if is_selected {
                 selected_style(palette)
             } else {
@@ -1761,6 +1903,16 @@ fn render_jobs_table(
     let offset = state.offset();
     let viewport_rows = usize::from(table_area.height.saturating_sub(1)).max(1);
     let hit_rows = table_hit_rows(table_area, offset, viewport_rows, overlay.jobs.len());
+    if with_run {
+        for (rect, index) in &hit_rows {
+            if overlay.jobs[*index].state != JobState::Invalid {
+                runs.push((
+                    Rect::new(rect.right() - RUN_CELL_WIDTH, rect.y, RUN_CELL_WIDTH, 1),
+                    *index,
+                ));
+            }
+        }
+    }
     if overlay.jobs.is_empty() {
         let message = if overlay.unsupported {
             "This server does not support jobs yet. Update and restart it."
@@ -2172,7 +2324,7 @@ mod tests {
             "never run",
             "broken",
             "command: required",
-            "r run   l logs",
+            "r run now · l logs · e enable · t schedule · tab decisions · esc",
         ] {
             assert!(
                 screen.contains(expected),
@@ -2242,6 +2394,103 @@ mod tests {
         let mut next = ClientShellInput::default();
         state.tick_jobs(Instant::now(), &mut next);
         assert_eq!(requests(&next).len(), 1);
+    }
+
+    #[test]
+    fn the_footer_names_the_keys_and_every_runnable_row_has_a_run_button() {
+        let mut state = state();
+        open_with_jobs(&mut state);
+        let frame = screen(&mut state);
+        assert!(
+            frame.contains("r run now · l logs · e enable · t schedule · tab decisions · esc"),
+            "{frame}"
+        );
+        assert_eq!(
+            frame.matches("▶ run").count(),
+            3,
+            "invalid job has none\n{frame}"
+        );
+        assert_eq!(state.hits.jobs.runs.len(), 3);
+    }
+
+    #[test]
+    fn clicking_run_on_a_row_runs_that_job_without_moving_to_it_first() {
+        let mut state = state();
+        open_with_jobs(&mut state);
+        screen(&mut state);
+        let (rect, index) = state.hits.jobs.runs[1];
+        assert_eq!(index, 1);
+        let outcome = state.handle_raw_events(vec![RawInputEvent::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: rect.x + 1,
+            row: rect.y,
+            modifiers: KeyModifiers::empty(),
+        })]);
+        let sent = requests(&outcome);
+        assert_eq!(
+            sent[0].method,
+            Method::JobRun(JobTarget {
+                job_id: "nightly".into()
+            })
+        );
+        assert_eq!(selected(&state), "nightly");
+        assert!(screen(&mut state).contains("starting nightly"));
+    }
+
+    #[test]
+    fn a_started_run_shows_running_live_and_then_its_result() {
+        let mut state = state();
+        open_with_jobs(&mut state);
+        screen(&mut state);
+        press(&mut state, 'j');
+        let sent = requests(&press(&mut state, 'r'));
+        answer(
+            &mut state,
+            &sent[0],
+            ResponseResult::JobRunRequested {
+                job_id: "nightly".into(),
+                started: true,
+                run_id: Some(9),
+                reason: None,
+            },
+        );
+        assert!(screen(&mut state).contains("started nightly · running…"));
+        // The next list shows it running: spinner in the row, one-second polling.
+        let mut running = sample_jobs();
+        running[1].state = JobState::Running;
+        running[1].running_since_unix_ms = Some(crate::jobs::now_unix_ms() - 3_000);
+        let mut next = ClientShellInput::default();
+        state.tick_jobs(Instant::now(), &mut next);
+        answer(&mut state, &requests(&next)[0], list_result(running, 8));
+        let frame = screen(&mut state);
+        assert!(
+            frame.contains("◉ nightly") && frame.contains("running"),
+            "{frame}"
+        );
+        assert!(
+            ["◐ run", "◓ run", "◑ run", "◒ run"]
+                .iter()
+                .any(|s| frame.contains(s)),
+            "{frame}"
+        );
+        assert!(frame.contains("started nightly · running…"));
+        let mut again = ClientShellInput::default();
+        state.tick_jobs(Instant::now() + Duration::from_millis(1_100), &mut again);
+        assert_eq!(
+            requests(&again).len(),
+            1,
+            "polled after one second while running"
+        );
+        // It finishes: run 9 is the last run and the status line says how it went.
+        let mut done = sample_jobs();
+        let mut last = done[1].last_run.clone().unwrap();
+        last.run_id = 9;
+        last.summary = "exit 0".into();
+        last.status = JobRunStatus::Success;
+        done[1].last_run = Some(last);
+        answer(&mut state, &requests(&again)[0], list_result(done, 9));
+        let frame = screen(&mut state);
+        assert!(frame.contains("nightly: ok · exit 0"), "{frame}");
     }
 
     #[test]
@@ -2355,7 +2604,7 @@ mod tests {
         assert!(requests(&idle).is_empty());
         state.handle_raw_events(vec![key(KeyCode::Esc)]);
         assert!(matches!(state.overlay, Some(ClientShellOverlay::Jobs(_))));
-        assert!(screen(&mut state).contains("r run   l logs"));
+        assert!(screen(&mut state).contains("r run now · l logs"));
         state.handle_raw_events(vec![key(KeyCode::Esc)]);
         assert!(state.overlay.is_none());
     }
@@ -2598,7 +2847,7 @@ mod tests {
         }
         press_tab(&mut state);
         assert_eq!(state.jobs_overlay().unwrap().tab, JobsTab::Jobs);
-        assert!(screen(&mut state).contains("r run   l logs"));
+        assert!(screen(&mut state).contains("r run now · l logs"));
     }
 
     #[test]

@@ -642,6 +642,33 @@ impl ClientShellState {
         if let Some(bar) = mode_bar {
             occlusion.cover(bar);
         }
+        if self.which_key.visible() {
+            let cursor = frame.cursor.clone();
+            let mut composed = frame.to_ratatui_buffer()?;
+            if let Some(rect) =
+                self.render_which_key_popup(&mut composed, Rect::new(0, 0, cols, rows), mode_bar)
+            {
+                occlusion.cover(rect);
+                let cursor = cursor.filter(|cursor| !contains(rect, (cursor.x, cursor.y)));
+                frame.replace_from_ratatui_buffer_preserving_effects(&composed, cursor);
+            }
+        }
+        if self.agent_preview_open() {
+            let cursor = frame.cursor.clone();
+            let mut composed = frame.to_ratatui_buffer()?;
+            let preview = self.render_agent_preview_popup(
+                &mut composed,
+                Rect::new(0, 0, cols, rows),
+                layout.sidebar,
+                std::time::Instant::now(),
+            );
+            if let Some(rect) = preview {
+                occlusion.cover(rect);
+                self.hits.preview.popup = rect;
+                let cursor = cursor.filter(|cursor| !contains(rect, (cursor.x, cursor.y)));
+                frame.replace_from_ratatui_buffer_preserving_effects(&composed, cursor);
+            }
+        }
         if let Some(overlay) = self.overlay.as_ref() {
             let mut composed = frame.to_ratatui_buffer()?;
             let cursor = if let ClientShellOverlay::ContextMenu(menu) = overlay {
@@ -650,6 +677,31 @@ impl ClientShellState {
                 occlusion.cover(rendered.area);
                 self.hits.context_menu_rows = rendered.menu_rows;
                 None
+            } else if matches!(overlay, ClientShellOverlay::Palette(_)) {
+                // Too small to draw: the palette stays keyboard-driven.
+                let rendered = self.render_palette_overlay(&mut composed);
+                self.hits.palette = rendered.as_ref().map_or_else(Default::default, |rendered| {
+                    occlusion.cover(rendered.area);
+                    super::palette::PaletteHits {
+                        popup: rendered.area,
+                        rows: rendered.rows.clone(),
+                        viewport_rows: rendered.viewport_rows,
+                    }
+                });
+                rendered.and_then(|rendered| rendered.cursor)
+            } else if matches!(overlay, ClientShellOverlay::Dashboard(_)) {
+                let rendered = self.render_dashboard_overlay(&mut composed);
+                self.hits.dashboard = rendered.as_ref().map_or_else(Default::default, |rendered| {
+                    occlusion.cover(rendered.area);
+                    super::agent_dashboard::DashboardHits {
+                        popup: rendered.area,
+                        header: rendered.header,
+                        rows: rendered.rows.clone(),
+                        viewport_rows: rendered.viewport_rows,
+                        offset: rendered.offset,
+                    }
+                });
+                rendered.and_then(|rendered| rendered.cursor)
             } else if let ClientShellOverlay::GlobalMenu(menu) = overlay {
                 let rendered = render::render_global_menu(
                     &mut composed,

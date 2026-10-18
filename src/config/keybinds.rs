@@ -383,6 +383,9 @@ pub struct Keybinds {
     pub collapse_agent_groups: ActionKeybinds,
     pub toggle_agent_group: ActionKeybinds,
     pub rename_agent: ActionKeybinds,
+    pub agent_dashboard: ActionKeybinds,
+    pub preview_agent: ActionKeybinds,
+    pub command_palette: ActionKeybinds,
     pub edit_scrollback: ActionKeybinds,
     pub clear_pane: ActionKeybinds,
     pub copy_mode: ActionKeybinds,
@@ -570,6 +573,9 @@ impl Config {
             collapse_agent_groups: empty_action!(),
             toggle_agent_group: empty_action!(),
             rename_agent: empty_action!(),
+            agent_dashboard: empty_action!(),
+            preview_agent: empty_action!(),
+            command_palette: empty_action!(),
             edit_scrollback: empty_action!(),
             clear_pane: empty_action!(),
             copy_mode: empty_action!(),
@@ -726,6 +732,9 @@ impl Config {
             );
             apply_action!(keybinds.toggle_agent_group, toggle_agent_group, source);
             apply_action!(keybinds.rename_agent, rename_agent, source);
+            apply_action!(keybinds.agent_dashboard, agent_dashboard, source);
+            apply_action!(keybinds.preview_agent, preview_agent, source);
+            apply_action!(keybinds.command_palette, command_palette, source);
             apply_action!(keybinds.edit_scrollback, edit_scrollback, source);
             apply_action!(keybinds.clear_pane, clear_pane, source);
             apply_action!(keybinds.copy_mode, copy_mode, source);

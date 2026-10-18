@@ -682,6 +682,7 @@ impl ClientShellState {
     /// the sidebar toggle takes precedence over the agent scrollbar beneath it.
     pub(super) fn handle_mouse(&mut self, mouse: MouseEvent, outcome: &mut ClientShellInput) {
         self.update_link_hover(mouse, outcome);
+        self.update_agent_preview_pointer(mouse, outcome);
         let point = (mouse.column, mouse.row);
         if self.mode == ClientShellMode::Navigate
             && self.workspace_preview_action_blocked()
@@ -692,6 +693,9 @@ impl ClientShellState {
             self.mode = self.copy_or_terminal_mode();
             self.navigate_workspace_id = None;
             outcome.repaint = true;
+        }
+        if self.route_palette_mouse(mouse, outcome) || self.route_dashboard_mouse(mouse, outcome) {
+            return;
         }
         if matches!(self.overlay, Some(ClientShellOverlay::Onboarding)) {
             if mouse.kind == MouseEventKind::Down(MouseButton::Left)

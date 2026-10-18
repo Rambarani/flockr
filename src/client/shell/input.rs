@@ -372,6 +372,7 @@ impl ClientShellState {
             self.reconcile_input_source();
         }
         outcome.repaint |= self.resume_mobile_switcher_if_ready();
+        outcome.repaint |= self.sync_which_key(std::time::Instant::now());
         outcome
     }
 
@@ -640,6 +641,9 @@ impl ClientShellState {
             return None;
         }
         if matches!(key.code, KeyCode::Modifier(_)) {
+            return None;
+        }
+        if self.dismiss_agent_preview_for_key(key, outcome) {
             return None;
         }
         self.word_selection_gesture = None;

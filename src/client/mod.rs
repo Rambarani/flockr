@@ -2322,10 +2322,13 @@ async fn run_client_loop(
                             outcome.actions.extend(actions);
                         }
                         let (effects, notification_repaint) = shell.tick_notifications(now);
+                        outcome.repaint |= shell.tick_agent_preview(now, &mut outcome);
+                        outcome.repaint |= shell.tick_agent_dashboard(now, &mut outcome);
                         outcome.repaint |= notification_repaint
                             | shell.tick_copy_feedback(now)
                             | shell.tick_workspace_highlight(now)
-                            | shell.tick_endpoint_error(now);
+                            | shell.tick_endpoint_error(now)
+                            | shell.tick_which_key(now);
                         let frame = outcome
                             .repaint
                             .then(|| shell.compose(state.reported_size.0, state.reported_size.1))

@@ -1,7 +1,11 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
+mod action_catalog;
 mod actions;
+mod agent_activity;
+mod agent_dashboard;
 mod agent_groups;
+mod agent_preview;
 mod agent_sidebar;
 mod aggregate_navigation;
 mod machine_diagnostics;
@@ -28,6 +32,8 @@ mod mouse;
 mod notification_policy;
 mod notifications;
 mod overlay_input;
+mod palette;
+mod popup_frame;
 mod preferences;
 mod render;
 mod scroll;
@@ -35,6 +41,7 @@ mod settings;
 mod state;
 mod surface_patch;
 mod text_editor;
+mod which_key;
 mod word_selection;
 mod worktrees;
 use text_editor::TextEditor;

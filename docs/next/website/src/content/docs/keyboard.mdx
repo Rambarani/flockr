@@ -15,6 +15,8 @@ A terminal multiplexer sits between your terminal and the programs running insid
 
 The prefix solves this. Press the prefix key, default `ctrl+b`, and the next keypress goes to Flockr instead of your terminal. `prefix+c` means: press `ctrl+b`, release, then press `c`. Flockr reserves one key instead of dozens.
 
+Press the prefix and pause for a moment (400 ms by default) and a **which-key** popup lists every key that can come next, grouped by category and generated from your live keybindings, including overrides and custom commands. It never intercepts the key you press: type the follow-up key as usual and the popup disappears, or press `esc` to cancel prefix mode. Change the delay with `ui.which_key.delay_ms` or turn it off with `ui.which_key.enabled = false`.
+
 Press `prefix+?` at any time to see every active binding. Press `/` in the keybind help to filter actions and shortcuts; use Backspace to edit the filter or `ctrl+u` to clear it.
 
 ## Learn these five first
@@ -55,6 +57,8 @@ Agents:
 | Action | Key |
 | --- | --- |
 | Rename the focused agent | `prefix+shift+a` |
+| Preview the focused agent's screen | `prefix+i` |
+| Agent dashboard | `prefix+d` |
 | Collapse / expand the focused agent's workspace group | `prefix+shift+e` |
 
 `keys.collapse_agent_groups` and `keys.expand_agent_groups` can bind collapse all and expand all; both are unset by default. Agent groups can also be toggled by clicking their headers in the sidebar.
@@ -67,11 +71,14 @@ Workspaces and session:
 | Rename workspace | `prefix+shift+w` |
 | Close workspace | `prefix+shift+d` |
 | Goto picker | `prefix+g` |
+| Command palette | `prefix+:` |
 | Toggle sidebar | `prefix+b` |
 
 The full keymap and the binding syntax live in the [keybinding reference](/docs/configuration/#keybindings).
 
 The Goto picker (`prefix+g`) lists each agent or terminal on its own row, grouped by workspace. Split tabs never hide their panes behind another row. Click a row or press Enter to jump directly to it. Press `/` to search names, agent kinds, tabs, workspaces, branches, or paths; use Up/Down or `j/k` to move between rows when not typing a search. Left/Right jumps to the first agent or terminal in the previous/next workspace section, without wrapping. While editing a search, Left/Right moves the text cursor instead. Outside search, `b/w/i/d` filter blocked, working, idle, or done agents, and `a` shows all terminals again. The selected destination's location and path appear below the list. When the list overflows, use the mouse wheel, click the scrollbar track, or drag its thumb to scroll without opening a destination.
+
+The command palette (`prefix+:`, `keys.command_palette`) is a fuzzy-searchable popup over everything you can do. It lists every keybinding action with its key right-aligned, your custom commands (including the upstream review popup), workspaces, tabs, panes, agents on every connected machine, and the settings sections. Type to filter: matched characters are highlighted, and the kind of entry (`tabs`, `agent`, `workspace`, `settings`, and so on) is searchable too. Use Up/Down or `ctrl+n`/`ctrl+p` to move, Enter to run, and Esc to close; you can also click a row or use the mouse wheel. Running an entry does exactly what its key or sidebar click does. With an empty query the palette shows what you ran most recently first; that history is kept in Flockr's client state between runs. Fuzzy matching uses the `nucleo-matcher` crate and follows its pattern syntax: spaces separate terms that must all match, and a query containing an uppercase letter is case-sensitive.
 
 Press Esc or Ctrl+[ to leave workspace navigation. In the Go To picker, `/` also opens search on layouts that require Shift to type it.
 

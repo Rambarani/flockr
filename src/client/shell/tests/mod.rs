@@ -88,7 +88,7 @@ fn worktree_list_result(open_workspace_id: Option<&str>) -> crate::api::schema::
     }
 }
 
-fn surface() -> PaneSurfaceFrame {
+pub(super) fn surface() -> PaneSurfaceFrame {
     let surface_buffer = Buffer::with_lines(["LIVE", "PANE"]);
     PaneSurfaceFrame {
         boot_id: "boot-1".into(),
@@ -134,7 +134,7 @@ fn surface() -> PaneSurfaceFrame {
     }
 }
 
-fn frame_rows(frame: &FrameData) -> Vec<String> {
+pub(super) fn frame_rows(frame: &FrameData) -> Vec<String> {
     frame
         .cells
         .chunks(frame.width as usize)

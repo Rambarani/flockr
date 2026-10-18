@@ -477,6 +477,17 @@ Use `herdr workspace report-metadata` in the same way for custom Space tokens. U
 
 Metadata reporters provide values only; styling stays in the local sidebar configuration. See [CLI reference: report metadata](/docs/cli-reference/#panes) for limits, clearing, sequencing, and expiry.
 
+### Grouping agents by workspace
+
+While `agent_panel_sort` is `"spaces"`, the expanded Agent list shows a header above each workspace's agents with the workspace name and a count per state, for example `1● 2○` for one active (blocked, working, or done) agent and two idle ones. Headers are labels, not targets: clicking one does nothing, and agent clicks, scrolling, and the next/previous agent keybindings behave as before. When several machines are connected, agents are grouped per machine and workspace, and the header reads `Machine · workspace`.
+
+```toml
+[ui.sidebar]
+group_agents_by_workspace = false
+```
+
+The default is `true`. The `"priority"` sort and filtered agent views interleave workspaces on purpose, so they never show headers.
+
 Sidebar row settings affect only the expanded desktop sidebar. Collapsed and mobile views keep their compact layouts.
 
 ## Notifications

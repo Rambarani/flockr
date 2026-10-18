@@ -1682,3 +1682,144 @@ fn semantic_notifications_use_client_policy_and_stable_navigation_targets() {
     assert!(state.visible_notification.is_none());
     assert_eq!(state.pending_notifications.len(), 1);
 }
+
+fn two_workspace_agent_snapshot() -> ClientShellSnapshot {
+    let mut projected = snapshot();
+    let mut second_workspace = projected.workspaces[0].clone();
+    second_workspace.workspace_id = "ws_2".into();
+    second_workspace.number = 2;
+    second_workspace.label = "api-server".into();
+    second_workspace.focused = false;
+    projected.workspaces.push(second_workspace);
+    let agent = |pane_id: &str, workspace_id: &str, status, focused| ClientShellAgent {
+        pane_id: pane_id.into(),
+        workspace_id: workspace_id.into(),
+        tab_id: "tab_1".into(),
+        name: Some(pane_id.into()),
+        display_agent: None,
+        agent: Some("pi".into()),
+        title: None,
+        terminal_title: None,
+        terminal_title_stripped: None,
+        agent_status: status,
+        state_change_seq: 1,
+        state_labels: Vec::new(),
+        tokens: Vec::new(),
+        focused,
+    };
+    projected.agents = vec![
+        agent("pane_1", "ws_1", AgentStatus::Working, true),
+        agent("pane_2", "ws_1", AgentStatus::Blocked, false),
+        agent("pane_3", "ws_2", AgentStatus::Idle, false),
+    ];
+    projected
+}
+
+fn sidebar_agent_state(config: &Config) -> (ClientShellState, FrameData) {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(config));
+    state.set_snapshot(Box::new(two_workspace_agent_snapshot()));
+    state.set_pane_surface(surface());
+    let frame = state.compose(106, 30).expect("agent sidebar frame").frame;
+    (state, frame)
+}
+
+#[test]
+fn agent_sidebar_groups_agents_under_workspace_headers() {
+    let (state, frame) = sidebar_agent_state(&Config::default());
+    let rows = frame_rows(&frame);
+    let body = state.hits.agent_body;
+    let header_rows = |label: &str| {
+        (body.y..body.bottom())
+            .filter(|y| {
+                rows[*y as usize]
+                    .chars()
+                    .skip(body.x as usize)
+                    .take(body.width as usize)
+                    .collect::<String>()
+                    .starts_with(&format!(" {label}"))
+            })
+            .collect::<Vec<_>>()
+    };
+    let first = header_rows("client-shell");
+    let second = header_rows("api-server");
+    assert_eq!(first, vec![body.y], "first group header opens the list");
+    assert_eq!(second.len(), 1, "one header per workspace");
+
+    // Counts summarise the group's states: one working, one blocked.
+    let header_text = rows[first[0] as usize].clone();
+    assert!(header_text.contains("1●"), "header: {header_text}");
+
+    // Every agent keeps its own hit rect, none of them on a header row.
+    let hits = state
+        .hits
+        .agents
+        .iter()
+        .map(|(rect, pane_id)| (pane_id.as_str(), rect.y))
+        .collect::<Vec<_>>();
+    assert_eq!(hits.len(), 3);
+    assert_eq!(hits[0], ("pane_1", body.y + 1));
+    // Default agent rows are two lines tall, so the second group opens at +5.
+    assert_eq!(hits[1], ("pane_2", body.y + 3));
+    assert_eq!(second, vec![body.y + 5]);
+    assert_eq!(hits[2], ("pane_3", body.y + 6));
+    assert!(hits.iter().all(|(_, y)| *y != first[0] && *y != second[0]));
+}
+
+#[test]
+fn agent_sidebar_headers_are_not_selectable_but_rows_still_focus_their_pane() {
+    let (mut state, _) = sidebar_agent_state(&Config::default());
+    let body = state.hits.agent_body;
+    let click = |state: &mut ClientShellState, row: u16| {
+        state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: body.x + 1,
+            row,
+            modifiers: KeyModifiers::empty(),
+        })])
+    };
+
+    let on_header = click(&mut state, body.y);
+    assert!(
+        on_header.actions.is_empty(),
+        "header click must not target an agent: {:?}",
+        on_header.actions
+    );
+
+    let third = state.hits.agents[2].0;
+    let on_agent = click(&mut state, third.y);
+    let [ClientShellAction::Endpoint { request, .. }] = &on_agent.actions[..] else {
+        panic!("agent row click should focus through endpoint API");
+    };
+    assert!(matches!(
+        &request.method,
+        crate::api::schema::Method::PaneFocus(target) if target.pane_id == "pane_3"
+    ));
+}
+
+#[test]
+fn agent_sidebar_grouping_can_be_disabled_or_is_skipped_for_priority_sort() {
+    let mut config = Config::default();
+    config.ui.sidebar.group_agents_by_workspace = false;
+    let (state, frame) = sidebar_agent_state(&config);
+    let body = state.hits.agent_body;
+    let rows = frame_rows(&frame);
+    assert!(!(body.y..body.bottom()).any(|y| {
+        let row = &rows[y as usize];
+        row.chars()
+            .skip(body.x as usize)
+            .collect::<String>()
+            .starts_with(" api-server")
+    }));
+    assert_eq!(state.hits.agents[0].0.y, body.y);
+    assert_eq!(state.hits.agents[1].0.y, body.y + 2);
+
+    let mut config = Config::default();
+    config.ui.agent_panel_sort = crate::config::AgentPanelSortConfig::Priority;
+    let (state, _) = sidebar_agent_state(&config);
+    let body = state.hits.agent_body;
+    assert_eq!(state.hits.agents[0].0.y, body.y);
+    assert_eq!(
+        state.hits.agents[0].1, "pane_2",
+        "blocked agent sorts first"
+    );
+}

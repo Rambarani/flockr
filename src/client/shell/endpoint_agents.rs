@@ -70,7 +70,7 @@ pub(super) fn render_expanded(
         config,
         agent_scroll,
         hits,
-        |row| row.agent.rows.len(),
+        |row| row.agent.height(),
         |buffer, rect, row, hits| {
             super::agent_sidebar::render_agent_row(buffer, rect, &row.agent, config);
             if row.stale {
@@ -81,8 +81,11 @@ pub(super) fn render_expanded(
                         .add_modifier(Modifier::DIM),
                 );
             }
-            hits.endpoint_agents
-                .push((rect, row.endpoint_id.clone(), row.agent.pane_id.clone()));
+            hits.endpoint_agents.push((
+                row.agent.body_rect(rect),
+                row.endpoint_id.clone(),
+                row.agent.pane_id.clone(),
+            ));
         },
     );
 }
@@ -106,7 +109,7 @@ impl ClientShellState {
         };
         let heights = rows
             .iter()
-            .map(|row| row.agent.rows.len().max(1).min(u16::MAX as usize) as u16)
+            .map(|row| row.agent.height().min(u16::MAX as usize) as u16)
             .collect::<Vec<_>>();
         let mut gaps = vec![self.config.agents.row_gap; rows.len()];
         if let Some(last) = gaps.last_mut() {
@@ -156,7 +159,7 @@ fn agent_rows(
         .flatten()
         .collect::<HashMap<_, _>>();
 
-    super::aggregate_navigation::aggregate_agent_rows(
+    let mut rows = super::aggregate_navigation::aggregate_agent_rows(
         endpoints,
         active_endpoint_id,
         config.agent_panel_sort,
@@ -166,12 +169,47 @@ fn agent_rows(
         let key = (row.endpoint.endpoint_id.clone(), row.agent.pane_id.clone());
         let mut agent = rendered_rows.remove(&key)?;
         agent.focused &= row.endpoint.endpoint_id == active_endpoint_id;
-        Some(EndpointAgentRow {
-            endpoint_id: row.endpoint.endpoint_id.clone(),
-            machine_label: row.endpoint.label.to_owned(),
-            stale: row.endpoint.stale(),
-            agent,
-        })
+        let workspace_label = row
+            .endpoint
+            .snapshot
+            .workspaces
+            .iter()
+            .find(|workspace| workspace.workspace_id == row.agent.workspace_id)
+            .map(|workspace| workspace.label.as_str())
+            .unwrap_or_default();
+        // Groups are per machine and workspace: ids and labels are only unique
+        // within one endpoint. With several machines the header names both.
+        let group = (
+            format!("{:?}\0{}", row.endpoint.endpoint_id, row.agent.workspace_id),
+            if endpoints.len() > 1 {
+                format!("{} · {workspace_label}", row.endpoint.label)
+            } else {
+                workspace_label.to_owned()
+            },
+        );
+        Some((
+            group,
+            EndpointAgentRow {
+                endpoint_id: row.endpoint.endpoint_id.clone(),
+                machine_label: row.endpoint.label.to_owned(),
+                stale: row.endpoint.stale(),
+                agent,
+            },
+        ))
     })
-    .collect()
+    .collect::<Vec<_>>();
+
+    let agent_view_active = endpoints
+        .iter()
+        .find(|endpoint| &endpoint.endpoint_id == active_endpoint_id)
+        .and_then(|endpoint| endpoint.snapshot.as_deref())
+        .is_some_and(|snapshot| snapshot.agent_view_label.is_some());
+    if super::agent_sidebar::group_headers_enabled(config, agent_view_active) {
+        super::agent_sidebar::assign_group_headers(
+            rows.iter_mut()
+                .map(|((key, label), row)| (key.clone(), label.clone(), &mut row.agent))
+                .collect(),
+        );
+    }
+    rows.into_iter().map(|(_, row)| row).collect()
 }

@@ -15,6 +15,76 @@ pub(super) struct AgentRow {
     pub(super) status: crate::api::schema::AgentStatus,
     pub(super) focused: bool,
     pub(super) rows: Vec<Vec<crate::ui::ResolvedToken>>,
+    /// Workspace header drawn above this row when it opens a group.
+    pub(super) group: Option<AgentGroupHeader>,
+}
+
+/// Non-interactive workspace header shown above the first agent of a group.
+pub(super) struct AgentGroupHeader {
+    label: String,
+    /// Agents per display state (blocked, working, done, idle), zero counts omitted.
+    counts: Vec<(crate::api::schema::AgentStatus, usize)>,
+}
+
+impl AgentRow {
+    /// Lines the row occupies, including its group header.
+    pub(super) fn height(&self) -> usize {
+        self.rows.len().max(1) + usize::from(self.group.is_some())
+    }
+
+    /// The part of `rect` that belongs to the agent itself (below any header).
+    /// Mouse hit-testing uses this so headers never select an agent.
+    pub(super) fn body_rect(&self, rect: Rect) -> Rect {
+        let header = u16::from(self.group.is_some()).min(rect.height);
+        Rect::new(rect.x, rect.y + header, rect.width, rect.height - header)
+    }
+}
+
+/// Headers only make sense when the list is ordered by workspace; the
+/// priority sort and agent views interleave workspaces on purpose.
+pub(super) fn group_headers_enabled(config: &ClientShellConfig, agent_view_active: bool) -> bool {
+    config.group_agents_by_workspace
+        && !agent_view_active
+        && config.agent_panel_sort == crate::config::AgentPanelSortConfig::Spaces
+}
+
+/// Mark the first row of every run of equal keys with a header. Each item is
+/// `(group key, header label, row)`; the key decides where runs break (so two
+/// machines with a same-named workspace stay separate groups).
+pub(super) fn assign_group_headers(mut items: Vec<(String, String, &mut AgentRow)>) {
+    let mut start = 0;
+    while start < items.len() {
+        let end = items[start..]
+            .iter()
+            .position(|item| item.0 != items[start].0)
+            .map_or(items.len(), |offset| start + offset);
+        let mut counts = Vec::new();
+        for status in [
+            crate::api::schema::AgentStatus::Blocked,
+            crate::api::schema::AgentStatus::Working,
+            crate::api::schema::AgentStatus::Done,
+            crate::api::schema::AgentStatus::Idle,
+        ] {
+            let count = items[start..end]
+                .iter()
+                .filter(|item| display_status(item.2.status) == status)
+                .count();
+            if count > 0 {
+                counts.push((status, count));
+            }
+        }
+        let label = items[start].1.clone();
+        items[start].2.group = Some(AgentGroupHeader { label, counts });
+        start = end;
+    }
+}
+
+fn display_status(status: crate::api::schema::AgentStatus) -> crate::api::schema::AgentStatus {
+    use crate::api::schema::AgentStatus;
+    match status {
+        AgentStatus::Unknown => AgentStatus::Idle,
+        other => other,
+    }
 }
 
 pub(super) fn ordered_agent_pane_ids(
@@ -79,9 +149,9 @@ pub(super) fn render_agent_panel(
         config,
         agent_scroll,
         hits,
-        |row| row.rows.len(),
+        AgentRow::height,
         |buffer, rect, row, hits| {
-            hits.agents.push((rect, row.pane_id.clone()));
+            hits.agents.push((row.body_rect(rect), row.pane_id.clone()));
             render_agent_row(buffer, rect, row, config);
         },
     );
@@ -239,10 +309,37 @@ pub(super) fn agent_rows(
     config: &ClientShellConfig,
     machine: Option<&str>,
 ) -> Vec<AgentRow> {
-    ordered_agent_pane_ids(snapshot, config.agent_panel_sort)
+    let mut rows = ordered_agent_pane_ids(snapshot, config.agent_panel_sort)
         .into_iter()
         .filter_map(|pane_id| agent_row(snapshot, &pane_id, config, machine))
-        .collect()
+        .collect::<Vec<_>>();
+    if group_headers_enabled(config, snapshot.agent_view_label.is_some()) {
+        let keys = rows
+            .iter()
+            .map(|row| {
+                let workspace_id = snapshot
+                    .agents
+                    .iter()
+                    .find(|agent| agent.pane_id == row.pane_id)
+                    .map(|agent| agent.workspace_id.clone())
+                    .unwrap_or_default();
+                let label = snapshot
+                    .workspaces
+                    .iter()
+                    .find(|workspace| workspace.workspace_id == workspace_id)
+                    .map(|workspace| workspace.label.clone())
+                    .unwrap_or_default();
+                (workspace_id, label)
+            })
+            .collect::<Vec<_>>();
+        assign_group_headers(
+            keys.into_iter()
+                .zip(rows.iter_mut())
+                .map(|((key, label), row)| (key, label, row))
+                .collect(),
+        );
+    }
+    rows
 }
 
 pub(super) fn agent_row(
@@ -315,6 +412,7 @@ pub(super) fn agent_row(
         status: agent.agent_status,
         focused: agent.focused,
         rows,
+        group: None,
     })
 }
 
@@ -353,6 +451,10 @@ pub(super) fn render_agent_row(
     } else {
         row.rows.clone()
     };
+    if let Some(group) = &row.group {
+        render_group_header(buffer, rect, group, config);
+    }
+    let rect = row.body_rect(rect);
     for (index, tokens) in rows.iter().take(rect.height as usize).enumerate() {
         let indent = if index == 0 { 1 } else { 3 };
         let mut spans = vec![ratatui::text::Span::raw(" ".repeat(indent))];
@@ -370,6 +472,57 @@ pub(super) fn render_agent_row(
             Rect::new(rect.x, rect.y + index as u16, rect.width, 1),
             buffer,
         );
+    }
+}
+
+fn render_group_header(
+    buffer: &mut Buffer,
+    rect: Rect,
+    group: &AgentGroupHeader,
+    config: &ClientShellConfig,
+) {
+    let palette = &config.palette;
+    let width = rect.width as usize;
+    // Right-aligned per-state counts, e.g. "1● 2●"; dropped before the label is
+    // squeezed below a readable width.
+    let mut counts = Vec::new();
+    let mut counts_width = 0;
+    for (index, (status, count)) in group.counts.iter().enumerate() {
+        let text = format!(
+            "{}{count}{}",
+            if index > 0 { " " } else { "" },
+            status_icon(*status, config.status_indicators)
+        );
+        counts_width += display_width(&text);
+        counts.push((text, *status));
+    }
+    let show_counts = width >= counts_width + 1 + 1 + 4;
+    let label_width = width.saturating_sub(1 + if show_counts { counts_width + 1 } else { 0 });
+    let label = crate::ui::truncate_end(&group.label, label_width);
+    put_text(
+        buffer,
+        rect.x,
+        rect.y,
+        rect.width,
+        &format!(" {label}"),
+        Style::default()
+            .fg(palette.overlay0)
+            .add_modifier(Modifier::BOLD),
+    );
+    if show_counts {
+        let mut x = rect.right().saturating_sub(counts_width as u16);
+        for (text, status) in counts {
+            let text_width = display_width(&text) as u16;
+            put_text(
+                buffer,
+                x,
+                rect.y,
+                text_width,
+                &text,
+                Style::default().fg(status_color(status, palette)),
+            );
+            x = x.saturating_add(text_width);
+        }
     }
 }
 

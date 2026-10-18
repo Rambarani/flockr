@@ -1061,6 +1061,12 @@
           ]
         },
         {
+          "key": "ui.sidebar.group_agents_by_workspace",
+          "type": "boolean",
+          "default": "true",
+          "description": "Show a header with the workspace name and per-state agent counts above each workspace's agents in the expanded Agent sidebar. Applies only while ui.agent_panel_sort is \"spaces\" and no agent view is active. With several machines connected, groups are per machine and workspace."
+        },
+        {
           "key": "ui.sidebar.agents.row_gap",
           "type": "integer",
           "default": "0",

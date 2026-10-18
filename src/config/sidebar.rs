@@ -475,16 +475,40 @@ impl Default for SpacesSidebarConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default)]
 pub struct SidebarConfig {
     pub agents: AgentsSidebarConfig,
     pub spaces: SpacesSidebarConfig,
+    /// Show a header per workspace above its agents in the "spaces" agent
+    /// ordering. Default: true.
+    pub group_agents_by_workspace: bool,
+}
+
+impl Default for SidebarConfig {
+    fn default() -> Self {
+        Self {
+            agents: AgentsSidebarConfig::default(),
+            spaces: SpacesSidebarConfig::default(),
+            group_agents_by_workspace: true,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn group_agents_by_workspace_defaults_on_and_parses_off() {
+        let config: crate::config::Config = toml::from_str("[ui.sidebar]\n").unwrap();
+        assert!(config.ui.sidebar.group_agents_by_workspace);
+
+        let config: crate::config::Config =
+            toml::from_str("[ui.sidebar]\ngroup_agents_by_workspace = false\n").unwrap();
+        assert!(!config.ui.sidebar.group_agents_by_workspace);
+        assert_eq!(config.ui.sidebar.agents, AgentsSidebarConfig::default());
+    }
 
     #[test]
     fn defaults_match_the_compact_agent_and_existing_space_layouts() {
@@ -503,6 +527,7 @@ mod tests {
         );
         assert!(config.agents.rows_by_agent.is_empty());
         assert_eq!(config.agents.row_gap, 0);
+        assert!(config.group_agents_by_workspace);
         assert_eq!(
             config.spaces.rows,
             vec![

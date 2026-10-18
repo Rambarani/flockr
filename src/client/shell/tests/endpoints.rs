@@ -2839,3 +2839,38 @@ fn navigator_foreign_workspace_heading_keeps_the_workspace_target() {
         }] if activated == &endpoint_id && workspace_id == "ws_1"
     ));
 }
+
+#[test]
+fn combined_agent_list_groups_by_machine_and_workspace() {
+    use crate::api::schema::AgentStatus;
+
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    let profile = remote_profile();
+    let endpoint_id = ClientEndpointId::Ssh(profile.id.clone());
+    state.set_endpoint_catalog(&[profile]);
+    state.set_endpoint_status(&endpoint_id, ClientEndpointStatus::Online);
+
+    // Both machines have a workspace with the same id and label; they must
+    // stay separate groups.
+    let mut local = snapshot();
+    local.agents = vec![agent("local agent", AgentStatus::Idle, 1)];
+    state.set_snapshot(Box::new(local));
+    state.set_pane_surface(surface());
+    let mut remote = snapshot();
+    remote.boot_id = "remote-boot".into();
+    remote.agents = vec![agent("remote agent", AgentStatus::Working, 1)];
+    state.set_endpoint_snapshot(&endpoint_id, Box::new(remote));
+
+    let frame = state.compose(100, 28).expect("combined endpoint frame");
+    let text = frame_rows(&frame).join("\n");
+    let local_header = text.find(" Local · client-shell").expect("local header");
+    let remote_header = text.find(" Build · client-shell").expect("remote header");
+    assert!(local_header < remote_header);
+
+    let body = state.hits.agent_body;
+    assert_eq!(state.hits.endpoint_agents.len(), 2);
+    assert_eq!(state.hits.endpoint_agents[0].0.y, body.y + 1);
+    assert_eq!(state.hits.endpoint_agents[0].1, ClientEndpointId::Local);
+    assert_eq!(state.hits.endpoint_agents[1].0.y, body.y + 4);
+    assert_eq!(state.hits.endpoint_agents[1].1, endpoint_id);
+}

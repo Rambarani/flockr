@@ -210,20 +210,37 @@ impl HeadlessServer {
         })
     }
 
-    /// Job results queued for terminal or system delivery become client
-    /// notifications; in-frame delivery is rendered by the app itself.
+    /// Job results go to client shells as semantic notifications (each shell
+    /// presents them per `[ui.toast] delivery`) and, for terminal or system
+    /// delivery, to a foreground non-shell client as a flat notification.
     pub(super) fn forward_job_notices(&mut self) {
-        let notices = self.app.take_job_client_notices();
-        if toast_notify_kind(self.app.state.toast_config.delivery).is_none() {
-            return;
-        }
-        for notice in notices {
-            self.send_notify_to_foreground_client(
-                toast_notify_kind(self.app.state.toast_config.delivery)
-                    .unwrap_or(protocol::NotifyKind::Toast),
-                &notice.title,
-                non_empty_body(&notice.body),
-            );
+        for notice in self.app.take_job_client_notices() {
+            self.send_to_client_shells(ServerMessage::SemanticNotification(
+                protocol::SemanticNotification {
+                    // `Finished` without a pane is discarded by shells, so
+                    // successes use the neutral custom kind.
+                    kind: if notice.failed {
+                        protocol::SemanticNotificationKind::NeedsAttention
+                    } else {
+                        protocol::SemanticNotificationKind::Custom
+                    },
+                    title: notice.title.clone(),
+                    body: non_empty_body(&notice.body),
+                    sound: None,
+                    agent: None,
+                    workspace_id: None,
+                    tab_id: None,
+                    pane_id: None,
+                    position: None,
+                },
+            ));
+            if let Some(kind) = toast_notify_kind(self.app.state.toast_config.delivery) {
+                self.send_notify_to_foreground_client(
+                    kind,
+                    &notice.title,
+                    non_empty_body(&notice.body),
+                );
+            }
         }
     }
 

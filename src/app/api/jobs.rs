@@ -155,6 +155,12 @@ impl App {
             },
         });
         if let Some(notice) = finished.notice {
+            if self.state.toast_config.delivery != crate::config::ToastDelivery::Off {
+                // Client shells and other attached clients get every notice
+                // (they apply `delivery` themselves); the in-frame toast below
+                // is for the app's own rendering.
+                self.job_client_notices.push(notice.clone());
+            }
             if self.pending_job_notices.len() >= MAX_PENDING_NOTICES {
                 self.pending_job_notices.pop_front();
             }
@@ -164,19 +170,16 @@ impl App {
         true
     }
 
-    /// Show queued job results according to `[ui.toast] delivery`: in-frame
-    /// toasts one at a time when the slot is free, client notifications for
-    /// terminal and system delivery, nothing when delivery is off.
+    /// Show queued job results as in-frame toasts, one at a time when the
+    /// slot is free. Terminal and system delivery are forwarded to clients by
+    /// the server (`take_job_client_notices`); `off` shows nothing.
     pub(crate) fn deliver_job_notices(&mut self) -> bool {
         use crate::config::ToastDelivery;
 
         let mut changed = false;
         match self.state.toast_config.delivery {
             ToastDelivery::Off => self.pending_job_notices.clear(),
-            ToastDelivery::Terminal | ToastDelivery::System => {
-                self.job_client_notices
-                    .extend(self.pending_job_notices.drain(..));
-            }
+            ToastDelivery::Terminal | ToastDelivery::System => self.pending_job_notices.clear(),
             ToastDelivery::Flockr => {
                 if self.state.toast.is_none() {
                     if let Some(notice) = self.pending_job_notices.pop_front() {
@@ -201,7 +204,8 @@ impl App {
         changed
     }
 
-    /// Results for clients to show as terminal or system notifications.
+    /// Results to forward to attached clients, which present them according
+    /// to `[ui.toast] delivery`.
     pub(crate) fn take_job_client_notices(&mut self) -> Vec<Notice> {
         std::mem::take(&mut self.job_client_notices)
     }

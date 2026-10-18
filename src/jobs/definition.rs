@@ -576,11 +576,12 @@ pub(crate) fn parse_job_toml(
     dir_name: &str,
     dir: &Path,
 ) -> Result<JobDef, Vec<String>> {
-    let mut document: toml::Table = toml::from_str(content).map_err(|err| vec![err.to_string()])?;
+    let mut document: toml::Table =
+        toml::from_str(content).map_err(|err| vec![err.to_string().trim_end().to_owned()])?;
     let (mode, env_vars) = extract_env(&mut document)?;
     let mut raw: RawJob = toml::Value::Table(document)
         .try_into()
-        .map_err(|err: toml::de::Error| vec![err.to_string()])?;
+        .map_err(|err: toml::de::Error| vec![err.to_string().trim_end().to_owned()])?;
     raw.env_vars = env_vars;
     raw.env = mode;
     build_job(raw, Some(dir_name), dir, JobSource::User)
@@ -600,7 +601,8 @@ pub(crate) fn parse_plugin_manifest_jobs(
     plugin_root: &Path,
     manifest_path: &Path,
 ) -> Result<Vec<Result<JobDef, InvalidJob>>, String> {
-    let manifest: PluginJobsOnly = toml::from_str(content).map_err(|err| err.to_string())?;
+    let manifest: PluginJobsOnly =
+        toml::from_str(content).map_err(|err| err.to_string().trim_end().to_owned())?;
     let source = JobSource::Plugin {
         plugin_id: plugin_id.to_owned(),
         plugin_root: plugin_root.to_path_buf(),
@@ -628,7 +630,7 @@ pub(crate) fn parse_plugin_manifest_jobs(
         let mut raw = match raw {
             Ok(raw) => raw,
             Err(err) => {
-                results.push(Err(invalid(vec![err.to_string()])));
+                results.push(Err(invalid(vec![err.to_string().trim_end().to_owned()])));
                 continue;
             }
         };
@@ -763,6 +765,10 @@ LOG_LEVEL = "debug"
     fn unknown_keys_are_rejected_so_typos_surface() {
         let errors = parse("command = [\"x\"]\nevry = \"1h\"\n").unwrap_err();
         assert!(errors[0].contains("unknown field `evry`"), "{errors:?}");
+        assert!(
+            !errors[0].ends_with('\n'),
+            "no trailing newline: {errors:?}"
+        );
     }
 
     #[test]

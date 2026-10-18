@@ -431,7 +431,7 @@ herdr plugin enable <plugin_id>
 herdr plugin disable <plugin_id>
 ```
 
-`plugin install` 只接受 GitHub 简写,比如 `ogulcancelik/herdr-plugin-examples/worktree-bootstrap`。它使用 `git`,在交互式终端显示信任预览,运行受支持的清单构建命令,并把 GitHub 安装保存在 Herdr 管理的目录中。非交互式安装用 `--yes`。`plugin update` 不指定目标时更新全部 GitHub 托管插件,指定目标时只更新对应的插件 id 或 GitHub 来源。它保留安装时记录的 ref,跳过未变化的提交,批量更新时忽略本地链接的插件。重新安装会创建新目录;运行中的插件保留原文件,新调用使用新安装。不允许覆盖安装到本地链接的插件之上。插件清单必须声明 `min_herdr_version`;当插件要求更新的 Herdr 二进制时,install 和 link 会失败。`plugin list` 默认是人类可读的;要原始 API 响应就传 `--json`。
+`plugin install` 只接受 GitHub 简写,比如 `Rambarani/flockr-plugin-examples/worktree-bootstrap`。它使用 `git`,在交互式终端显示信任预览,运行受支持的清单构建命令,并把 GitHub 安装保存在 Herdr 管理的目录中。非交互式安装用 `--yes`。`plugin update` 不指定目标时更新全部 GitHub 托管插件,指定目标时只更新对应的插件 id 或 GitHub 来源。它保留安装时记录的 ref,跳过未变化的提交,批量更新时忽略本地链接的插件。重新安装会创建新目录;运行中的插件保留原文件,新调用使用新安装。不允许覆盖安装到本地链接的插件之上。插件清单必须声明 `min_herdr_version`;当插件要求更新的 Herdr 二进制时,install 和 link 会失败。`plugin list` 默认是人类可读的;要原始 API 响应就传 `--json`。
 
 本地开发:
 

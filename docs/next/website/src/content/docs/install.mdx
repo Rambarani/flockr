@@ -10,19 +10,19 @@ Herdr publishes stable-channel binaries for Linux, macOS, and Windows. Windows i
 On Linux or macOS, run:
 
 ```bash
-curl -fsSL https://herdr.dev/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Rambarani/flockr/main/distribution/install.sh | sh
 ```
 
 On Windows, run:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://herdr.dev/install.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/Rambarani/flockr/main/distribution/install.ps1 | iex"
 ```
 
 If endpoint security blocks that fileless PowerShell command, open Command Prompt and run:
 
 ```cmd
-curl.exe -fsSLo install.cmd https://herdr.dev/install.cmd && install.cmd && del install.cmd
+curl.exe -fsSLo install.cmd https://raw.githubusercontent.com/Rambarani/flockr/main/distribution/install.cmd && install.cmd && del install.cmd
 ```
 
 The installer downloads the release binary for your platform and places it on your PATH. New direct installs use the stable update channel. Existing Windows preview installs stay on preview until you switch them with `herdr channel set stable`. On Windows, PATH points to the active versioned release directory; the installer also updates the `current` and stable `bin` compatibility aliases, so updates do not need to overwrite a running `herdr.exe`.
@@ -43,16 +43,16 @@ If you already use mise:
 mise use -g herdr
 ```
 
-If mise reports `herdr not found in mise tool registry`, update mise and retry. Older mise versions predate the Herdr registry entry; `mise use -g github:herdrdev/herdr` works as a temporary fallback.
+If mise reports `herdr not found in mise tool registry`, update mise and retry. Older mise versions predate the Herdr registry entry; `mise use -g github:Rambarani/flockr` works as a temporary fallback.
 
 ## Install with Nix
 
 If you already use Nix, Herdr provides a flake that builds Herdr from source:
 
 ```bash
-nix run github:herdrdev/herdr/v0.x.y
-nix build github:herdrdev/herdr/v0.x.y
-nix profile install github:herdrdev/herdr/v0.x.y
+nix run github:Rambarani/flockr/v0.x.y
+nix build github:Rambarani/flockr/v0.x.y
+nix profile install github:Rambarani/flockr/v0.x.y
 ```
 
 Replace `v0.x.y` with the latest release tag. You can omit the tag to track `master`, but release tags are recommended for normal installs.
@@ -60,7 +60,7 @@ Replace `v0.x.y` with the latest release tag. You can omit the tag to track `mas
 The flake also exposes a development shell:
 
 ```bash
-nix develop github:herdrdev/herdr
+nix develop github:Rambarani/flockr
 ```
 
 Use the same Nix workflow to update Herdr. For a profile install, list your profile entries and upgrade the Herdr entry:
@@ -78,7 +78,7 @@ nix flake update herdr
 
 ## Download manually
 
-You can also download a binary from [GitHub releases](https://github.com/herdrdev/herdr/releases).
+You can also download a binary from [GitHub releases](https://github.com/Rambarani/flockr/releases).
 
 Choose the asset that matches your system:
 

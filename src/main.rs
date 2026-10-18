@@ -126,10 +126,10 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # so existing preview installs stay there until explicitly switched.
 # channel = "stable"
 
-# Check herdr.dev for new Herdr versions in the background.
+# Check the flockr GitHub repository for new Herdr versions in the background.
 # version_check = true
 
-# Check herdr.dev for remote agent-detection manifest updates in the background.
+# Check the flockr GitHub repository for remote agent-detection manifest updates in the background.
 # manifest_check = true
 
 [keys]
@@ -733,7 +733,7 @@ fn main() -> io::Result<()> {
         println!("Config: {}", config::config_path().display());
         println!("Logs:   {}", logging::help_log_paths_summary());
         println!("Env:    FLOCKR_CONFIG_PATH overrides config file path");
-        println!("Home:   https://herdr.dev");
+        println!("Home:   https://github.com/Rambarani/flockr");
         println!();
         println!("{}", cli::AGENT_HELP_FOOTER);
         return Ok(());

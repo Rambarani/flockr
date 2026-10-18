@@ -48,9 +48,9 @@ const TERMINAL_SESSION_CONTROL_USAGE: &str =
 pub(crate) const AGENT_HELP_FOOTER: &str = concat!(
     "Are you an AI? Use these resources ONLY IF your task specifically asks you to:\n",
     "  Help a human understand or set up Herdr for the first time:\n",
-    "    https://herdr.dev/agent-guide.md\n",
+    "    https://raw.githubusercontent.com/Rambarani/flockr/main/distribution/agent-guide.md\n",
     "  Debug or investigate a problem with Herdr:\n",
-    "    https://herdr.dev/llms.txt\n",
+    "    https://github.com/Rambarani/flockr/llms.txt\n",
     "  Control Herdr panes, agents, or workspaces:\n",
     "    SKIP if a Herdr skill is already in your context. Otherwise run: herdr --skill",
 );

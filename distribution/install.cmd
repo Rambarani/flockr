@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-set "INSTALLER_URL=https://herdr.dev/install.ps1"
+set "INSTALLER_URL=https://raw.githubusercontent.com/Rambarani/flockr/main/distribution/install.ps1"
 set "CURL_PROTOCOL=--proto =https --tlsv1.2"
 if defined FLOCKR_INSTALLER_URL (
     set "INSTALLER_URL=%FLOCKR_INSTALLER_URL%"

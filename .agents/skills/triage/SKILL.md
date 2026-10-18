@@ -7,7 +7,7 @@ description: Triage open herdr GitHub issues into a concise decision-first Markd
 
 Use this skill only inside the herdr repository.
 
-When the user says `triage`, inspect open GitHub issues for `herdrdev/herdr` and return a concise Markdown table. Prefer GitHub MCP tools when available. If they are unavailable, use `gh issue list` / `gh issue view` only when authenticated access is already configured.
+When the user says `triage`, inspect open GitHub issues for `Rambarani/flockr` and return a concise Markdown table. Prefer GitHub MCP tools when available. If they are unavailable, use `gh issue list` / `gh issue view` only when authenticated access is already configured.
 
 Use this table shape:
 

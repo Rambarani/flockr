@@ -10,19 +10,19 @@ Herdr 为 Linux、macOS 和 Windows 提供稳定通道二进制文件。Windows 
 在 Linux 或 macOS 上运行:
 
 ```bash
-curl -fsSL https://herdr.dev/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Rambarani/flockr/main/distribution/install.sh | sh
 ```
 
 在 Windows 上运行:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://herdr.dev/install.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/Rambarani/flockr/main/distribution/install.ps1 | iex"
 ```
 
 如果端点安全软件阻止该无文件 PowerShell 命令，请打开命令提示符并运行：
 
 ```cmd
-curl.exe -fsSLo install.cmd https://herdr.dev/install.cmd && install.cmd && del install.cmd
+curl.exe -fsSLo install.cmd https://raw.githubusercontent.com/Rambarani/flockr/main/distribution/install.cmd && install.cmd && del install.cmd
 ```
 
 安装器会下载适合你平台的发布二进制文件并放到 PATH 上。新的直接安装默认使用稳定更新通道。现有的 Windows 预览安装会继续留在预览通道,直到你运行 `herdr channel set stable`。在 Windows 上,PATH 指向当前带版本号的发布目录;安装器还会更新 `current` 和稳定的 `bin` 兼容别名,因此更新时不需要覆盖正在运行的 `herdr.exe`。
@@ -43,16 +43,16 @@ brew install herdr
 mise use -g herdr
 ```
 
-如果 mise 报 `herdr not found in mise tool registry`,请更新 mise 后重试。旧版 mise 早于 Herdr 的注册表条目;`mise use -g github:herdrdev/herdr` 可以作为临时兜底。
+如果 mise 报 `herdr not found in mise tool registry`,请更新 mise 后重试。旧版 mise 早于 Herdr 的注册表条目;`mise use -g github:Rambarani/flockr` 可以作为临时兜底。
 
 ## 用 Nix 安装
 
 如果你已经在用 Nix,Herdr 提供了一个从源码构建的 flake:
 
 ```bash
-nix run github:herdrdev/herdr/v0.x.y
-nix build github:herdrdev/herdr/v0.x.y
-nix profile install github:herdrdev/herdr/v0.x.y
+nix run github:Rambarani/flockr/v0.x.y
+nix build github:Rambarani/flockr/v0.x.y
+nix profile install github:Rambarani/flockr/v0.x.y
 ```
 
 把 `v0.x.y` 替换为最新的发布标签。省略标签可以跟踪 `master`,但常规安装建议使用发布标签。
@@ -60,7 +60,7 @@ nix profile install github:herdrdev/herdr/v0.x.y
 flake 还提供一个开发 shell:
 
 ```bash
-nix develop github:herdrdev/herdr
+nix develop github:Rambarani/flockr
 ```
 
 更新时使用你安装 Herdr 的同一套 Nix 工作流。对于 profile 安装,列出 profile 条目并升级 Herdr 条目:
@@ -78,7 +78,7 @@ nix flake update herdr
 
 ## 手动下载
 
-也可以从 [GitHub releases](https://github.com/herdrdev/herdr/releases) 下载二进制文件。
+也可以从 [GitHub releases](https://github.com/Rambarani/flockr/releases) 下载二进制文件。
 
 选择匹配你系统的产物:
 

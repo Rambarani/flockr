@@ -83,7 +83,7 @@ Suspending an agent with Ctrl+Z preserves its name, session reference, and hook 
 
 ## Detection manifests
 
-Bundled manifests live inside Herdr. Herdr also checks herdr.dev for remote manifest updates and applies valid per-agent rule updates automatically without requiring a Herdr restart. Remote manifests are stored in Herdr's state directory. Set `[update] manifest_check = false` to disable background remote manifest checks.
+Bundled manifests live inside Herdr. Herdr also checks github.com/Rambarani/flockr for remote manifest updates and applies valid per-agent rule updates automatically without requiring a Herdr restart. Remote manifests are stored in Herdr's state directory. Set `[update] manifest_check = false` to disable background remote manifest checks.
 
 Local overrides can replace a remote or bundled manifest from the platform config directory:
 

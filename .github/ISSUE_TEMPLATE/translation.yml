@@ -23,7 +23,7 @@ body:
     attributes:
       label: Page
       description: URL of the affected docs page.
-      placeholder: https://herdr.dev/ja/docs/quick-start/
+      placeholder: https://github.com/Rambarani/flockr/ja/docs/quick-start/
     validations:
       required: true
 

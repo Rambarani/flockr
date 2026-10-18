@@ -467,13 +467,13 @@
           "key": "update.version_check",
           "type": "boolean",
           "default": "true",
-          "description": "Check herdr.dev for new Herdr versions in the background."
+          "description": "Check the flockr GitHub repository for new Herdr versions in the background."
         },
         {
           "key": "update.manifest_check",
           "type": "boolean",
           "default": "true",
-          "description": "Check herdr.dev for remote agent-detection manifest updates in the background. Bundled manifests and local overrides still apply."
+          "description": "Check the flockr GitHub repository for remote agent-detection manifest updates in the background. Bundled manifests and local overrides still apply."
         }
       ]
     },

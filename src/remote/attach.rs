@@ -30,8 +30,8 @@ const NONINTERACTIVE_SSH_STDERR_LIMIT: usize = 16 * 1024;
 const BRIDGE_FAILURE_REPORT_TIMEOUT: Duration = Duration::from_secs(1);
 const REMOTE_SERVER_SHUTDOWN_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const CURRENT_PROTOCOL: u32 = crate::protocol::PROTOCOL_VERSION;
-const STABLE_UPDATE_MANIFEST_URL: &str = "https://herdr.dev/latest.json";
-const PREVIEW_UPDATE_MANIFEST_URL: &str = "https://herdr.dev/preview.json";
+const STABLE_UPDATE_MANIFEST_URL: &str = "https://raw.githubusercontent.com/Rambarani/flockr/main/distribution/latest.json";
+const PREVIEW_UPDATE_MANIFEST_URL: &str = "https://raw.githubusercontent.com/Rambarani/flockr/main/distribution/preview.json";
 const REMOTE_BINARY_ENV_VAR: &str = "FLOCKR_REMOTE_BINARY";
 const REMOTE_OUTPUT_READY_MARKER: &str = "flockr-remote-output-ready:1";
 const WINDOWS_REMOTE_PATH_MARKER: &str = "flockr-remote-path:1:";
@@ -1714,7 +1714,7 @@ fi
         r#"if [ -n "$home" ]; then
     emit "$home/.local/share/mise/installs/herdr/$version/bin/herdr"
     emit "$home/.local/share/mise/installs/herdr/$version/herdr"
-    emit "$home/.local/share/mise/installs/github-ogulcancelik-herdr/$version/herdr"
+    emit "$home/.local/share/mise/installs/github-rambarani-flockr/$version/herdr"
     emit "$home/.nix-profile/bin/herdr"
 fi
 if [ -n "$user" ]; then
@@ -5147,7 +5147,7 @@ function Get-Process {
         );
         assert!(script.contains("emit \"$home/.local/share/mise/installs/herdr/$version/herdr\""));
         assert!(script.contains(
-            "emit \"$home/.local/share/mise/installs/github-ogulcancelik-herdr/$version/herdr\""
+            "emit \"$home/.local/share/mise/installs/github-rambarani-flockr/$version/herdr\""
         ));
         assert!(script.contains("emit \"$home/.nix-profile/bin/herdr\""));
         assert!(script.contains("emit \"/etc/profiles/per-user/$user/bin/herdr\""));

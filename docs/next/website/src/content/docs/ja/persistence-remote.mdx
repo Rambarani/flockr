@@ -94,7 +94,7 @@ herdr --remote workbox --handoff
 
 先にサーバーへ SSH してそこで `herdr` を実行した場合、Herdr は完全にサーバー上で動きます。このモードは便利でシンプルですが、通常のターミナルテキスト貼り付けを超えてローカルデスクトップのクリップボードにはアクセスできません。
 
-Linux/macOS ホストでは、プラットフォームが一致する直接インストールなら現在のローカルバイナリをコピーできます。Homebrew、mise、Nix のインストール、異なるプラットフォーム、または Windows ホストの場合は、`https://herdr.dev/latest.json` から現在のクライアントバージョンに対応するリリースアセットをダウンロードします。
+Linux/macOS ホストでは、プラットフォームが一致する直接インストールなら現在のローカルバイナリをコピーできます。Homebrew、mise、Nix のインストール、異なるプラットフォーム、または Windows ホストの場合は、`https://raw.githubusercontent.com/Rambarani/flockr/main/distribution/latest.json` から現在のクライアントバージョンに対応するリリースアセットをダウンロードします。
 
 ローカルビルドやカスタムパッケージを使うには、リモートアタッチ前に `FLOCKR_REMOTE_BINARY` にローカルファイルパスを設定します。Linux/macOS 向けには実行ファイル、Windows 向けには完全な `herdr-windows-x86_64.zip` パッケージを指定してください。
 

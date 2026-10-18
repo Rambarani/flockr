@@ -1043,7 +1043,7 @@ command = ["sh", "-c", "echo bootstrap"]
     fs::write(
         &git_config,
         format!(
-            "[url \"file://{}\"]\n    insteadOf = https://github.com/ogulcancelik/herdr-plugin-examples.git\n",
+            "[url \"file://{}\"]\n    insteadOf = https://github.com/Rambarani/flockr-plugin-examples.git\n",
             source_repo.display()
         ),
     )
@@ -1061,7 +1061,7 @@ command = ["sh", "-c", "echo bootstrap"]
             "--yes",
             "--ref",
             "v0.43.0",
-            "ogulcancelik/herdr-plugin-examples/worktree-bootstrap",
+            "Rambarani/flockr-plugin-examples/worktree-bootstrap",
         ],
         &[
             ("GIT_CONFIG_GLOBAL", &git_config),
@@ -1179,7 +1179,7 @@ command = ["sh", "-c", "echo should-not-install"]
     fs::write(
         &git_config,
         format!(
-            "[url \"file://{}\"]\n    insteadOf = https://github.com/ogulcancelik/herdr-plugin-examples.git\n",
+            "[url \"file://{}\"]\n    insteadOf = https://github.com/Rambarani/flockr-plugin-examples.git\n",
             source_repo.display()
         ),
     )
@@ -1193,7 +1193,7 @@ command = ["sh", "-c", "echo should-not-install"]
             "plugins",
             "plugin",
             "install",
-            "ogulcancelik/herdr-plugin-examples/build-fail",
+            "Rambarani/flockr-plugin-examples/build-fail",
             "--yes",
         ],
         &[("GIT_CONFIG_GLOBAL", &git_config)],
@@ -1275,7 +1275,7 @@ command = ["sh", "-c", "echo should-not-install"]
     fs::write(
         &git_config,
         format!(
-            "[url \"file://{}\"]\n    insteadOf = https://github.com/ogulcancelik/herdr-plugin-examples.git\n",
+            "[url \"file://{}\"]\n    insteadOf = https://github.com/Rambarani/flockr-plugin-examples.git\n",
             source_repo.display()
         ),
     )
@@ -1289,7 +1289,7 @@ command = ["sh", "-c", "echo should-not-install"]
             "plugins",
             "plugin",
             "install",
-            "ogulcancelik/herdr-plugin-examples/missing-tool",
+            "Rambarani/flockr-plugin-examples/missing-tool",
             "--yes",
         ],
         &[("GIT_CONFIG_GLOBAL", &git_config)],
@@ -1384,7 +1384,7 @@ EOF
     fs::write(
         &git_config,
         format!(
-            "[url \"file://{}\"]\n    insteadOf = https://github.com/ogulcancelik/herdr-plugin-examples.git\n",
+            "[url \"file://{}\"]\n    insteadOf = https://github.com/Rambarani/flockr-plugin-examples.git\n",
             source_repo.display()
         ),
     )
@@ -1398,7 +1398,7 @@ EOF
             "plugins",
             "plugin",
             "install",
-            "ogulcancelik/herdr-plugin-examples/manifest-mutator",
+            "Rambarani/flockr-plugin-examples/manifest-mutator",
             "--yes",
         ],
         &[("GIT_CONFIG_GLOBAL", &git_config)],

@@ -14,7 +14,7 @@ env:
 
 jobs:
   validate-release-source:
-    if: github.repository == 'herdrdev/herdr' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: github.repository == 'Rambarani/flockr' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     outputs:
       preview_commit: ${{ steps.source.outputs.preview_commit }}
@@ -48,7 +48,7 @@ jobs:
 
   flake-check:
     needs: validate-release-source
-    if: github.repository == 'herdrdev/herdr'
+    if: github.repository == 'Rambarani/flockr'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -72,7 +72,7 @@ jobs:
 
   build:
     needs: validate-release-source
-    if: github.repository == 'herdrdev/herdr'
+    if: github.repository == 'Rambarani/flockr'
     permissions:
       contents: read
     strategy:
@@ -202,7 +202,7 @@ jobs:
 
   validate-release-inputs:
     needs: validate-release-source
-    if: github.repository == 'herdrdev/herdr'
+    if: github.repository == 'Rambarani/flockr'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -231,7 +231,7 @@ jobs:
 
   release:
     needs: [build, flake-check, validate-release-inputs]
-    if: github.repository == 'herdrdev/herdr' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: github.repository == 'Rambarani/flockr' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -261,7 +261,7 @@ jobs:
 
   update-nix-package:
     needs: release
-    if: github.repository == 'herdrdev/herdr' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: github.repository == 'Rambarani/flockr' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 2
     continue-on-error: true
@@ -274,14 +274,14 @@ jobs:
           GH_TOKEN: ${{ secrets.FLOCKR_NIX_DISPATCH_TOKEN }}
           GH_HOST: github.com
         run: |
-          if ! gh workflow run update-check.yml --repo herdrdev/herdr-nix --ref main; then
-            echo "::warning::Nix update could not be triggered. The Herdr release is already published; run update-check manually in herdrdev/herdr-nix."
+          if ! gh workflow run update-check.yml --repo Rambarani/flockr-nix --ref main; then
+            echo "::warning::Nix update could not be triggered. The Herdr release is already published; run update-check manually in Rambarani/flockr-nix."
             exit 1
           fi
 
   close-released-issues:
     needs: [release, validate-release-source]
-    if: github.repository == 'herdrdev/herdr' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: github.repository == 'Rambarani/flockr' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     continue-on-error: true
     permissions:
@@ -413,7 +413,7 @@ jobs:
 
   update-latest-json:
     needs: [release, validate-release-source]
-    if: github.repository == 'herdrdev/herdr' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: github.repository == 'Rambarani/flockr' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     concurrency:
       group: docs-publish-master

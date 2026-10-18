@@ -12,9 +12,10 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use super::format::{ItemRecord, ParsedFeed};
+use super::format::{GroupRecord, ItemRecord, ParsedFeed};
 use crate::api::schema::{
-    FeedActionInfo, FeedActionResult, FeedField, FeedItemInfo, FeedItemState, FeedSummary,
+    FeedActionInfo, FeedActionResult, FeedField, FeedGroupInfo, FeedItemInfo, FeedItemState,
+    FeedSummary,
 };
 
 const STORE_VERSION: u32 = 1;
@@ -29,6 +30,8 @@ pub(crate) struct StoredFeed {
     pub(crate) fetched_unix_ms: Option<u64>,
     #[serde(default)]
     pub(crate) title: Option<String>,
+    #[serde(default)]
+    pub(crate) groups: Vec<GroupRecord>,
     #[serde(default)]
     pub(crate) items: Vec<ItemRecord>,
     /// The last refresh failed.
@@ -49,6 +52,31 @@ impl StoredFeed {
             .try_into()
             .unwrap_or(u32::MAX)
     }
+
+    /// Declared groups with their counts, in order; empty for a flat feed.
+    fn group_infos(&self) -> Vec<FeedGroupInfo> {
+        self.groups
+            .iter()
+            .map(|group| {
+                let members = || {
+                    self.items
+                        .iter()
+                        .filter(|item| item.group.as_deref() == Some(group.id.as_str()))
+                };
+                FeedGroupInfo {
+                    id: group.id.clone(),
+                    title: group.title.clone(),
+                    short_title: group.short_title.clone(),
+                    count: members().count().try_into().unwrap_or(u32::MAX),
+                    unread: members()
+                        .filter(|item| item.state == FeedItemState::Unread)
+                        .count()
+                        .try_into()
+                        .unwrap_or(u32::MAX),
+                }
+            })
+            .collect()
+    }
 }
 
 /// Everything that makes one stored feed look different to a client.
@@ -56,6 +84,7 @@ fn visible_part(
     feed: &StoredFeed,
 ) -> (
     &Option<String>,
+    &Vec<GroupRecord>,
     &Vec<ItemRecord>,
     bool,
     &Option<String>,
@@ -63,6 +92,7 @@ fn visible_part(
 ) {
     (
         &feed.title,
+        &feed.groups,
         &feed.items,
         feed.stale,
         &feed.error,
@@ -273,6 +303,7 @@ impl FeedManager {
             RefreshOutcome::Feed(parsed) => {
                 next.fetched_unix_ms = Some(finished_unix_ms);
                 next.title = parsed.title;
+                next.groups = parsed.groups;
                 next.items = parsed.items;
                 next.stale = false;
                 next.error = None;
@@ -328,6 +359,7 @@ impl FeedManager {
             error: stored.error.clone(),
             refreshing: entry.busy.is_some(),
             diagnostics: stored.diagnostics.clone(),
+            groups: stored.group_infos(),
             last_action: entry.last_action.clone(),
         }
     }
@@ -362,6 +394,7 @@ impl FeedManager {
                         value: field.value.clone(),
                     })
                     .collect(),
+                group: item.group.clone(),
                 actions: item
                     .actions
                     .iter()
@@ -455,6 +488,53 @@ mod tests {
         assert!(summary.loaded && !summary.refreshing && !summary.stale);
         assert_eq!(summary.fetched_unix_ms, Some(1_000));
         assert!(dir.join("feed.json").is_file());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn group_counts_reach_the_summary_and_items_carry_their_group() {
+        let dir = temp_dir("groups");
+        let mut manager = FeedManager::new();
+        manager.begin("sync", &dir, TaskKind::Refresh).unwrap();
+        let text = r#"{"version":1,"groups":[{"id":"x","title":"X"},{"id":"y","title":"Y"}],
+            "items":[{"id":"1","state":"unread","group":"x"},{"id":"2","group":"x"},
+                     {"id":"3","state":"unread"}]}"#;
+        let finished = manager.finish(result(feed(text), 1), &dir);
+        assert!(finished.changed);
+        let summary = manager.summary("sync", &dir, None, "Sync");
+        let counts: Vec<_> = summary
+            .groups
+            .iter()
+            .map(|g| (g.id.as_str(), g.count, g.unread))
+            .collect();
+        assert_eq!(counts, [("x", 2, 1), ("y", 0, 0), ("other", 1, 1)]);
+        let items = manager.items("sync", &dir, None);
+        let groups: Vec<_> = items.iter().map(|i| i.group.as_deref()).collect();
+        assert_eq!(groups, [Some("x"), Some("x"), Some("other")]);
+        // The groups survive a restart, and a regroup is a visible change.
+        let mut reloaded = FeedManager::new();
+        assert_eq!(reloaded.summary("sync", &dir, None, "Sync").groups.len(), 3);
+        let regrouped = r#"{"version":1,"groups":[{"id":"y","title":"Y"}],
+            "items":[{"id":"1","state":"unread","group":"y"},{"id":"2","group":"x"},
+                     {"id":"3","state":"unread"}]}"#;
+        assert!(reloaded.finish(result(feed(regrouped), 2), &dir).changed);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_flat_feed_has_no_groups_in_its_summary() {
+        let dir = temp_dir("flat");
+        let mut manager = FeedManager::new();
+        manager.begin("sync", &dir, TaskKind::Refresh).unwrap();
+        manager.finish(result(feed(TWO_ITEMS), 1), &dir);
+        assert!(manager
+            .summary("sync", &dir, None, "Sync")
+            .groups
+            .is_empty());
+        assert!(manager
+            .items("sync", &dir, None)
+            .iter()
+            .all(|item| item.group.is_none()));
         std::fs::remove_dir_all(dir).unwrap();
     }
 

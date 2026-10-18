@@ -6,8 +6,15 @@
 //!    "badge":"NH-1","url":"https://example.com","updated_at":"2026-10-18T09:00:00Z",
 //!    "body":"Can you look?\nIt blocks the release.",
 //!    "fields":[{"label":"Source","value":"jira"}],
+//!    "group":"mentions",
 //!    "actions":[{"key":"d","title":"done","command":["workbox","mark","a","done"]}]}]}
 //! ```
+//!
+//! A feed may also declare `"groups":[{"id":"mentions","title":"Mentions"}]`
+//! (optionally with a `short_title` for narrow places) and tag items with a
+//! `group` id. The list order is the tab order; items whose group is missing
+//! or not declared are collected in an implicit `other` group. A feed without
+//! `groups` is one flat list, exactly as before.
 //!
 //! The parser is strict about the document shape and forgiving about
 //! details: unknown fields are ignored, an unknown state becomes `read`, long
@@ -35,6 +42,14 @@ pub(crate) const MAX_BODY_BYTES: usize = 8 * 1024;
 pub(crate) const MAX_FIELDS: usize = 12;
 pub(crate) const MAX_FIELD_LABEL_CHARS: usize = 40;
 pub(crate) const MAX_FIELD_VALUE_CHARS: usize = 500;
+/// Most groups a feed may declare (the implicit `other` group is extra).
+pub(crate) const MAX_GROUPS: usize = 16;
+pub(crate) const MAX_GROUP_ID_CHARS: usize = 40;
+pub(crate) const MAX_GROUP_TITLE_CHARS: usize = 60;
+pub(crate) const MAX_GROUP_SHORT_TITLE_CHARS: usize = 20;
+/// The id of the implicit group for items without a known group.
+pub(crate) const OTHER_GROUP_ID: &str = "other";
+pub(crate) const OTHER_GROUP_TITLE: &str = "Other";
 pub(crate) const MAX_ACTIONS: usize = 8;
 pub(crate) const MAX_ACTION_TITLE_CHARS: usize = 40;
 pub(crate) const MAX_ARGV: usize = 64;
@@ -64,12 +79,25 @@ pub(crate) const RESERVED_NAMES: &[&str] = &[
     "space",
 ];
 pub(crate) const RESERVED_CHARS: &[char] = &['j', 'k', 'q', 'g', 'G', 'R', 'S', '/'];
+/// Also reserved, but only in a feed that declares `groups`: the overlay
+/// switches category with these, so a flat feed keeps them for actions.
+pub(crate) const GROUPED_RESERVED_CHARS: &[char] =
+    &['[', ']', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct ActionRecord {
     pub(crate) key: String,
     pub(crate) title: String,
     pub(crate) command: Vec<String>,
+}
+
+/// A category of a feed (a tab in the Feed overlay).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct GroupRecord {
+    pub(crate) id: String,
+    pub(crate) title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) short_title: Option<String>,
 }
 
 /// A labelled value in an item's detail view.
@@ -98,6 +126,10 @@ pub(crate) struct ItemRecord {
     pub(crate) body: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) fields: Vec<FieldRecord>,
+    /// The id of the item's group; only set in a feed with `groups`, where
+    /// the parser resolves it to a declared group or `other`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) group: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) actions: Vec<ActionRecord>,
 }
@@ -105,6 +137,9 @@ pub(crate) struct ItemRecord {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ParsedFeed {
     pub(crate) title: Option<String>,
+    /// Declared groups in order, plus `other` when an item landed there.
+    /// Empty for a flat feed.
+    pub(crate) groups: Vec<GroupRecord>,
     pub(crate) items: Vec<ItemRecord>,
     pub(crate) diagnostics: Vec<String>,
 }
@@ -306,6 +341,12 @@ fn optional_text(
 
 /// Why `key` cannot be an action key, if it cannot.
 pub(crate) fn action_key_problem(key: &str) -> Option<String> {
+    action_key_problem_in(key, false)
+}
+
+/// Like `action_key_problem`; `grouped` adds the keys the overlay uses to
+/// switch category in a feed with groups.
+pub(crate) fn action_key_problem_in(key: &str, grouped: bool) -> Option<String> {
     let mut chars = key.chars();
     let (Some(first), None) = (chars.next(), chars.next()) else {
         if RESERVED_NAMES.contains(&key.to_ascii_lowercase().as_str()) {
@@ -319,12 +360,18 @@ pub(crate) fn action_key_problem(key: &str) -> Option<String> {
     if RESERVED_CHARS.contains(&first) {
         return Some(format!("{first:?} is reserved for the overlay"));
     }
+    if grouped && GROUPED_RESERVED_CHARS.contains(&first) {
+        return Some(format!(
+            "{first:?} is reserved for the overlay in a feed with groups"
+        ));
+    }
     None
 }
 
 fn parse_action(
     value: &serde_json::Value,
     context: &str,
+    grouped: bool,
     seen_keys: &mut Vec<String>,
     diagnostics: &mut Diagnostics,
 ) -> Option<ActionRecord> {
@@ -336,7 +383,7 @@ fn parse_action(
         diagnostics.push(format!("{context}: an action needs a string key; dropped"));
         return None;
     };
-    if let Some(problem) = action_key_problem(key) {
+    if let Some(problem) = action_key_problem_in(key, grouped) {
         diagnostics.push(format!("{context}: action key {problem}; dropped"));
         return None;
     }
@@ -397,6 +444,7 @@ fn parse_action(
 fn parse_item(
     value: &serde_json::Value,
     position: usize,
+    grouped: bool,
     diagnostics: &mut Diagnostics,
 ) -> Option<ItemRecord> {
     let context_fallback = format!("items[{position}]");
@@ -468,7 +516,9 @@ fn parse_item(
                     ));
                     break;
                 }
-                if let Some(action) = parse_action(value, &context, &mut seen_keys, diagnostics) {
+                if let Some(action) =
+                    parse_action(value, &context, grouped, &mut seen_keys, diagnostics)
+                {
                     actions.push(action);
                 }
             }
@@ -477,6 +527,7 @@ fn parse_item(
     }
     let body = parse_body(object, &context, diagnostics);
     let fields = parse_fields(object, &context, diagnostics);
+    let group = optional_text(object, "group", MAX_GROUP_ID_CHARS, &context, diagnostics);
     Some(ItemRecord {
         id,
         title,
@@ -499,8 +550,103 @@ fn parse_item(
         ),
         body,
         fields,
+        group,
         actions,
     })
+}
+
+/// Read the optional feed-level `groups` array: `{id, title, short_title?}`.
+fn parse_groups(
+    root: &serde_json::Map<String, serde_json::Value>,
+    diagnostics: &mut Diagnostics,
+) -> Vec<GroupRecord> {
+    let list = match root.get("groups") {
+        None | Some(serde_json::Value::Null) => return Vec::new(),
+        Some(serde_json::Value::Array(list)) => list,
+        Some(_) => {
+            diagnostics.push("feed: groups must be an array; ignored".to_owned());
+            return Vec::new();
+        }
+    };
+    let mut groups: Vec<GroupRecord> = Vec::new();
+    for (position, entry) in list.iter().enumerate() {
+        let context = format!("groups[{position}]");
+        if groups.len() >= MAX_GROUPS {
+            diagnostics.push(format!(
+                "more than {MAX_GROUPS} groups; the rest are dropped"
+            ));
+            break;
+        }
+        let Some(entry) = entry.as_object() else {
+            diagnostics.push(format!("{context}: a group must be an object; dropped"));
+            continue;
+        };
+        let Some(id) = optional_text(entry, "id", MAX_GROUP_ID_CHARS, &context, diagnostics) else {
+            diagnostics.push(format!(
+                "{context}: a group needs a non-empty string id; dropped"
+            ));
+            continue;
+        };
+        if groups.iter().any(|group| group.id == id) {
+            diagnostics.push(format!(
+                "{context}: group {id:?} appears twice; kept the first"
+            ));
+            continue;
+        }
+        let title = optional_text(entry, "title", MAX_GROUP_TITLE_CHARS, &context, diagnostics)
+            .unwrap_or_else(|| id.clone());
+        let short_title = optional_text(
+            entry,
+            "short_title",
+            MAX_GROUP_SHORT_TITLE_CHARS,
+            &context,
+            diagnostics,
+        );
+        groups.push(GroupRecord {
+            id,
+            title,
+            short_title,
+        });
+    }
+    groups
+}
+
+/// Point every item at a declared group, or at `other` (added to `groups`
+/// when needed). A flat feed (no groups) leaves items alone.
+fn resolve_groups(
+    groups: &mut Vec<GroupRecord>,
+    items: &mut [ItemRecord],
+    diagnostics: &mut Diagnostics,
+) {
+    if groups.is_empty() {
+        for item in items.iter_mut() {
+            item.group = None;
+        }
+        return;
+    }
+    let mut needs_other = false;
+    for item in items.iter_mut() {
+        match item.group.take() {
+            Some(id) if groups.iter().any(|group| group.id == id) => item.group = Some(id),
+            other => {
+                if let Some(id) = other {
+                    diagnostics.push(format!(
+                        "item {:?}: unknown group {id:?}; shown in {OTHER_GROUP_TITLE}",
+                        item.id
+                    ));
+                }
+                item.group = Some(OTHER_GROUP_ID.to_owned());
+                needs_other = true;
+            }
+        }
+    }
+    if needs_other && !groups.iter().any(|group| group.id == OTHER_GROUP_ID) {
+        groups.push(GroupRecord {
+            id: OTHER_GROUP_ID.to_owned(),
+            title: OTHER_GROUP_TITLE.to_owned(),
+            short_title: None,
+        });
+    }
 }
 
 /// Parse a feed document. `Err` carries the reasons the document as a whole
@@ -546,13 +692,15 @@ pub(crate) fn parse_feed(text: &str) -> Result<ParsedFeed, Vec<String>> {
         "feed",
         &mut diagnostics,
     );
+    let mut groups = parse_groups(root, &mut diagnostics);
+    let grouped = !groups.is_empty();
     let mut records: Vec<ItemRecord> = Vec::new();
     for (position, value) in items.iter().enumerate() {
         if records.len() >= MAX_ITEMS {
             diagnostics.push(format!("more than {MAX_ITEMS} items; the rest are dropped"));
             break;
         }
-        let Some(item) = parse_item(value, position, &mut diagnostics) else {
+        let Some(item) = parse_item(value, position, grouped, &mut diagnostics) else {
             continue;
         };
         if records.iter().any(|existing| existing.id == item.id) {
@@ -561,8 +709,10 @@ pub(crate) fn parse_feed(text: &str) -> Result<ParsedFeed, Vec<String>> {
         }
         records.push(item);
     }
+    resolve_groups(&mut groups, &mut records, &mut diagnostics);
     Ok(ParsedFeed {
         title,
+        groups,
         items: records,
         diagnostics: diagnostics.finish(),
     })
@@ -963,6 +1113,145 @@ mod tests {
         let feed = parse(&format!(r#"{{"version":1,"items":[{items}]}}"#));
         assert_eq!(feed.diagnostics.len(), MAX_DIAGNOSTICS + 1);
         assert_eq!(feed.diagnostics.last().unwrap(), "... and 40 more");
+    }
+
+    #[test]
+    fn groups_define_order_titles_and_resolve_items() {
+        let feed = parse(
+            r#"{"version":1,"groups":[
+                 {"id":"b","title":"Bee","short_title":"B"},
+                 {"id":"a","title":"Ay"},
+                 {"id":"empty"}],
+               "items":[
+                 {"id":"1","title":"t","group":"a"},{"id":"2","title":"t","group":"b"},
+                 {"id":"3","title":"t"},{"id":"4","title":"t","group":"nope"}]}"#,
+        );
+        let ids: Vec<_> = feed.groups.iter().map(|g| g.id.as_str()).collect();
+        assert_eq!(ids, ["b", "a", "empty", "other"]);
+        assert_eq!(feed.groups[0].short_title.as_deref(), Some("B"));
+        assert_eq!(feed.groups[2].title, "empty", "title defaults to the id");
+        assert_eq!(feed.groups[3].title, OTHER_GROUP_TITLE);
+        let of: Vec<_> = feed.items.iter().map(|i| i.group.as_deref()).collect();
+        assert_eq!(of, [Some("a"), Some("b"), Some("other"), Some("other")]);
+        let joined = feed.diagnostics.join("\n");
+        assert!(joined.contains("unknown group \"nope\""), "{joined}");
+        assert_eq!(
+            feed.diagnostics.len(),
+            1,
+            "a missing group is not a problem"
+        );
+    }
+
+    #[test]
+    fn no_implicit_other_group_when_every_item_has_a_declared_group() {
+        let feed = parse(
+            r#"{"version":1,"groups":[{"id":"a"}],"items":[{"id":"1","title":"t","group":"a"}]}"#,
+        );
+        assert_eq!(feed.groups.len(), 1);
+        assert!(feed.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn a_declared_other_group_takes_the_ungrouped_items() {
+        let feed = parse(
+            r#"{"version":1,"groups":[{"id":"other","title":"Misc"}],"items":[{"id":"1","title":"t"}]}"#,
+        );
+        assert_eq!(feed.groups.len(), 1);
+        assert_eq!(feed.groups[0].title, "Misc");
+        assert_eq!(feed.items[0].group.as_deref(), Some("other"));
+    }
+
+    #[test]
+    fn a_feed_without_groups_ignores_item_groups_and_stays_flat() {
+        let feed = parse(
+            r#"{"version":1,"items":[{"id":"1","title":"t","group":"a"},{"id":"2","title":"t"}]}"#,
+        );
+        assert!(feed.groups.is_empty());
+        assert!(feed.items.iter().all(|item| item.group.is_none()));
+        assert!(feed.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn groups_are_capped_and_bad_entries_dropped() {
+        let many = (0..MAX_GROUPS + 3)
+            .map(|n| format!(r#"{{"id":"g{n}"}}"#))
+            .collect::<Vec<_>>()
+            .join(",");
+        let feed = parse(&format!(r#"{{"version":1,"groups":[{many}],"items":[]}}"#));
+        assert_eq!(feed.groups.len(), MAX_GROUPS);
+        assert!(feed
+            .diagnostics
+            .iter()
+            .any(|d| d.contains("more than 16 groups")));
+
+        let long_id = "i".repeat(MAX_GROUP_ID_CHARS + 5);
+        let long_title = "t".repeat(MAX_GROUP_TITLE_CHARS + 5);
+        let long_short = "s".repeat(MAX_GROUP_SHORT_TITLE_CHARS + 5);
+        let feed = parse(&format!(
+            r#"{{"version":1,"groups":[
+              {{"id":"{long_id}","title":"{long_title}","short_title":"{long_short}"}},
+              {{"id":"dup"}},{{"id":"dup"}},{{"title":"no id"}},{{"id":""}},7,{{"id":3}}],
+              "items":[{{"id":"1","group":"{long_id}"}}]}}"#
+        ));
+        let ids: Vec<_> = feed.groups.iter().map(|g| g.id.chars().count()).collect();
+        assert_eq!(ids, [MAX_GROUP_ID_CHARS, 3]);
+        assert_eq!(feed.groups[0].title.chars().count(), MAX_GROUP_TITLE_CHARS);
+        assert_eq!(
+            feed.groups[0]
+                .short_title
+                .as_deref()
+                .map(|t| t.chars().count()),
+            Some(MAX_GROUP_SHORT_TITLE_CHARS)
+        );
+        assert_eq!(
+            feed.items[0].group.as_deref().map(|g| g.chars().count()),
+            Some(MAX_GROUP_ID_CHARS),
+            "an over-long item group is cut like the group id, so they still match"
+        );
+        let joined = feed.diagnostics.join("\n");
+        for expected in [
+            "group \"dup\" appears twice",
+            "a group needs a non-empty string id",
+            "a group must be an object",
+            "id must be a string",
+        ] {
+            assert!(
+                joined.contains(expected),
+                "missing {expected:?} in\n{joined}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_non_array_groups_value_is_ignored_with_a_diagnostic() {
+        let feed = parse(r#"{"version":1,"groups":"x","items":[{"id":"1","group":"a"}]}"#);
+        assert!(feed.groups.is_empty());
+        assert!(feed.items[0].group.is_none());
+        assert!(feed
+            .diagnostics
+            .iter()
+            .any(|d| d.contains("groups must be an array")));
+    }
+
+    #[test]
+    fn category_keys_are_reserved_only_in_a_feed_with_groups() {
+        for key in ["[", "]", "0", "1", "9"] {
+            assert!(action_key_problem(key).is_none(), "{key}");
+            assert!(action_key_problem_in(key, true).is_some(), "{key}");
+        }
+        let actions = r#""actions":[{"key":"1","command":["x"]},{"key":"d","command":["x"]}]"#;
+        let flat = parse(&format!(
+            r#"{{"version":1,"items":[{{"id":"a",{actions}}}]}}"#
+        ));
+        assert_eq!(flat.items[0].actions.len(), 2, "flat feeds are unchanged");
+        let grouped = parse(&format!(
+            r#"{{"version":1,"groups":[{{"id":"g"}}],"items":[{{"id":"a","group":"g",{actions}}}]}}"#
+        ));
+        assert_eq!(grouped.items[0].actions.len(), 1);
+        assert!(grouped
+            .diagnostics
+            .iter()
+            .any(|d| d.contains("reserved for the overlay in a feed with groups")));
     }
 
     #[test]

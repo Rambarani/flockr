@@ -18,7 +18,7 @@
                 "type": "array"
               },
               "key": {
-                "description": "One visible character, unique per item. Reserved for the overlay: 'j' 'k' 'q' 'g' 'G' 'R' 'S' '/' and these key names: enter, return, esc, escape, up, down, left, right, tab, backtab, pageup, pagedown, home, end, backspace, delete, space.",
+                "description": "One visible character, unique per item. Reserved for the overlay: 'j' 'k' 'q' 'g' 'G' 'R' 'S' '/' and these key names: enter, return, esc, escape, up, down, left, right, tab, backtab, pageup, pagedown, home, end, backspace, delete, space. In a feed that declares groups these are reserved too: '[' ']' '0' '1' '2' '3' '4' '5' '6' '7' '8' '9'.",
                 "maxLength": 1,
                 "minLength": 1,
                 "not": {
@@ -83,6 +83,11 @@
           "maxItems": 12,
           "type": "array"
         },
+        "group": {
+          "description": "The id of one of the feed's `groups`; the item shows under that category tab. A missing or undeclared id puts the item in the implicit `other` group. Ignored when the feed declares no groups.",
+          "maxLength": 40,
+          "type": "string"
+        },
         "id": {
           "description": "Unique within the feed (a repeated id keeps the first).",
           "maxLength": 200,
@@ -131,6 +136,35 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "What a job's feed command prints on stdout: ONE JSON object and nothing else, at most 4096 KiB. Longer strings are cut, items beyond 500 are dropped.",
   "properties": {
+    "groups": {
+      "description": "Optional categories, in tab order. Items point at one with `group`; items without a known group go to an implicit `other` group shown last. Without groups the feed is one flat list.",
+      "items": {
+        "properties": {
+          "id": {
+            "description": "Unique within the feed (a repeated id keeps the first).",
+            "maxLength": 40,
+            "minLength": 1,
+            "type": "string"
+          },
+          "short_title": {
+            "description": "A shorter tab text for narrow places such as the sidebar.",
+            "maxLength": 20,
+            "type": "string"
+          },
+          "title": {
+            "description": "Tab text; defaults to the id.",
+            "maxLength": 60,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "maxItems": 16,
+      "type": "array"
+    },
     "items": {
       "items": {
         "$ref": "#/$defs/item"

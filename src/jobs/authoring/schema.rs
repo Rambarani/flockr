@@ -8,10 +8,12 @@
 use serde_json::{json, Value};
 
 use crate::feed::format::{
-    FEED_VERSION, MAX_ACTIONS, MAX_ACTION_TITLE_CHARS, MAX_ARGV, MAX_ARG_CHARS, MAX_BADGE_CHARS,
-    MAX_BODY_BYTES, MAX_FEED_BYTES, MAX_FEED_TITLE_CHARS, MAX_FIELDS, MAX_FIELD_LABEL_CHARS,
-    MAX_FIELD_VALUE_CHARS, MAX_ID_CHARS, MAX_ITEMS, MAX_SUBTITLE_CHARS, MAX_TITLE_CHARS,
-    MAX_UPDATED_AT_CHARS, MAX_URL_CHARS, RESERVED_CHARS, RESERVED_NAMES,
+    FEED_VERSION, GROUPED_RESERVED_CHARS, MAX_ACTIONS, MAX_ACTION_TITLE_CHARS, MAX_ARGV,
+    MAX_ARG_CHARS, MAX_BADGE_CHARS, MAX_BODY_BYTES, MAX_FEED_BYTES, MAX_FEED_TITLE_CHARS,
+    MAX_FIELDS, MAX_FIELD_LABEL_CHARS, MAX_FIELD_VALUE_CHARS, MAX_GROUPS, MAX_GROUP_ID_CHARS,
+    MAX_GROUP_SHORT_TITLE_CHARS, MAX_GROUP_TITLE_CHARS, MAX_ID_CHARS, MAX_ITEMS,
+    MAX_SUBTITLE_CHARS, MAX_TITLE_CHARS, MAX_UPDATED_AT_CHARS, MAX_URL_CHARS, OTHER_GROUP_ID,
+    RESERVED_CHARS, RESERVED_NAMES,
 };
 use crate::jobs::definition::{
     format_duration, DEFAULT_TIMEOUT, JOB_ID_MAX_CHARS, MAX_TIMEOUT, MIN_INTERVAL, MIN_TIMEOUT,
@@ -227,6 +229,11 @@ fn item_schema() -> Value {
                     }
                 }
             },
+            "group": {
+                "type": "string",
+                "maxLength": MAX_GROUP_ID_CHARS,
+                "description": format!("The id of one of the feed's `groups`; the item shows under that category tab. A missing or undeclared id puts the item in the implicit `{OTHER_GROUP_ID}` group. Ignored when the feed declares no groups.")
+            },
             "actions": {
                 "type": "array",
                 "maxItems": MAX_ACTIONS,
@@ -240,7 +247,7 @@ fn item_schema() -> Value {
                             "minLength": 1,
                             "maxLength": 1,
                             "not": { "enum": reserved_chars },
-                            "description": format!("One visible character, unique per item. Reserved for the overlay: {} and these key names: {}.", RESERVED_CHARS.iter().map(|c| format!("'{c}'")).collect::<Vec<_>>().join(" "), reserved_names.join(", "))
+                            "description": format!("One visible character, unique per item. Reserved for the overlay: {} and these key names: {}.", RESERVED_CHARS.iter().map(|c| format!("'{c}'")).collect::<Vec<_>>().join(" "), reserved_names.join(", ")) + &format!(" In a feed that declares groups these are reserved too: {}.", GROUPED_RESERVED_CHARS.iter().map(|c| format!("'{c}'")).collect::<Vec<_>>().join(" "))
                         },
                         "title": text(MAX_ACTION_TITLE_CHARS, "Menu text; defaults to the key."),
                         "command": {
@@ -271,6 +278,20 @@ pub(crate) fn feed_schema() -> Value {
         "properties": {
             "version": { "const": FEED_VERSION, "description": "A missing version is read as 1 with a diagnostic; any other value is rejected." },
             "title": text(MAX_FEED_TITLE_CHARS, "Section title; the job's feed.title wins."),
+            "groups": {
+                "type": "array",
+                "maxItems": MAX_GROUPS,
+                "description": format!("Optional categories, in tab order. Items point at one with `group`; items without a known group go to an implicit `{OTHER_GROUP_ID}` group shown last. Without groups the feed is one flat list."),
+                "items": {
+                    "type": "object",
+                    "required": ["id"],
+                    "properties": {
+                        "id": { "type": "string", "minLength": 1, "maxLength": MAX_GROUP_ID_CHARS, "description": "Unique within the feed (a repeated id keeps the first)." },
+                        "title": text(MAX_GROUP_TITLE_CHARS, "Tab text; defaults to the id."),
+                        "short_title": text(MAX_GROUP_SHORT_TITLE_CHARS, "A shorter tab text for narrow places such as the sidebar.")
+                    }
+                }
+            },
             "items": {
                 "type": "array",
                 "maxItems": MAX_ITEMS,

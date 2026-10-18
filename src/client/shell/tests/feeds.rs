@@ -29,6 +29,7 @@ fn summary(job_id: &str, title: &str, count: u32, unread: u32, revision: u64) ->
         error: None,
         refreshing: false,
         diagnostics: Vec::new(),
+        groups: Vec::new(),
         last_action: None,
     }
 }
@@ -44,6 +45,7 @@ fn item(id: &str, title: &str, state: FeedItemState) -> FeedItemInfo {
         updated_at: None,
         body: None,
         fields: Vec::new(),
+        group: None,
         actions: vec![
             FeedActionInfo {
                 key: "d".into(),

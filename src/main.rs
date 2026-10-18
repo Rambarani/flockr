@@ -64,6 +64,7 @@ mod terminal_theme;
 mod thread_spawn;
 mod ui;
 mod update;
+mod upstream;
 mod workspace;
 mod worktree;
 
@@ -134,6 +135,30 @@ const DEFAULT_CONFIG: &str = r##"# flockr configuration
 
 # Check the flockr GitHub repository for remote agent-detection manifest updates in the background.
 # manifest_check = true
+
+[upstream]
+# Watch the upstream herdr releases (github.com/herdrdev/herdr) in the background and
+# notify inside flockr when a release newer than the synced upstream base appears.
+# `flockr upstream review` (default key: prefix+u) lists them and can open a tab that
+# merges a release into an isolated git worktree without touching your checkout.
+# enabled = true
+
+# Minimum hours between upstream release checks.
+# check_interval_hours = 24
+
+# Also report upstream prereleases.
+# include_prereleases = false
+
+# Path of the flockr source checkout used by `flockr upstream sync`.
+# Unset falls back to the checkout this binary was built from, if it still exists.
+# repo_path = "~/src/flockr"
+
+# Agent that performs the merge in the sync worktree. `{prompt_file}` expands to the
+# generated prompt file; without it the prompt text is passed as the first argument.
+# agent_command = "claude"
+
+# Key that opens the pending upstream updates review popup. Empty disables it.
+# review_key = "prefix+u"
 
 [keys]
 # Prefix key to enter prefix mode (default: "ctrl+b")

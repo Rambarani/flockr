@@ -20,6 +20,12 @@ macro_rules! github_repo {
         "flockr"
     };
 }
+/// The upstream project flockr is forked from, watched by `flockr upstream`.
+macro_rules! upstream_slug {
+    () => {
+        "herdrdev/herdr"
+    };
+}
 /// `https://github.com/<owner>/<repo>`
 macro_rules! repo_url {
     () => {
@@ -57,6 +63,18 @@ pub(crate) const GITHUB_OWNER: &str = github_owner!();
 #[cfg(test)]
 pub(crate) const GITHUB_REPO: &str = github_repo!();
 pub(crate) const REPO_URL: &str = repo_url!();
+/// `owner/repo` of the upstream project flockr is forked from.
+pub(crate) const UPSTREAM_REPO: &str = upstream_slug!();
+/// Git remote name `flockr upstream sync` creates for the upstream project.
+pub(crate) const UPSTREAM_REMOTE_NAME: &str = "upstream";
+/// Clone URL of the upstream project.
+pub(crate) const UPSTREAM_REMOTE_URL: &str = concat!("https://github.com/", upstream_slug!());
+/// GitHub releases API listing for the upstream project.
+pub(crate) const UPSTREAM_RELEASES_API_URL: &str = concat!(
+    "https://api.github.com/repos/",
+    upstream_slug!(),
+    "/releases?per_page=30"
+);
 /// Stable release channel manifest (`distribution/latest.json`).
 pub(crate) const STABLE_UPDATE_MANIFEST_URL: &str = distribution_url!("latest.json");
 /// Preview release channel manifest (`distribution/preview.json`).
@@ -95,5 +113,12 @@ mod tests {
             );
         }
         assert!(docs_url!().starts_with(REPO_URL));
+        assert_eq!(
+            UPSTREAM_REMOTE_URL,
+            format!("https://github.com/{UPSTREAM_REPO}")
+        );
+        assert!(UPSTREAM_RELEASES_API_URL.starts_with(&format!(
+            "https://api.github.com/repos/{UPSTREAM_REPO}/releases"
+        )));
     }
 }

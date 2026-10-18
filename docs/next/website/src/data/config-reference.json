@@ -478,6 +478,48 @@
       ]
     },
     {
+      "id": "upstream",
+      "title": "Upstream herdr watcher",
+      "keys": [
+        {
+          "key": "upstream.enabled",
+          "type": "boolean",
+          "default": "true",
+          "description": "Check the upstream herdr releases on GitHub (herdrdev/herdr) in the background and notify inside flockr when a release newer than the synced upstream base appears. Release notes are cached in the state directory so `flockr upstream review` works offline."
+        },
+        {
+          "key": "upstream.check_interval_hours",
+          "type": "integer",
+          "default": "24",
+          "description": "Minimum hours between upstream release checks. Values below 1 are treated as 1."
+        },
+        {
+          "key": "upstream.include_prereleases",
+          "type": "boolean",
+          "default": "false",
+          "description": "Also report upstream prereleases. Preview builds with non-semver tags are never reported."
+        },
+        {
+          "key": "upstream.repo_path",
+          "type": "string",
+          "default": "unset",
+          "description": "Path of the flockr source checkout used by `flockr upstream sync` and `flockr upstream apply`. When unset, flockr uses the checkout it was built from if that directory still exists and contains `.flockr/upstream-base`; otherwise the copy action explains how to set this key."
+        },
+        {
+          "key": "upstream.agent_command",
+          "type": "string",
+          "default": "\"claude\"",
+          "description": "Agent that performs the merge in the sync worktree. A `{prompt_file}` placeholder expands to the generated prompt file path; without it the prompt text is passed as the first argument, as in `claude \"$(cat <file>)\"`."
+        },
+        {
+          "key": "upstream.review_key",
+          "type": "keybinding",
+          "default": "\"prefix+u\"",
+          "description": "Key that opens the pending upstream updates review popup (Copy updates, Skip this version, Later). An empty string disables the binding. The popup is also listed in keybinding help."
+        }
+      ]
+    },
+    {
       "id": "keys",
       "title": "Keybindings",
       "keys": [

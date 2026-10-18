@@ -167,6 +167,9 @@ pub enum AppEvent {
         version: String,
         install_command: String,
     },
+    /// The background check found an upstream herdr release that flockr has
+    /// not synced yet and the user was not notified about.
+    UpstreamUpdatesAvailable { title: String, context: String },
     /// Remote agent detection manifest update check finished.
     AgentDetectionManifestsUpdated {
         updated: Vec<crate::detect::manifest_update::ManifestUpdateCommit>,

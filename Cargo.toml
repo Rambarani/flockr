@@ -12,6 +12,7 @@ categories = ["command-line-utilities"]
 include = [
     "src/**/*",
     "assets/sounds/*",
+    ".flockr/upstream-base",
     "docs/next/api/flockr-api.schema.json",
     "skills/flockr/SKILL.md",
     "distribution/install.ps1",

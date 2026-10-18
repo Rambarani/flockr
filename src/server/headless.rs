@@ -3351,6 +3351,14 @@ impl HeadlessServer {
 
         if self
             .app
+            .next_upstream_check
+            .is_some_and(|deadline| now >= deadline)
+        {
+            self.app.run_upstream_check();
+        }
+
+        if self
+            .app
             .session_save_deadline
             .is_some_and(|deadline| now >= deadline)
         {

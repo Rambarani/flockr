@@ -46,6 +46,56 @@ impl Default for UpdateConfig {
     }
 }
 
+/// `[upstream]` settings for the herdr release watcher and the "copy updates"
+/// workflow (`flockr upstream ...`).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct UpstreamConfig {
+    /// Check the upstream herdr releases on GitHub in the background and notify
+    /// inside flockr when new ones appear. Default: true.
+    pub enabled: bool,
+    /// Minimum hours between upstream release checks. Default: 24.
+    pub check_interval_hours: u32,
+    /// Also report upstream prereleases. Default: false.
+    pub include_prereleases: bool,
+    /// Path of the flockr source checkout used by `flockr upstream sync`.
+    /// Default: unset, which falls back to the checkout this binary was built
+    /// from when it is still on disk.
+    pub repo_path: Option<String>,
+    /// Agent command that performs the merge in the sync worktree. A
+    /// `{prompt_file}` placeholder expands to the generated prompt file;
+    /// without it the prompt text is appended as the first argument.
+    /// Default: "claude".
+    pub agent_command: String,
+    /// Key that opens the pending upstream updates review popup. Empty disables
+    /// the binding. Default: "prefix+u".
+    pub review_key: String,
+}
+
+impl Default for UpstreamConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            check_interval_hours: DEFAULT_UPSTREAM_CHECK_INTERVAL_HOURS,
+            include_prereleases: false,
+            repo_path: None,
+            agent_command: "claude".to_string(),
+            review_key: DEFAULT_UPSTREAM_REVIEW_KEY.to_string(),
+        }
+    }
+}
+
+pub const DEFAULT_UPSTREAM_CHECK_INTERVAL_HOURS: u32 = 24;
+pub const DEFAULT_UPSTREAM_REVIEW_KEY: &str = "prefix+u";
+
+impl UpstreamConfig {
+    /// Check interval with a floor of one hour so a typo cannot hammer the
+    /// unauthenticated GitHub API.
+    pub fn check_interval(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(u64::from(self.check_interval_hours.max(1)) * 3600)
+    }
+}
+
 fn default_update_channel() -> UpdateChannelConfig {
     default_update_channel_for_build(cfg!(windows), crate::build_info::is_preview())
 }
@@ -320,6 +370,7 @@ pub struct Config {
     pub session: SessionConfig,
     pub server: ServerConfig,
     pub update: UpdateConfig,
+    pub upstream: UpstreamConfig,
     pub keys: KeysConfig,
     pub ui: UiConfig,
     pub worktrees: WorktreesConfig,
@@ -1358,6 +1409,92 @@ manifest_check = false
         assert_eq!(config.update.channel.as_str(), "preview");
         assert!(!config.update.version_check);
         assert!(!config.update.manifest_check);
+    }
+
+    #[test]
+    fn upstream_config_defaults_and_parses() {
+        let default_config = Config::default();
+        assert!(default_config.upstream.enabled);
+        assert_eq!(default_config.upstream.check_interval_hours, 24);
+        assert!(!default_config.upstream.include_prereleases);
+        assert_eq!(default_config.upstream.repo_path, None);
+        assert_eq!(default_config.upstream.agent_command, "claude");
+        assert_eq!(default_config.upstream.review_key, "prefix+u");
+        assert_eq!(
+            default_config.upstream.check_interval(),
+            std::time::Duration::from_secs(24 * 3600)
+        );
+
+        let toml = r#"
+[upstream]
+enabled = false
+check_interval_hours = 6
+include_prereleases = true
+repo_path = "~/src/flockr"
+agent_command = "my-agent --file {prompt_file}"
+review_key = "ctrl+alt+u"
+"#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert!(!config.upstream.enabled);
+        assert_eq!(config.upstream.check_interval_hours, 6);
+        assert!(config.upstream.include_prereleases);
+        assert_eq!(config.upstream.repo_path.as_deref(), Some("~/src/flockr"));
+        assert_eq!(
+            config.upstream.agent_command,
+            "my-agent --file {prompt_file}"
+        );
+        assert_eq!(config.upstream.review_key, "ctrl+alt+u");
+        assert_eq!(
+            config.upstream.check_interval(),
+            std::time::Duration::from_secs(6 * 3600)
+        );
+    }
+
+    #[test]
+    fn upstream_check_interval_has_a_one_hour_floor() {
+        let config: Config = toml::from_str("[upstream]\ncheck_interval_hours = 0\n").unwrap();
+        assert_eq!(
+            config.upstream.check_interval(),
+            std::time::Duration::from_secs(3600)
+        );
+        // Unset keys keep their defaults when only one key is given.
+        assert!(config.upstream.enabled);
+        assert_eq!(config.upstream.agent_command, "claude");
+    }
+
+    #[test]
+    fn upstream_section_is_known_and_unknown_keys_are_reported() {
+        let toml = "[upstream]\nenabled = true\nbogus_key = 1\n";
+        let path = std::env::temp_dir().join(format!(
+            "flockr-upstream-config-{}-{}.toml",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::write(&path, toml).unwrap();
+        let _guard = crate::config::test_config_env_lock().lock().unwrap();
+        std::env::set_var(crate::config::CONFIG_PATH_ENV_VAR, &path);
+        let loaded = Config::load();
+        std::env::remove_var(crate::config::CONFIG_PATH_ENV_VAR);
+        let _ = std::fs::remove_file(&path);
+        assert!(
+            loaded
+                .diagnostics
+                .iter()
+                .any(|diag| diag.contains("upstream.bogus_key")),
+            "{:?}",
+            loaded.diagnostics
+        );
+        assert!(
+            !loaded
+                .diagnostics
+                .iter()
+                .any(|diag| diag.contains("unknown config section")),
+            "{:?}",
+            loaded.diagnostics
+        );
     }
 
     #[test]

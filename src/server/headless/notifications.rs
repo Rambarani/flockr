@@ -574,6 +574,17 @@ impl HeadlessServer {
 
                 true
             }
+            AppEvent::UpstreamUpdatesAvailable { title, context } => {
+                let title = title.clone();
+                let context = context.clone();
+                let changed = self.app.handle_internal_event_with_render_impact(ev);
+                // `Off` and `Flockr` delivery render the in-frame toast; terminal
+                // and system delivery become a client notification.
+                if let Some(kind) = toast_notify_kind(self.app.state.toast_config.delivery) {
+                    self.send_notify_to_foreground_client(kind, &title, non_empty_body(&context));
+                }
+                changed
+            }
             AppEvent::WorktreeReadFinished(result)
                 if matches!(&result.request.method, api::schema::Method::WorktreeList(_)) =>
             {

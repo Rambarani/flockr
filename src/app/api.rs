@@ -17,6 +17,8 @@ use super::{api_helpers::pane_agent_status, App, Mode, OverlayPaneState, ToastKi
 use crate::events::AppEvent;
 
 const API_NOTIFICATION_RATE_LIMIT: Duration = Duration::from_secs(1);
+/// How long the "new upstream herdr release" toast stays up.
+const UPSTREAM_TOAST_DURATION: Duration = Duration::from_secs(12);
 #[cfg(windows)]
 const WINDOWS_POWERSHELL_AGENT_EXIT_RESPAWN_GRACE: Duration = Duration::from_secs(2);
 
@@ -343,6 +345,7 @@ impl App {
         } else {
             None
         };
+        let upstream_notice = matches!(ev, AppEvent::UpstreamUpdatesAvailable { .. });
         let manifest_update_agents =
             if let AppEvent::AgentDetectionManifestsUpdated { activated, .. } = &ev {
                 Some(activated.clone())
@@ -404,6 +407,10 @@ impl App {
         }
 
         self.sync_toast_deadline(previous_toast);
+        if upstream_notice && self.state.toast.is_some() {
+            // Actionable notice: keep it up longer than a status toast.
+            self.toast_deadline = Some(Instant::now() + UPSTREAM_TOAST_DURATION);
+        }
         self.shutdown_detached_terminal_runtimes();
         pane_updates.extend(worktree_restore_updates);
         pane_updates

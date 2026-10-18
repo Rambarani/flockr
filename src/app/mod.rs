@@ -135,6 +135,10 @@ pub struct App {
     pub(crate) next_api_worktree_operation_id: u64,
     pub(crate) next_auto_update_check: Option<Instant>,
     pub(crate) next_agent_manifest_update_check: Option<Instant>,
+    /// Next poll of the upstream herdr watcher. The watcher itself only hits
+    /// the network once per `[upstream] check_interval_hours`.
+    pub(crate) next_upstream_check: Option<Instant>,
+    pub(crate) upstream_config: crate::config::UpstreamConfig,
     pub(crate) update_version_check_enabled: bool,
     pub(crate) update_manifest_check_enabled: bool,
     pub(crate) loaded_host_cursor: crate::config::HostCursorModeConfig,
@@ -596,6 +600,17 @@ impl App {
                 tracing::warn!(err = %err, "failed to spawn update check thread");
             }
         }
+        let upstream_check_enabled =
+            background_update_check_enabled(policy.background_updates, config.upstream.enabled);
+        if upstream_check_enabled {
+            let upstream_tx = event_tx.clone();
+            let upstream_config = config.upstream.clone();
+            if let Err(err) = crate::thread_spawn::spawn_named("flockr-upstream-check", move || {
+                crate::upstream::check::background_check(&upstream_config, upstream_tx)
+            }) {
+                tracing::warn!(err = %err, "failed to spawn upstream check thread");
+            }
+        }
         if manifest_check_enabled {
             let manifest_update_tx = event_tx.clone();
             if let Err(err) = crate::thread_spawn::spawn_named("flockr-manifest-check", move || {
@@ -646,6 +661,9 @@ impl App {
                 .then_some(Instant::now() + AUTO_UPDATE_CHECK_INTERVAL),
             next_agent_manifest_update_check: manifest_check_enabled
                 .then_some(Instant::now() + AUTO_UPDATE_CHECK_INTERVAL),
+            next_upstream_check: upstream_check_enabled
+                .then_some(Instant::now() + AUTO_UPDATE_CHECK_INTERVAL),
+            upstream_config: config.upstream.clone(),
             update_version_check_enabled: config.update.version_check,
             update_manifest_check_enabled: config.update.manifest_check,
             loaded_host_cursor: config.ui.host_cursor,
@@ -995,6 +1013,20 @@ impl App {
                 )
             {
                 self.next_agent_manifest_update_check = Some(now);
+            }
+        }
+
+        if !invalid_section("upstream") {
+            let was_enabled = self.upstream_config.enabled;
+            self.upstream_config = config.upstream.clone();
+            let enabled = background_update_check_enabled(
+                self.policy.background_updates,
+                self.upstream_config.enabled,
+            );
+            if !enabled {
+                self.next_upstream_check = None;
+            } else if !was_enabled || self.next_upstream_check.is_none() {
+                self.next_upstream_check = Some(Instant::now());
             }
         }
 

@@ -559,6 +559,10 @@ pub(super) fn render_expanded(
         active_snapshot.and_then(|snapshot| snapshot.agent_view_label.as_deref()),
         state.endpoints,
         state.active_endpoint_id,
+        super::agent_groups::CollapsedGroups {
+            local: state.collapsed_groups,
+            remote: state.remote_collapsed_groups,
+        },
         config,
         state.agent_scroll,
         hits,

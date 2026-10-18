@@ -96,6 +96,7 @@ pub(super) struct ShellHitMap {
     pub(super) popup: Option<PaneHit>,
     pub(super) pane_splits: Vec<PaneSplitHit>,
     pub(super) agents: Vec<(Rect, String)>,
+    pub(super) agent_headers: Vec<super::agent_groups::AgentHeaderHit>,
     pub(super) endpoint_agents: Vec<(Rect, ClientEndpointId, String)>,
     pub(super) agent_body: Rect,
     pub(super) agent_scrollbar: Rect,
@@ -323,6 +324,9 @@ pub(super) enum ClientRenameTarget {
     Pane {
         pane_id: String,
     },
+    Agent {
+        pane_id: String,
+    },
 }
 
 #[derive(Debug)]
@@ -528,6 +532,11 @@ pub(super) enum ClientContextMenuAction {
     RemoveWorktree,
     ToggleGroup,
     NewTab,
+    RenameAgent,
+    ClearAgentName,
+    ToggleAgentGroup,
+    CollapseAgentGroups,
+    ExpandAgentGroups,
     RenamePane,
     ClearPaneName,
     SwapWithFocusedPane,
@@ -558,6 +567,17 @@ pub(super) enum ClientContextMenuTarget {
         source_pane_id: Option<String>,
         has_manual_label: bool,
         right_click_passthrough: bool,
+    },
+    Agent {
+        pane_id: String,
+        has_name: bool,
+    },
+    AgentGroup {
+        endpoint_id: ClientEndpointId,
+        workspace_id: String,
+        collapsed: bool,
+        /// Only the active endpoint can rename its workspaces.
+        can_rename: bool,
     },
 }
 
@@ -777,6 +797,29 @@ pub(super) struct ClientInputContext {
 
 type ClientInputLeases = crate::input::InputLeaseTable<u8, ClientInputContext, ClientInputTarget>;
 
+/// What a left click in the agent list landed on, for double-click detection.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum ClientAgentListTarget {
+    Agent {
+        endpoint_id: ClientEndpointId,
+        pane_id: String,
+    },
+    Group {
+        endpoint_id: ClientEndpointId,
+        workspace_id: String,
+    },
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct ClientAgentListClick {
+    pub(super) target: ClientAgentListTarget,
+    pub(super) at: std::time::Instant,
+}
+
+impl ClientAgentListClick {
+    pub(super) const DOUBLE_CLICK: std::time::Duration = std::time::Duration::from_millis(350);
+}
+
 #[derive(Clone, Debug)]
 pub(super) struct ClientPaneClick {
     pub(super) pane_id: String,
@@ -888,6 +931,7 @@ pub(crate) struct ClientShellState {
     pub(super) sidebar_section_split_manual: bool,
     pub(super) agent_panel_sort_manual: bool,
     pub(super) last_sidebar_divider_click: Option<std::time::Instant>,
+    pub(super) last_agent_list_click: Option<ClientAgentListClick>,
     pub(super) chrome_drag: Option<ClientChromeDrag>,
     pub(super) workspace_press: Option<ClientWorkspacePress>,
     pub(super) tab_press: Option<ClientTabPress>,
@@ -1062,6 +1106,7 @@ impl ClientShellState {
             sidebar_section_split_manual: preferences.sidebar_section_split.is_some(),
             agent_panel_sort_manual: preferences.agent_panel_sort.is_some(),
             last_sidebar_divider_click: None,
+            last_agent_list_click: None,
             chrome_drag: None,
             workspace_press: None,
             tab_press: None,

@@ -201,6 +201,10 @@ const DEFAULT_CONFIG: &str = r##"# flockr configuration
 # switch_workspace = ""   # optional indexed binding, e.g. "prefix+shift+1..9"
 # close_tab = "prefix+shift+x"
 # rename_pane = "prefix+shift+p"
+# toggle_agent_group = "prefix+shift+e"
+# collapse_agent_groups = ""   # optional, unset by default
+# expand_agent_groups = ""     # optional, unset by default
+# rename_agent = "prefix+shift+a"
 # edit_scrollback = "prefix+e"
 # clear_pane = ""                  # unbound; e.g. "prefix+ctrl+k"
 # focus_pane_left = "prefix+h"
@@ -372,7 +376,8 @@ const DEFAULT_CONFIG: &str = r##"# flockr configuration
 # Accepts: hex (#89b4fa), named colors (cyan, blue, magenta), or rgb(r,g,b)
 # accent = "cyan"
 
-# Show a workspace header above each workspace's agents while agent_panel_sort is "spaces".
+# Show a header above each workspace's agents while agent_panel_sort is "spaces". Click a
+# header to collapse or expand its group; the choice is remembered per workspace.
 # [ui.sidebar]
 # group_agents_by_workspace = true
 

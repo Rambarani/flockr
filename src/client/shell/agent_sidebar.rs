@@ -8,6 +8,10 @@ use ratatui::{
     widgets::{Paragraph, Widget},
 };
 
+use super::agent_groups::{
+    group_agent_items, group_headers_enabled, item_layout, render_group_header, ungrouped_items,
+    AgentGroupMember, AgentGroupSeed, AgentHeaderHit, AgentListItem, CollapsedGroups,
+};
 use super::*;
 
 pub(super) struct AgentRow {
@@ -15,76 +19,6 @@ pub(super) struct AgentRow {
     pub(super) status: crate::api::schema::AgentStatus,
     pub(super) focused: bool,
     pub(super) rows: Vec<Vec<crate::ui::ResolvedToken>>,
-    /// Workspace header drawn above this row when it opens a group.
-    pub(super) group: Option<AgentGroupHeader>,
-}
-
-/// Non-interactive workspace header shown above the first agent of a group.
-pub(super) struct AgentGroupHeader {
-    label: String,
-    /// Agents per display state (blocked, working, done, idle), zero counts omitted.
-    counts: Vec<(crate::api::schema::AgentStatus, usize)>,
-}
-
-impl AgentRow {
-    /// Lines the row occupies, including its group header.
-    pub(super) fn height(&self) -> usize {
-        self.rows.len().max(1) + usize::from(self.group.is_some())
-    }
-
-    /// The part of `rect` that belongs to the agent itself (below any header).
-    /// Mouse hit-testing uses this so headers never select an agent.
-    pub(super) fn body_rect(&self, rect: Rect) -> Rect {
-        let header = u16::from(self.group.is_some()).min(rect.height);
-        Rect::new(rect.x, rect.y + header, rect.width, rect.height - header)
-    }
-}
-
-/// Headers only make sense when the list is ordered by workspace; the
-/// priority sort and agent views interleave workspaces on purpose.
-pub(super) fn group_headers_enabled(config: &ClientShellConfig, agent_view_active: bool) -> bool {
-    config.group_agents_by_workspace
-        && !agent_view_active
-        && config.agent_panel_sort == crate::config::AgentPanelSortConfig::Spaces
-}
-
-/// Mark the first row of every run of equal keys with a header. Each item is
-/// `(group key, header label, row)`; the key decides where runs break (so two
-/// machines with a same-named workspace stay separate groups).
-pub(super) fn assign_group_headers(mut items: Vec<(String, String, &mut AgentRow)>) {
-    let mut start = 0;
-    while start < items.len() {
-        let end = items[start..]
-            .iter()
-            .position(|item| item.0 != items[start].0)
-            .map_or(items.len(), |offset| start + offset);
-        let mut counts = Vec::new();
-        for status in [
-            crate::api::schema::AgentStatus::Blocked,
-            crate::api::schema::AgentStatus::Working,
-            crate::api::schema::AgentStatus::Done,
-            crate::api::schema::AgentStatus::Idle,
-        ] {
-            let count = items[start..end]
-                .iter()
-                .filter(|item| display_status(item.2.status) == status)
-                .count();
-            if count > 0 {
-                counts.push((status, count));
-            }
-        }
-        let label = items[start].1.clone();
-        items[start].2.group = Some(AgentGroupHeader { label, counts });
-        start = end;
-    }
-}
-
-fn display_status(status: crate::api::schema::AgentStatus) -> crate::api::schema::AgentStatus {
-    use crate::api::schema::AgentStatus;
-    match status {
-        AgentStatus::Unknown => AgentStatus::Idle,
-        other => other,
-    }
 }
 
 pub(super) fn ordered_agent_pane_ids(
@@ -123,6 +57,8 @@ pub(super) fn render_agent_panel(
     buffer: &mut Buffer,
     area: Rect,
     snapshot: &ClientShellSnapshot,
+    endpoint_id: &ClientEndpointId,
+    collapsed: CollapsedGroups<'_>,
     config: &ClientShellConfig,
     agent_scroll: &mut usize,
     hits: &mut ShellHitMap,
@@ -137,11 +73,11 @@ pub(super) fn render_agent_panel(
         return;
     }
 
-    let rows = agent_rows(snapshot, config, None);
+    let items = agent_items(snapshot, config, endpoint_id, collapsed, None);
     render_agent_list(
         buffer,
         area,
-        &rows,
+        &items,
         snapshot
             .agent_view_label
             .as_ref()
@@ -149,9 +85,9 @@ pub(super) fn render_agent_panel(
         config,
         agent_scroll,
         hits,
-        AgentRow::height,
+        |row| row.rows.len(),
         |buffer, rect, row, hits| {
-            hits.agents.push((row.body_rect(rect), row.pane_id.clone()));
+            hits.agents.push((rect, row.pane_id.clone()));
             render_agent_row(buffer, rect, row, config);
         },
     );
@@ -224,7 +160,7 @@ pub(super) fn render_agent_panel_header(
 pub(super) fn render_agent_list<T>(
     buffer: &mut Buffer,
     area: Rect,
-    rows: &[T],
+    items: &[AgentListItem<T>],
     empty_message: Option<&str>,
     config: &ClientShellConfig,
     agent_scroll: &mut usize,
@@ -239,7 +175,7 @@ pub(super) fn render_agent_list<T>(
         area.height.saturating_sub(3),
     );
     hits.agent_body = body;
-    if body.is_empty() || rows.is_empty() {
+    if body.is_empty() || items.is_empty() {
         *agent_scroll = 0;
         if let Some(message) = empty_message.filter(|_| !body.is_empty()) {
             put_text(
@@ -256,21 +192,7 @@ pub(super) fn render_agent_list<T>(
         return;
     }
 
-    let row_heights = rows
-        .iter()
-        .map(|row| row_lines(row).max(1).min(u16::MAX as usize) as u16)
-        .collect::<Vec<_>>();
-    let gaps = rows
-        .iter()
-        .enumerate()
-        .map(|(index, _)| {
-            if index + 1 < rows.len() {
-                config.agents.row_gap
-            } else {
-                0
-            }
-        })
-        .collect::<Vec<_>>();
+    let (row_heights, gaps) = item_layout(items, row_lines, config.agents.row_gap);
     let metrics =
         super::scroll::list_scroll_metrics(&row_heights, &gaps, body.height, *agent_scroll);
     hits.agent_max_scroll = metrics.max_offset_from_bottom;
@@ -281,20 +203,25 @@ pub(super) fn render_agent_list<T>(
     let show_scrollbar = metrics.max_offset_from_bottom > 0 && body.width > 1;
     let content_width = body.width.saturating_sub(u16::from(show_scrollbar));
     let mut y = body.y;
-    for (index, row) in rows.iter().enumerate().skip(*agent_scroll) {
+    for (index, item) in items.iter().enumerate().skip(*agent_scroll) {
         let height = row_heights[index].min(body.height);
         if y.saturating_add(height) > body.bottom() {
             break;
         }
         let rect = Rect::new(body.x, y, content_width, height);
-        render_row(buffer, rect, row, hits);
-        y = y
-            .saturating_add(height)
-            .saturating_add(if index + 1 < rows.len() {
-                config.agents.row_gap
-            } else {
-                0
-            });
+        match item {
+            AgentListItem::Header(header) => {
+                render_group_header(buffer, rect, header, config);
+                hits.agent_headers.push(AgentHeaderHit {
+                    rect,
+                    endpoint_id: header.endpoint_id.clone(),
+                    workspace_id: header.workspace_id.clone(),
+                    collapsed: header.collapsed,
+                });
+            }
+            AgentListItem::Row(row) => render_row(buffer, rect, row, hits),
+        }
+        y = y.saturating_add(height).saturating_add(gaps[index]);
     }
 
     if show_scrollbar {
@@ -304,42 +231,60 @@ pub(super) fn render_agent_list<T>(
     }
 }
 
+/// Flat agent rows in list order, without group headers.
 pub(super) fn agent_rows(
     snapshot: &ClientShellSnapshot,
     config: &ClientShellConfig,
     machine: Option<&str>,
 ) -> Vec<AgentRow> {
-    let mut rows = ordered_agent_pane_ids(snapshot, config.agent_panel_sort)
+    ordered_agent_pane_ids(snapshot, config.agent_panel_sort)
         .into_iter()
         .filter_map(|pane_id| agent_row(snapshot, &pane_id, config, machine))
-        .collect::<Vec<_>>();
-    if group_headers_enabled(config, snapshot.agent_view_label.is_some()) {
-        let keys = rows
-            .iter()
-            .map(|row| {
-                let workspace_id = snapshot
-                    .agents
-                    .iter()
-                    .find(|agent| agent.pane_id == row.pane_id)
-                    .map(|agent| agent.workspace_id.clone())
-                    .unwrap_or_default();
-                let label = snapshot
-                    .workspaces
-                    .iter()
-                    .find(|workspace| workspace.workspace_id == workspace_id)
-                    .map(|workspace| workspace.label.clone())
-                    .unwrap_or_default();
-                (workspace_id, label)
-            })
-            .collect::<Vec<_>>();
-        assign_group_headers(
-            keys.into_iter()
-                .zip(rows.iter_mut())
-                .map(|((key, label), row)| (key, label, row))
-                .collect(),
-        );
+        .collect()
+}
+
+/// The agent list of one endpoint: rows under workspace headers when grouping
+/// applies (collapsed groups keep only their header), otherwise plain rows.
+pub(super) fn agent_items(
+    snapshot: &ClientShellSnapshot,
+    config: &ClientShellConfig,
+    endpoint_id: &ClientEndpointId,
+    collapsed: CollapsedGroups<'_>,
+    machine: Option<&str>,
+) -> Vec<AgentListItem<AgentRow>> {
+    let rows = agent_rows(snapshot, config, machine);
+    if !group_headers_enabled(config, snapshot.agent_view_label.is_some()) {
+        return ungrouped_items(rows);
     }
-    rows
+    let entries = rows
+        .into_iter()
+        .map(|row| {
+            let workspace_id = snapshot
+                .agents
+                .iter()
+                .find(|agent| agent.pane_id == row.pane_id)
+                .map(|agent| agent.workspace_id.clone())
+                .unwrap_or_default();
+            let label = snapshot
+                .workspaces
+                .iter()
+                .find(|workspace| workspace.workspace_id == workspace_id)
+                .map(|workspace| workspace.label.clone())
+                .unwrap_or_default();
+            let seed = AgentGroupSeed {
+                endpoint_id: endpoint_id.clone(),
+                workspace_id,
+                label,
+                stale: false,
+            };
+            (seed, row)
+        })
+        .collect();
+    group_agent_items(entries, collapsed, |row| AgentGroupMember {
+        status: row.status,
+        focused: row.focused,
+        pane_id: &row.pane_id,
+    })
 }
 
 pub(super) fn agent_row(
@@ -369,10 +314,12 @@ pub(super) fn agent_row(
     let tab_label = tab
         .filter(|tab| tab_count > 1 || tab.custom_label)
         .map(|tab| tab.label.as_str());
+    // The alias set through `agent.rename` wins over an integration-reported
+    // display name, so a rename is always visible in the row.
     let agent_label = agent
-        .display_agent
+        .name
         .as_deref()
-        .or(agent.name.as_deref())
+        .or(agent.display_agent.as_deref())
         .or(agent.agent.as_deref())
         .or(agent.title.as_deref());
     let labels = agent
@@ -412,7 +359,6 @@ pub(super) fn agent_row(
         status: agent.agent_status,
         focused: agent.focused,
         rows,
-        group: None,
     })
 }
 
@@ -451,10 +397,6 @@ pub(super) fn render_agent_row(
     } else {
         row.rows.clone()
     };
-    if let Some(group) = &row.group {
-        render_group_header(buffer, rect, group, config);
-    }
-    let rect = row.body_rect(rect);
     for (index, tokens) in rows.iter().take(rect.height as usize).enumerate() {
         let indent = if index == 0 { 1 } else { 3 };
         let mut spans = vec![ratatui::text::Span::raw(" ".repeat(indent))];
@@ -472,57 +414,6 @@ pub(super) fn render_agent_row(
             Rect::new(rect.x, rect.y + index as u16, rect.width, 1),
             buffer,
         );
-    }
-}
-
-fn render_group_header(
-    buffer: &mut Buffer,
-    rect: Rect,
-    group: &AgentGroupHeader,
-    config: &ClientShellConfig,
-) {
-    let palette = &config.palette;
-    let width = rect.width as usize;
-    // Right-aligned per-state counts, e.g. "1● 2●"; dropped before the label is
-    // squeezed below a readable width.
-    let mut counts = Vec::new();
-    let mut counts_width = 0;
-    for (index, (status, count)) in group.counts.iter().enumerate() {
-        let text = format!(
-            "{}{count}{}",
-            if index > 0 { " " } else { "" },
-            status_icon(*status, config.status_indicators)
-        );
-        counts_width += display_width(&text);
-        counts.push((text, *status));
-    }
-    let show_counts = width >= counts_width + 1 + 1 + 4;
-    let label_width = width.saturating_sub(1 + if show_counts { counts_width + 1 } else { 0 });
-    let label = crate::ui::truncate_end(&group.label, label_width);
-    put_text(
-        buffer,
-        rect.x,
-        rect.y,
-        rect.width,
-        &format!(" {label}"),
-        Style::default()
-            .fg(palette.overlay0)
-            .add_modifier(Modifier::BOLD),
-    );
-    if show_counts {
-        let mut x = rect.right().saturating_sub(counts_width as u16);
-        for (text, status) in counts {
-            let text_width = display_width(&text) as u16;
-            put_text(
-                buffer,
-                x,
-                rect.y,
-                text_width,
-                &text,
-                Style::default().fg(status_color(status, palette)),
-            );
-            x = x.saturating_add(text_width);
-        }
     }
 }
 

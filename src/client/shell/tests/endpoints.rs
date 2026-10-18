@@ -2874,3 +2874,131 @@ fn combined_agent_list_groups_by_machine_and_workspace() {
     assert_eq!(state.hits.endpoint_agents[1].0.y, body.y + 4);
     assert_eq!(state.hits.endpoint_agents[1].1, endpoint_id);
 }
+
+fn combined_group_state(path: Option<std::path::PathBuf>) -> (ClientShellState, ClientEndpointId) {
+    use crate::api::schema::AgentStatus;
+
+    let mut config = ClientShellConfig::from_config(&Config::default());
+    if let Some(path) = path {
+        config = config.with_preferences_path(path);
+    }
+    let mut state = ClientShellState::new(config);
+    let profile = remote_profile();
+    let endpoint_id = ClientEndpointId::Ssh(profile.id.clone());
+    state.set_endpoint_catalog(&[profile]);
+    state.set_endpoint_status(&endpoint_id, ClientEndpointStatus::Online);
+    let mut local = snapshot();
+    local.agents = vec![agent("local agent", AgentStatus::Idle, 1)];
+    state.set_snapshot(Box::new(local));
+    state.set_pane_surface(surface());
+    let mut remote = snapshot();
+    remote.boot_id = "remote-boot".into();
+    let mut second = agent("second agent", AgentStatus::Blocked, 2);
+    second.pane_id = "pane_2".into();
+    second.focused = false;
+    remote.agents = vec![agent("remote agent", AgentStatus::Working, 1), second];
+    state.set_endpoint_snapshot(&endpoint_id, Box::new(remote));
+    state.compose(100, 28).expect("combined endpoint frame");
+    (state, endpoint_id)
+}
+
+fn click_combined_header(state: &mut ClientShellState, index: usize) {
+    let rect = state.hits.agent_headers[index].rect;
+    state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: rect.x + 1,
+        row: rect.y,
+        modifiers: KeyModifiers::empty(),
+    })]);
+    state.compose(100, 28).expect("combined endpoint frame");
+}
+
+#[test]
+fn combined_agent_groups_collapse_per_machine_even_with_identical_workspace_ids() {
+    let (mut state, endpoint_id) = combined_group_state(None);
+    assert_eq!(state.hits.endpoint_agents.len(), 3);
+    let labels = state
+        .hits
+        .agent_headers
+        .iter()
+        .map(|hit| {
+            (
+                hit.endpoint_id.clone(),
+                hit.workspace_id.clone(),
+                hit.collapsed,
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        labels,
+        [
+            (ClientEndpointId::Local, "ws_1".to_owned(), false),
+            (endpoint_id.clone(), "ws_1".to_owned(), false),
+        ]
+    );
+
+    click_combined_header(&mut state, 1);
+    assert!(state.remote_collapsed_groups[&endpoint_id].contains("agents:ws_1"));
+    assert!(
+        state.collapsed_groups.is_empty(),
+        "local group is untouched"
+    );
+    assert_eq!(state.hits.endpoint_agents.len(), 1);
+    assert_eq!(state.hits.endpoint_agents[0].1, ClientEndpointId::Local);
+    let frame = state.compose(100, 28).expect("frame");
+    let text = frame_rows(&frame).join("\n");
+    assert!(text.contains(" ▸ Build · client-"), "{text}");
+    assert!(text.contains(" ▾ Local · client-"), "{text}");
+    // Both agents of the hidden group stay counted: one working, one blocked.
+    let header_row = frame_rows(&frame)[state.hits.agent_headers[1].rect.y as usize].clone();
+    assert!(header_row.contains("1●"), "{header_row}");
+
+    click_combined_header(&mut state, 0);
+    assert!(state.collapsed_groups.contains("agents:ws_1"));
+    assert!(state.hits.endpoint_agents.is_empty());
+    click_combined_header(&mut state, 1);
+    click_combined_header(&mut state, 0);
+    assert_eq!(state.hits.endpoint_agents.len(), 3);
+}
+
+#[test]
+fn combined_agent_group_collapse_persists_per_machine() {
+    let path = std::env::temp_dir().join(format!(
+        "flockr-shell-combined-agent-groups-{}.json",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&path);
+    let (mut state, endpoint_id) = combined_group_state(Some(path.clone()));
+    click_combined_header(&mut state, 1);
+
+    let (restored, _) = combined_group_state(Some(path.clone()));
+    assert!(restored.collapsed_groups.is_empty());
+    assert!(restored.remote_collapsed_groups[&endpoint_id].contains("agents:ws_1"));
+    assert_eq!(restored.hits.endpoint_agents.len(), 1);
+    assert!(restored.hits.agent_headers[1].collapsed);
+    std::fs::remove_file(path).expect("remove combined group preferences");
+}
+
+#[test]
+fn combined_agent_navigation_skips_collapsed_machine_groups() {
+    use crate::input::{KeybindAction, KeybindMatch};
+
+    let (mut state, endpoint_id) = combined_group_state(None);
+    click_combined_header(&mut state, 0);
+    let mut outcome = ClientShellInput::default();
+    state.record_binding(KeybindMatch::Action(KeybindAction::NextAgent), &mut outcome);
+    assert!(matches!(
+        outcome.actions.as_slice(),
+        [ClientShellAction::ActivateEndpoint {
+            endpoint_id: activated,
+            target: Some(ClientEndpointFocusTarget::Pane(pane_id)),
+        }] if activated == &endpoint_id && pane_id == "pane_1"
+    ));
+
+    // With the remote group collapsed as well, nothing is listed and stepping
+    // still moves through the full list instead of doing nothing.
+    click_combined_header(&mut state, 1);
+    let mut outcome = ClientShellInput::default();
+    state.record_binding(KeybindMatch::Action(KeybindAction::NextAgent), &mut outcome);
+    assert_eq!(outcome.actions.len(), 1);
+}

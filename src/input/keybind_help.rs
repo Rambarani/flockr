@@ -149,6 +149,19 @@ pub(crate) fn keybind_help_groups(
                 ),
                 entry(binding_label(&keybinds.previous_agent), "previous agent"),
                 entry(binding_label(&keybinds.next_agent), "next agent"),
+                entry(binding_label(&keybinds.rename_agent), "rename agent"),
+                entry(
+                    binding_label(&keybinds.toggle_agent_group),
+                    "collapse / expand agent group",
+                ),
+                entry(
+                    binding_label(&keybinds.collapse_agent_groups),
+                    "collapse all agent groups",
+                ),
+                entry(
+                    binding_label(&keybinds.expand_agent_groups),
+                    "expand all agent groups",
+                ),
                 entry(indexed_label(&keybinds.focus_agent), "focus agent 1-9"),
                 entry(binding_label(&keybinds.new_tab), "new tab"),
                 entry(binding_label(&keybinds.rename_tab), "rename tab"),

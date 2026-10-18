@@ -379,6 +379,10 @@ pub struct Keybinds {
     pub switch_workspace: Vec<IndexedKeybind>,
     pub close_tab: ActionKeybinds,
     pub rename_pane: ActionKeybinds,
+    pub expand_agent_groups: ActionKeybinds,
+    pub collapse_agent_groups: ActionKeybinds,
+    pub toggle_agent_group: ActionKeybinds,
+    pub rename_agent: ActionKeybinds,
     pub edit_scrollback: ActionKeybinds,
     pub clear_pane: ActionKeybinds,
     pub copy_mode: ActionKeybinds,
@@ -562,6 +566,10 @@ impl Config {
             switch_workspace: Vec::new(),
             close_tab: empty_action!(),
             rename_pane: empty_action!(),
+            expand_agent_groups: empty_action!(),
+            collapse_agent_groups: empty_action!(),
+            toggle_agent_group: empty_action!(),
+            rename_agent: empty_action!(),
             edit_scrollback: empty_action!(),
             clear_pane: empty_action!(),
             copy_mode: empty_action!(),
@@ -710,6 +718,14 @@ impl Config {
             );
             apply_action!(keybinds.close_tab, close_tab, source);
             apply_action!(keybinds.rename_pane, rename_pane, source);
+            apply_action!(keybinds.expand_agent_groups, expand_agent_groups, source);
+            apply_action!(
+                keybinds.collapse_agent_groups,
+                collapse_agent_groups,
+                source
+            );
+            apply_action!(keybinds.toggle_agent_group, toggle_agent_group, source);
+            apply_action!(keybinds.rename_agent, rename_agent, source);
             apply_action!(keybinds.edit_scrollback, edit_scrollback, source);
             apply_action!(keybinds.clear_pane, clear_pane, source);
             apply_action!(keybinds.copy_mode, copy_mode, source);

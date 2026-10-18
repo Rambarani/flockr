@@ -1,6 +1,48 @@
 use super::*;
 
 impl ClientShellState {
+    /// The agent row under `point`, from either the local or combined list.
+    pub(super) fn agent_row_at(&self, point: (u16, u16)) -> Option<(ClientEndpointId, String)> {
+        self.hits
+            .endpoint_agents
+            .iter()
+            .find(|(rect, _, _)| super::contains(*rect, point))
+            .map(|(_, endpoint_id, pane_id)| (endpoint_id.clone(), pane_id.clone()))
+            .or_else(|| {
+                self.hits
+                    .agents
+                    .iter()
+                    .find(|(rect, _)| super::contains(*rect, point))
+                    .map(|(_, pane_id)| (self.active_endpoint_id.clone(), pane_id.clone()))
+            })
+    }
+
+    /// Record a left click in the agent list. Returns true when it completes a
+    /// double click on the same target.
+    pub(super) fn register_agent_list_click(&mut self, target: ClientAgentListTarget) -> bool {
+        let now = std::time::Instant::now();
+        let double = self.last_agent_list_click.as_ref().is_some_and(|last| {
+            last.target == target
+                && now.duration_since(last.at) <= ClientAgentListClick::DOUBLE_CLICK
+        });
+        self.last_agent_list_click = (!double).then_some(ClientAgentListClick { target, at: now });
+        double
+    }
+
+    /// Double click on an agent row renames that agent. Only the active
+    /// endpoint can be renamed; other machines activate on the first click.
+    pub(super) fn agent_row_double_click_renames(
+        &mut self,
+        endpoint_id: &ClientEndpointId,
+        pane_id: &str,
+    ) -> bool {
+        let double = self.register_agent_list_click(ClientAgentListTarget::Agent {
+            endpoint_id: endpoint_id.clone(),
+            pane_id: pane_id.to_owned(),
+        });
+        double && *endpoint_id == self.active_endpoint_id && self.open_rename_agent_overlay(pane_id)
+    }
+
     pub(super) fn active_endpoint_workspace_at(&self, point: (u16, u16)) -> Option<String> {
         self.hits
             .workspaces
@@ -92,6 +134,10 @@ impl ClientShellState {
         else {
             return false;
         };
+        if self.agent_row_double_click_renames(&endpoint_id, &pane_id) {
+            outcome.repaint = true;
+            return true;
+        }
         self.focus_or_activate(
             endpoint_id,
             ClientEndpointFocusTarget::Pane(pane_id),
@@ -191,14 +237,17 @@ impl ClientShellState {
                         target.endpoint_id == self.active_endpoint_id
                             && Some(target.pane_id.as_str()) == focused
                     });
-                    match (current, action) {
-                        (Some(index), KeybindAction::PreviousAgent) => {
-                            (index + agents.len() - 1) % agents.len()
-                        }
-                        (Some(index), KeybindAction::NextAgent) => (index + 1) % agents.len(),
-                        (None, KeybindAction::PreviousAgent) => agents.len() - 1,
-                        _ => 0,
-                    }
+                    // Agents inside a collapsed workspace group are not listed,
+                    // so stepping skips them.
+                    let Some(next) = super::agent_groups::step_visible_agent(
+                        &agents,
+                        |target| !self.agent_group_hides(&target.endpoint_id, &target.workspace_id),
+                        current,
+                        action == KeybindAction::PreviousAgent,
+                    ) else {
+                        return true;
+                    };
+                    next
                 }
                 _ => unreachable!("endpoint agent navigation"),
             };

@@ -434,6 +434,11 @@ pub(crate) fn render_sidebar(
         buffer,
         detail_area,
         snapshot,
+        state.active_endpoint_id,
+        super::agent_groups::CollapsedGroups {
+            local: state.collapsed_groups,
+            remote: state.remote_collapsed_groups,
+        },
         config,
         state.agent_scroll,
         hits,

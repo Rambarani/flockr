@@ -77,11 +77,24 @@ impl ClientShellState {
         press: ClientWorkspacePress,
         outcome: &mut ClientShellInput,
     ) {
+        // A double click on a space row renames that workspace. Like agent
+        // rows, only the active endpoint can be renamed; the click still
+        // focuses (or activates) the workspace first.
+        let double = self.register_agent_list_click(ClientAgentListTarget::Space {
+            endpoint_id: press.endpoint_id.clone(),
+            workspace_id: press.workspace_id.clone(),
+        });
+        let rename = double && press.endpoint_id == self.active_endpoint_id;
+        let workspace_id = press.workspace_id.clone();
         self.focus_or_activate(
             press.endpoint_id,
             ClientEndpointFocusTarget::Workspace(press.workspace_id),
             outcome,
         );
+        if rename {
+            self.open_rename_workspace_overlay_for(workspace_id);
+            outcome.repaint = true;
+        }
     }
 
     pub(super) fn handle_endpoint_machine_click(

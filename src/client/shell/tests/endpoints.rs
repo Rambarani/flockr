@@ -348,6 +348,38 @@ fn state_with_scrollable_agents() -> (ClientShellState, ClientEndpointId) {
     (state, remote)
 }
 
+#[test]
+fn double_click_on_another_machines_space_activates_it_without_renaming() {
+    let (mut state, remote) = state_with_remote();
+    state.compose(100, 28).unwrap();
+    let rect = state
+        .hits
+        .workspaces
+        .iter()
+        .find(|hit| hit.endpoint_id == remote)
+        .expect("remote space row is listed")
+        .rect;
+    let click = |state: &mut ClientShellState| {
+        for kind in [
+            MouseEventKind::Down(MouseButton::Left),
+            MouseEventKind::Up(MouseButton::Left),
+        ] {
+            state.handle_raw_events(vec![RawInputEvent::Mouse(MouseEvent {
+                kind,
+                column: rect.x + 2,
+                row: rect.y,
+                modifiers: KeyModifiers::NONE,
+            })]);
+        }
+    };
+    click(&mut state);
+    click(&mut state);
+    assert!(
+        !matches!(state.overlay, Some(ClientShellOverlay::Rename(_))),
+        "only the active machine's spaces can be renamed"
+    );
+}
+
 /// Checks that the visible toggle wins overlapping scrollbar clicks and can reopen
 /// the sidebar, for both endpoint layouts and both ends of the overflowing list.
 #[test]

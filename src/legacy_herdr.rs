@@ -118,6 +118,41 @@ pub(crate) fn apply_legacy_pane_env(cmd: &mut portable_pty::CommandBuilder) {
     }
 }
 
+/// Log filter directives from `FLOCKR_LOG`, or from the legacy `HERDR_LOG` with
+/// its `herdr` tracing targets rewritten to `flockr` (the crate name the
+/// tracing targets are keyed on).
+pub(crate) fn log_filter_directives() -> Option<String> {
+    if let Ok(value) = std::env::var("FLOCKR_LOG") {
+        return Some(value);
+    }
+    let legacy = std::env::var(legacy_env_name("FLOCKR_LOG")?).ok()?;
+    Some(translate_legacy_log_target(&legacy))
+}
+
+fn translate_legacy_log_target(directives: &str) -> String {
+    directives
+        .split(',')
+        .map(|directive| {
+            let (target, level) = match directive.split_once('=') {
+                Some((target, level)) => (target.trim(), Some(level)),
+                None => (directive.trim(), None),
+            };
+            let target = if target == "herdr" {
+                "flockr".to_string()
+            } else if let Some(rest) = target.strip_prefix("herdr::") {
+                format!("flockr::{rest}")
+            } else {
+                target.to_string()
+            };
+            match level {
+                Some(level) => format!("{target}={level}"),
+                None => target,
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 /// Maps a legacy `herdr:<id>` report source to its `flockr:<id>` alias.
 pub(crate) fn canonical_report_source(source: &str) -> Cow<'_, str> {
     match source.strip_prefix(LEGACY_REPORT_SOURCE_PREFIX) {
@@ -161,6 +196,14 @@ mod tests {
         let mut source = Some("herdr:pi".to_string());
         canonicalize_optional_report_source(&mut source);
         assert_eq!(source.as_deref(), Some("flockr:pi"));
+    }
+
+    #[test]
+    fn legacy_log_targets_are_rewritten() {
+        assert_eq!(
+            translate_legacy_log_target("herdr=debug,herdr::pane_graphics_files=trace,warn"),
+            "flockr=debug,flockr::pane_graphics_files=trace,warn"
+        );
     }
 
     #[test]

@@ -19,8 +19,9 @@ pub(crate) fn init_file_logging(file_name: &str) {
         return;
     };
 
-    let filter =
-        EnvFilter::try_from_env("FLOCKR_LOG").unwrap_or_else(|_| EnvFilter::new("flockr=info"));
+    let filter = crate::legacy_herdr::log_filter_directives()
+        .and_then(|directives| EnvFilter::try_new(directives).ok())
+        .unwrap_or_else(|| EnvFilter::new("flockr=info"));
 
     let _ = tracing_subscriber::fmt()
         .with_env_filter(filter)

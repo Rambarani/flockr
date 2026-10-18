@@ -4,6 +4,8 @@
 //! {"version":1,"title":"Today","items":[
 //!   {"id":"a","title":"Fix login","subtitle":"jira · mention","state":"unread",
 //!    "badge":"NH-1","url":"https://example.com","updated_at":"2026-10-18T09:00:00Z",
+//!    "body":"Can you look?\nIt blocks the release.",
+//!    "fields":[{"label":"Source","value":"jira"}],
 //!    "actions":[{"key":"d","title":"done","command":["workbox","mark","a","done"]}]}]}
 //! ```
 //!
@@ -27,6 +29,12 @@ pub(crate) const MAX_SUBTITLE_CHARS: usize = 300;
 pub(crate) const MAX_BADGE_CHARS: usize = 40;
 pub(crate) const MAX_URL_CHARS: usize = 2048;
 pub(crate) const MAX_UPDATED_AT_CHARS: usize = 40;
+/// Longest `body`, in bytes of UTF-8 (cut at a character boundary).
+pub(crate) const MAX_BODY_BYTES: usize = 8 * 1024;
+/// Most `fields` entries on an item.
+pub(crate) const MAX_FIELDS: usize = 12;
+pub(crate) const MAX_FIELD_LABEL_CHARS: usize = 40;
+pub(crate) const MAX_FIELD_VALUE_CHARS: usize = 500;
 pub(crate) const MAX_ACTIONS: usize = 8;
 pub(crate) const MAX_ACTION_TITLE_CHARS: usize = 40;
 pub(crate) const MAX_ARGV: usize = 64;
@@ -55,13 +63,20 @@ pub(crate) const RESERVED_NAMES: &[&str] = &[
     "delete",
     "space",
 ];
-pub(crate) const RESERVED_CHARS: &[char] = &['j', 'k', 'q', 'g', 'G', 'R', '/'];
+pub(crate) const RESERVED_CHARS: &[char] = &['j', 'k', 'q', 'g', 'G', 'R', 'S', '/'];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct ActionRecord {
     pub(crate) key: String,
     pub(crate) title: String,
     pub(crate) command: Vec<String>,
+}
+
+/// A labelled value in an item's detail view.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct FieldRecord {
+    pub(crate) label: String,
+    pub(crate) value: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -78,6 +93,11 @@ pub(crate) struct ItemRecord {
     pub(crate) url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) updated_at: Option<String>,
+    /// Plain text for the detail view; line breaks are kept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) body: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) fields: Vec<FieldRecord>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) actions: Vec<ActionRecord>,
 }
@@ -139,6 +159,102 @@ pub(crate) fn clean_text(text: &str) -> String {
         .collect::<String>()
         .trim()
         .to_owned()
+}
+
+/// Like `clean_text` for multi-line text: line breaks stay, tabs become
+/// spaces, other control characters go, and surrounding blank space is cut.
+pub(crate) fn clean_multiline(text: &str) -> String {
+    text.replace("\r\n", "\n")
+        .chars()
+        .filter_map(|ch| match ch {
+            '\n' => Some('\n'),
+            '\r' => Some('\n'),
+            '\t' => Some(' '),
+            ch if ch.is_control() => None,
+            ch => Some(ch),
+        })
+        .collect::<String>()
+        .trim()
+        .to_owned()
+}
+
+/// Cut `text` to at most `max` bytes at a character boundary.
+fn clip_bytes(text: &str, max: usize) -> (&str, bool) {
+    if text.len() <= max {
+        return (text, false);
+    }
+    let mut end = max;
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    (&text[..end], true)
+}
+
+/// Read the optional `body`: multi-line plain text cut to `MAX_BODY_BYTES`.
+fn parse_body(
+    object: &serde_json::Map<String, serde_json::Value>,
+    context: &str,
+    diagnostics: &mut Diagnostics,
+) -> Option<String> {
+    match string_field(object, "body") {
+        StringField::Absent => None,
+        StringField::WrongType => {
+            diagnostics.push(format!("{context}: body must be a string; ignored"));
+            None
+        }
+        StringField::Text(text) => {
+            let cleaned = clean_multiline(text);
+            if cleaned.is_empty() {
+                return None;
+            }
+            let (cut, was_cut) = clip_bytes(&cleaned, MAX_BODY_BYTES);
+            if was_cut {
+                diagnostics.push(format!(
+                    "{context}: body is longer than {} KiB; cut",
+                    MAX_BODY_BYTES / 1024
+                ));
+            }
+            Some(cut.trim_end().to_owned())
+        }
+    }
+}
+
+/// Read the optional `fields` array of `{label, value}` strings.
+fn parse_fields(
+    object: &serde_json::Map<String, serde_json::Value>,
+    context: &str,
+    diagnostics: &mut Diagnostics,
+) -> Vec<FieldRecord> {
+    let list = match object.get("fields") {
+        None | Some(serde_json::Value::Null) => return Vec::new(),
+        Some(serde_json::Value::Array(list)) => list,
+        Some(_) => {
+            diagnostics.push(format!("{context}: fields must be an array; ignored"));
+            return Vec::new();
+        }
+    };
+    let mut fields = Vec::new();
+    for entry in list {
+        if fields.len() >= MAX_FIELDS {
+            diagnostics.push(format!(
+                "{context}: more than {MAX_FIELDS} fields; the rest are dropped"
+            ));
+            break;
+        }
+        let Some(entry) = entry.as_object() else {
+            diagnostics.push(format!("{context}: a field must be an object; dropped"));
+            continue;
+        };
+        let label = optional_text(entry, "label", MAX_FIELD_LABEL_CHARS, context, diagnostics);
+        let value = optional_text(entry, "value", MAX_FIELD_VALUE_CHARS, context, diagnostics);
+        match (label, value) {
+            (Some(label), Some(value)) => fields.push(FieldRecord { label, value }),
+            _ => diagnostics.push(format!(
+                "{context}: a field needs a non-empty string label and value; dropped"
+            )),
+        }
+    }
+    fields
 }
 
 enum StringField<'a> {
@@ -359,6 +475,8 @@ fn parse_item(
         }
         Some(_) => diagnostics.push(format!("{context}: actions must be an array; ignored")),
     }
+    let body = parse_body(object, &context, diagnostics);
+    let fields = parse_fields(object, &context, diagnostics);
     Some(ItemRecord {
         id,
         title,
@@ -379,6 +497,8 @@ fn parse_item(
             &context,
             diagnostics,
         ),
+        body,
+        fields,
         actions,
     })
 }
@@ -537,6 +657,79 @@ mod tests {
             item.actions[0].command,
             ["workbox", "mark", "jira:NH-1", "done"]
         );
+    }
+
+    #[test]
+    fn body_keeps_line_breaks_and_fields_parse_in_order() {
+        let feed = parse(
+            r#"{"version":1,"items":[{"id":"a","title":"A",
+              "body":"line one\r\nline two\u0007\n\ttabbed\n\n",
+              "fields":[{"label":"Source","value":"jira"},{"label":"Today","value":"no"}]}]}"#,
+        );
+        assert!(feed.diagnostics.is_empty(), "{:?}", feed.diagnostics);
+        let item = &feed.items[0];
+        assert_eq!(item.body.as_deref(), Some("line one\nline two\n tabbed"));
+        assert_eq!(item.fields.len(), 2);
+        assert_eq!(item.fields[0].label, "Source");
+        assert_eq!(item.fields[1].value, "no");
+    }
+
+    #[test]
+    fn an_old_feed_without_body_or_fields_still_parses_clean() {
+        let feed = parse(r#"{"version":1,"items":[{"id":"a","title":"A","state":"unread"}]}"#);
+        assert!(feed.diagnostics.is_empty());
+        assert!(feed.items[0].body.is_none());
+        assert!(feed.items[0].fields.is_empty());
+    }
+
+    #[test]
+    fn a_long_body_is_cut_at_a_character_boundary() {
+        let text = "é".repeat(MAX_BODY_BYTES);
+        let feed = parse(&format!(
+            r#"{{"version":1,"items":[{{"id":"a","body":"{text}"}}]}}"#
+        ));
+        let body = feed.items[0].body.as_deref().unwrap();
+        assert!(body.len() <= MAX_BODY_BYTES);
+        assert_eq!(body.len(), MAX_BODY_BYTES, "é is two bytes, so it fits exactly");
+        assert!(feed.diagnostics.iter().any(|d| d.contains("body is longer")));
+    }
+
+    #[test]
+    fn fields_are_capped_and_bad_entries_dropped() {
+        let many: Vec<String> = (0..MAX_FIELDS + 3)
+            .map(|n| format!(r#"{{"label":"L{n}","value":"v"}}"#))
+            .collect();
+        let long_label = "l".repeat(MAX_FIELD_LABEL_CHARS + 5);
+        let long_value = "v".repeat(MAX_FIELD_VALUE_CHARS + 5);
+        let feed = parse(&format!(
+            r#"{{"version":1,"items":[
+              {{"id":"a","fields":[{}]}},
+              {{"id":"b","fields":[{{"label":"{long_label}","value":"{long_value}"}},
+                 {{"label":"only label"}},{{"value":"only value"}},7,{{"label":"n","value":3}}]}},
+              {{"id":"c","fields":"nope","body":5}}]}}"#,
+            many.join(",")
+        ));
+        assert_eq!(feed.items[0].fields.len(), MAX_FIELDS);
+        assert!(feed.diagnostics.iter().any(|d| d.contains("more than 12 fields")));
+        let b = &feed.items[1].fields;
+        assert_eq!(b.len(), 1);
+        assert_eq!(b[0].label.chars().count(), MAX_FIELD_LABEL_CHARS);
+        assert_eq!(b[0].value.chars().count(), MAX_FIELD_VALUE_CHARS);
+        let dropped = feed
+            .diagnostics
+            .iter()
+            .filter(|d| d.contains("a field needs") || d.contains("a field must be"))
+            .count();
+        assert_eq!(dropped, 4, "{:?}", feed.diagnostics);
+        assert!(feed.items[2].fields.is_empty() && feed.items[2].body.is_none());
+        assert!(feed.diagnostics.iter().any(|d| d.contains("fields must be an array")));
+        assert!(feed.diagnostics.iter().any(|d| d.contains("body must be a string")));
+    }
+
+    #[test]
+    fn s_is_reserved_for_sync_now() {
+        assert!(action_key_problem("S").is_some());
+        assert!(action_key_problem("s").is_none());
     }
 
     #[test]

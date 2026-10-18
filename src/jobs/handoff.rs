@@ -1166,6 +1166,8 @@ mod tests {
             badge: None,
             url: None,
             updated_at: None,
+            body: None,
+            fields: Vec::new(),
             actions: Vec::new(),
         };
         let few: Vec<_> = (0..3).map(item).collect();

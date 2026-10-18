@@ -9,8 +9,8 @@ use serde_json::{json, Value};
 
 use crate::feed::format::{
     FEED_VERSION, MAX_ACTIONS, MAX_ACTION_TITLE_CHARS, MAX_ARGV, MAX_ARG_CHARS, MAX_BADGE_CHARS,
-    MAX_FEED_BYTES, MAX_FEED_TITLE_CHARS, MAX_ID_CHARS, MAX_ITEMS, MAX_SUBTITLE_CHARS,
-    MAX_TITLE_CHARS, MAX_UPDATED_AT_CHARS, MAX_URL_CHARS, RESERVED_CHARS, RESERVED_NAMES,
+    MAX_BODY_BYTES, MAX_FEED_BYTES, MAX_FEED_TITLE_CHARS, MAX_FIELDS, MAX_FIELD_LABEL_CHARS,
+    MAX_FIELD_VALUE_CHARS, MAX_ID_CHARS, MAX_ITEMS, MAX_SUBTITLE_CHARS, MAX_TITLE_CHARS, MAX_UPDATED_AT_CHARS, MAX_URL_CHARS, RESERVED_CHARS, RESERVED_NAMES,
 };
 use crate::jobs::definition::{
     format_duration, DEFAULT_TIMEOUT, JOB_ID_MAX_CHARS, MAX_TIMEOUT, MIN_INTERVAL, MIN_TIMEOUT,
@@ -209,6 +209,23 @@ fn item_schema() -> Value {
             "badge": text(MAX_BADGE_CHARS, "Short tag such as a ticket key."),
             "url": { "type": "string", "pattern": "^https?://", "maxLength": MAX_URL_CHARS, "description": "Opened by enter or a click; http or https only." },
             "updated_at": text(MAX_UPDATED_AT_CHARS, "The item's own timestamp, RFC 3339."),
+            "body": {
+                "type": "string",
+                "description": format!("Plain text for the detail pane; line breaks are kept, other control characters are removed. Cut at {} KiB (bytes of UTF-8).", MAX_BODY_BYTES / 1024)
+            },
+            "fields": {
+                "type": "array",
+                "maxItems": MAX_FIELDS,
+                "description": "Labelled values for the detail pane, shown as a table in order. An entry without a non-empty label and value is dropped.",
+                "items": {
+                    "type": "object",
+                    "required": ["label", "value"],
+                    "properties": {
+                        "label": text(MAX_FIELD_LABEL_CHARS, "Left column."),
+                        "value": text(MAX_FIELD_VALUE_CHARS, "Right column; wrapped.")
+                    }
+                }
+            },
             "actions": {
                 "type": "array",
                 "maxItems": MAX_ACTIONS,
@@ -494,6 +511,32 @@ notify = "never"
             assert!(parsed.diagnostics.is_empty(), "{state}");
         }
         assert_eq!(states.len(), FEED_STATES.len());
+    }
+
+    #[test]
+    fn feed_schema_body_and_fields_caps_match_the_parser() {
+        let schema = feed_schema();
+        let item = &schema["$defs"]["item"]["properties"];
+        assert_eq!(item["fields"]["maxItems"], MAX_FIELDS);
+        let field = &item["fields"]["items"]["properties"];
+        assert_eq!(field["label"]["maxLength"], MAX_FIELD_LABEL_CHARS);
+        assert_eq!(field["value"]["maxLength"], MAX_FIELD_VALUE_CHARS);
+        assert!(item["body"]["description"]
+            .as_str()
+            .unwrap()
+            .contains(&format!("{} KiB", MAX_BODY_BYTES / 1024)));
+        let fits = feed_with(&format!(
+            "{{\"id\":\"a\",\"title\":\"t\",\"body\":\"{}\"}}",
+            "x".repeat(MAX_BODY_BYTES)
+        ))
+        .unwrap();
+        assert!(fits.diagnostics.is_empty(), "{:?}", fits.diagnostics);
+        let over = feed_with(&format!(
+            "{{\"id\":\"a\",\"title\":\"t\",\"body\":\"{}\"}}",
+            "x".repeat(MAX_BODY_BYTES + 1)
+        ))
+        .unwrap();
+        assert!(over.diagnostics.iter().any(|d| d.contains("cut")));
     }
 
     #[test]

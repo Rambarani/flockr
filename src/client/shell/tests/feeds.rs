@@ -40,6 +40,8 @@ fn item(id: &str, title: &str, state: FeedItemState) -> FeedItemInfo {
         badge: Some(id.to_uppercase()),
         url: Some(format!("https://example.com/{id}")),
         updated_at: None,
+        body: None,
+        fields: Vec::new(),
         actions: vec![
             FeedActionInfo {
                 key: "d".into(),

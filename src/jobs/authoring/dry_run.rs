@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use super::{run_in_job_env, Scratch};
 use crate::api::schema::{
-    FeedActionInfo, FeedItemInfo, FeedItemState, JobRunInfo, JobRunStatus, JobRunTrigger,
+    FeedActionInfo, FeedField, FeedItemInfo, FeedItemState, JobRunInfo, JobRunStatus, JobRunTrigger,
 };
 use crate::feed::format::{parse_feed, ItemRecord, ParsedFeed, MAX_FEED_BYTES};
 use crate::jobs::definition::JobDef;
@@ -58,6 +58,15 @@ fn item_info(item: &ItemRecord) -> FeedItemInfo {
         badge: item.badge.clone(),
         url: item.url.clone(),
         updated_at: item.updated_at.clone(),
+        body: item.body.clone(),
+        fields: item
+            .fields
+            .iter()
+            .map(|field| FeedField {
+                label: field.label.clone(),
+                value: field.value.clone(),
+            })
+            .collect(),
         actions: item
             .actions
             .iter()

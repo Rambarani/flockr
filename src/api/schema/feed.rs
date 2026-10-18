@@ -23,6 +23,13 @@ pub struct FeedActionInfo {
     pub title: String,
 }
 
+/// A labelled value shown in an item's detail view.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct FeedField {
+    pub label: String,
+    pub value: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct FeedItemInfo {
     pub id: String,
@@ -38,6 +45,13 @@ pub struct FeedItemInfo {
     /// The item's own timestamp as the feed gave it (RFC 3339).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
+    /// Plain text for a detail view (up to 8 KiB, line breaks kept). Added
+    /// after the first release of `feed.get`; absent from older servers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+    /// Labelled values for a detail view (up to 12). Absent from older servers.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<FeedField>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub actions: Vec<FeedActionInfo>,
 }

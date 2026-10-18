@@ -5,7 +5,9 @@
 //! key, state is `unread` or `read`, and subtitle is
 //! `<source> · <reason>[ · <where>]`. The actions mark the item done (`d`),
 //! seen (`s`), or toggle it on the today list (`t`) by running
-//! `workbox mark <id> <action>`.
+//! `workbox mark <id> <action>`. The detail view gets `fields` (Source,
+//! Reason, Where, Status, From, Key, Snoozed until, Today) and the snippet as
+//! `body`, the same facts workbox's own detail pane shows.
 
 use serde::Deserialize;
 
@@ -29,8 +31,8 @@ impl Default for AdaptOptions {
 }
 
 /// The fields of one `workbox list --json` element that the feed uses.
-/// Other fields (`tab`, `actor`, `snippet`, `snoozed_until`, ...) are
-/// ignored, so new workbox fields never break the adapter.
+/// Other fields (`tab`, ...) are ignored, so new workbox fields never break
+/// the adapter.
 #[derive(Debug, Deserialize)]
 struct WorkboxItem {
     #[serde(default)]
@@ -53,6 +55,36 @@ struct WorkboxItem {
     unread: bool,
     #[serde(default)]
     today: bool,
+    #[serde(default)]
+    status: Option<String>,
+    #[serde(default)]
+    actor: Option<String>,
+    #[serde(default)]
+    snippet: Option<String>,
+    #[serde(default)]
+    snoozed_until: Option<String>,
+}
+
+/// The labelled values for the detail view. `Updated` is left out: the
+/// detail view already shows the item's `updated_at` in local time.
+fn fields(item: &WorkboxItem) -> Vec<serde_json::Value> {
+    let reason = item.reason.replace('_', " ");
+    let optional = |text: &Option<String>| text.as_deref().and_then(non_empty).map(str::to_owned);
+    let rows = [
+        ("Source", non_empty(&item.source).map(str::to_owned)),
+        ("Reason", non_empty(&reason).map(str::to_owned)),
+        ("Where", non_empty(&item.where_).map(str::to_owned)),
+        ("Status", optional(&item.status)),
+        ("From", optional(&item.actor)),
+        ("Key", non_empty(&item.key).map(str::to_owned)),
+        ("Snoozed until", optional(&item.snoozed_until)),
+        ("Today", Some(if item.today { "yes" } else { "no" }.to_owned())),
+    ];
+    rows.into_iter()
+        .filter_map(|(label, value)| {
+            value.map(|value| serde_json::json!({"label": label, "value": value}))
+        })
+        .collect()
 }
 
 fn non_empty(text: &str) -> Option<&str> {
@@ -123,6 +155,10 @@ pub(crate) fn adapt(
         }
         if let Some(updated_at) = non_empty(&item.updated_at) {
             entry.insert("updated_at".into(), updated_at.into());
+        }
+        entry.insert("fields".into(), serde_json::Value::Array(fields(&item)));
+        if let Some(snippet) = item.snippet.as_deref().and_then(non_empty) {
+            entry.insert("body".into(), snippet.into());
         }
         let bin = options.bin.as_str();
         entry.insert(
@@ -220,6 +256,67 @@ mod tests {
     }
 
     #[test]
+    fn detail_fields_and_the_snippet_body_mirror_the_workbox_pane() {
+        let (feed, _) = adapted(&AdaptOptions::default());
+        let pairs = |item: &serde_json::Value| -> Vec<(String, String)> {
+            item["fields"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|f| {
+                    (
+                        f["label"].as_str().unwrap().to_owned(),
+                        f["value"].as_str().unwrap().to_owned(),
+                    )
+                })
+                .collect()
+        };
+        let want = |rows: &[(&str, &str)]| -> Vec<(String, String)> {
+            rows.iter()
+                .map(|(l, v)| ((*l).to_owned(), (*v).to_owned()))
+                .collect()
+        };
+        let first = &feed["items"][0];
+        assert_eq!(
+            pairs(first),
+            want(&[
+                ("Source", "jira"),
+                ("Reason", "mention"),
+                ("Where", "NH board"),
+                ("Status", "In Progress"),
+                ("From", "alice"),
+                ("Key", "NH-1412"),
+                ("Today", "no"),
+            ])
+        );
+        assert_eq!(first["body"], "can you look?");
+        let second = &feed["items"][1];
+        assert_eq!(
+            pairs(second),
+            want(&[
+                ("Source", "github"),
+                ("Reason", "review requested"),
+                ("Key", "o/r#12"),
+                ("Today", "yes"),
+            ])
+        );
+        assert!(second.get("body").is_none());
+    }
+
+    #[test]
+    fn a_snoozed_item_lists_when_it_wakes() {
+        let (feed, _) = adapt(
+            r#"[{"id":"a","title":"A","snoozed_until":"2026-10-19T09:00:00Z"}]"#,
+            &AdaptOptions::default(),
+        )
+        .unwrap();
+        let rows = feed["items"][0]["fields"].as_array().unwrap();
+        assert!(rows
+            .iter()
+            .any(|f| f["label"] == "Snoozed until" && f["value"] == "2026-10-19T09:00:00Z"));
+    }
+
+    #[test]
     fn the_title_and_program_are_options() {
         let (feed, _) = adapted(&AdaptOptions {
             title: "Today (workbox)".into(),
@@ -238,6 +335,8 @@ mod tests {
         let parsed = parse_feed(&feed.to_string()).expect("valid feed");
         assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
         assert_eq!(parsed.items.len(), 2);
+        assert_eq!(parsed.items[0].fields.len(), 7);
+        assert_eq!(parsed.items[0].body.as_deref(), Some("can you look?"));
         assert_eq!(parsed.items[0].state, FeedItemState::Unread);
         assert_eq!(
             parsed.items[0].actions.len(),

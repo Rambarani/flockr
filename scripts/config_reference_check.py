@@ -32,6 +32,11 @@ ROOT_STRUCT = "Config"
 # therefore not enumerable in a flat reference table.
 SKIPPED_SUBTREES = ("keys.command",)
 
+# Enums with a hand-written Deserialize that accepts more than their listed
+# string variants (a table form), so their variants are not the complete set of
+# allowed values and are not value-checked.
+OPEN_VALUE_ENUMS = ("AgentSoundSetting",)
+
 FIELD_RE = re.compile(r"^\s*pub ([a-z_][a-z0-9_]*):\s*(.+?),?\s*$")
 STRUCT_RE = re.compile(r"^\s*pub(?:\(crate\))? struct ([A-Za-z0-9_]+)\s*\{\s*$")
 ENUM_RE = re.compile(r"^\s*pub(?:\(crate\))? enum ([A-Za-z0-9_]+)\s*\{\s*$")
@@ -242,7 +247,7 @@ def collect_entries(model: Model, struct_name: str = ROOT_STRUCT, prefix: str = 
             entries.extend(collect_entries(model, inner, f"{dotted}."))
         else:
             entry = {"key": dotted, "rust_type": struct_field.rust_type, "doc": struct_field.doc}
-            if inner in model.enums:
+            if inner in model.enums and inner not in OPEN_VALUE_ENUMS:
                 entry["values"] = model.enums[inner]
             entries.append(entry)
     return entries

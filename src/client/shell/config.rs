@@ -127,6 +127,7 @@ impl ClientShellConfig {
             group_agents_by_workspace: config.ui.sidebar.group_agents_by_workspace,
             status_indicators: config.ui.status_indicators,
             sound_enabled: config.ui.sound.enabled,
+            sound: config.ui.sound.clone(),
             toast_delivery: config.ui.toast.delivery,
             toast_delay_seconds: config.ui.toast.delay_seconds,
             toast_position: config.ui.toast.herdr.position,
@@ -355,6 +356,7 @@ impl ClientShellConfig {
                 self.group_agents_by_workspace = ui.sidebar.group_agents_by_workspace;
                 self.status_indicators = ui.status_indicators;
                 self.sound_enabled = ui.sound.enabled;
+                self.sound = ui.sound.clone();
                 self.toast_delivery = ui.toast.delivery;
                 self.toast_delay_seconds = ui.toast.delay_seconds;
                 self.toast_position = ui.toast.herdr.position;

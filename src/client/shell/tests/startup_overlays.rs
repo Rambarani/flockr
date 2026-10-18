@@ -651,12 +651,12 @@ fn endpoint_keybindings_hide_only_local_keybinding_diagnostics() {
 fn live_client_config_keeps_sound_diagnostics() {
     let mut shell_config = ClientShellConfig::from_config(&Config::default());
     let mut config = Config::default();
-    config.ui.sound.path = Some(std::path::PathBuf::from("invalid.wav"));
+    config.ui.sound.path = Some(std::path::PathBuf::from("invalid.txt"));
 
     let diagnostics = shell_config.apply_live_config(&config, &[], &[]);
     assert!(diagnostics
         .iter()
-        .any(|diagnostic| diagnostic.contains("expected an mp3 file")));
+        .any(|diagnostic| diagnostic.contains("unsupported sound file format")));
 }
 
 #[test]
@@ -1196,7 +1196,8 @@ fn client_settings_preview_restore_and_endpoint_integrations_are_owned_by_overla
 
     state.open_settings_overlay();
     state.compose(106, 30).expect("settings overlay");
-    for _ in 0..3 {
+    // indicators, sound, tones, toasts
+    for _ in 0..4 {
         let next = state.handle_input_bytes(b"\t");
         assert!(next.actions.is_empty());
     }
@@ -1313,4 +1314,194 @@ fn client_settings_preview_restore_and_endpoint_integrations_are_owned_by_overla
             ..
         })) if integration_messages == &["installed codex"]
     ));
+}
+
+fn tones_picker_state(config_toml: &str, name: &str) -> (ClientShellState, std::path::PathBuf) {
+    let dir = std::env::temp_dir().join(format!("herdr-tones-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("config.toml");
+    std::fs::write(&path, config_toml).unwrap();
+    std::env::set_var(crate::config::CONFIG_PATH_ENV_VAR, &path);
+
+    let loaded: Config = toml::from_str(config_toml).unwrap();
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&loaded));
+    state.set_snapshot(Box::new(snapshot()));
+    state.set_pane_surface(surface());
+    state.open_settings_overlay();
+    state.compose(106, 30).expect("settings overlay");
+    // theme -> indicators -> sound -> tones
+    for _ in 0..3 {
+        state.handle_input_bytes(b"\t");
+    }
+    assert!(matches!(
+        state.overlay,
+        Some(ClientShellOverlay::Settings(ClientSettingsOverlay {
+            section: ClientSettingsSection::Tones,
+            ..
+        }))
+    ));
+    (state, path)
+}
+
+fn finish_tones_test(path: &std::path::Path) {
+    std::env::remove_var(crate::config::CONFIG_PATH_ENV_VAR);
+    let _ = std::fs::remove_dir_all(path.parent().unwrap());
+}
+
+fn selected_tone_row(state: &ClientShellState) -> usize {
+    let Some(ClientShellOverlay::Settings(settings)) = state.overlay.as_ref() else {
+        panic!("settings overlay should be open");
+    };
+    settings.selected
+}
+
+#[test]
+fn tones_picker_previews_on_move_and_writes_only_the_chosen_sound_keys() {
+    use crate::sound::{BuiltInSound, Sound, SoundSelection};
+
+    let _guard = crate::config::test_config_env_lock().lock().unwrap();
+    let original = "# my config\n[ui]\nsidebar_width = 30\n\n[ui.sound]\nenabled = true\nvolume = 0.5\n\n[theme]\nname = \"nord\"\n";
+    let (mut state, path) = tones_picker_state(original, "write");
+    assert_eq!(selected_tone_row(&state), 0);
+
+    let moved = state.handle_input_bytes(b"j");
+    assert_eq!(selected_tone_row(&state), 1);
+    let [ClientShellAction::PreviewSound {
+        selection, volume, ..
+    }] = &moved.actions[..]
+    else {
+        panic!(
+            "moving should preview the highlighted tone: {:?}",
+            moved.actions.len()
+        );
+    };
+    assert_eq!(selection, &SoundSelection::BuiltIn(BuiltInSound::Chime));
+    assert_eq!(*volume, 0.5, "preview honors the configured volume");
+
+    // Previewing alone never touches the file.
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+
+    // r assigns only the request sound.
+    state.handle_input_bytes(b"r");
+    let written = std::fs::read_to_string(&path).unwrap();
+    assert!(written.contains("request = \"chime\""), "{written}");
+    assert!(!written.contains("done ="), "{written}");
+    for kept in [
+        "# my config",
+        "sidebar_width = 30",
+        "volume = 0.5",
+        "name = \"nord\"",
+    ] {
+        assert!(written.contains(kept), "lost {kept:?}: {written}");
+    }
+    assert!(toml::from_str::<Config>(&written).is_ok(), "{written}");
+    assert_eq!(
+        state.config.sound.selection_for(Sound::Request, None),
+        SoundSelection::BuiltIn(BuiltInSound::Chime)
+    );
+    assert_eq!(
+        state.config.sound.selection_for(Sound::Done, None),
+        SoundSelection::Default
+    );
+
+    // Enter assigns both to the next tone, replacing the earlier request value.
+    state.handle_input_bytes(b"j");
+    state.handle_input_bytes(b"\r");
+    let written = std::fs::read_to_string(&path).unwrap();
+    assert!(written.contains("done = \"ping\""), "{written}");
+    assert!(written.contains("request = \"ping\""), "{written}");
+    assert_eq!(written.matches("request =").count(), 1, "{written}");
+
+    // d assigns only done.
+    state.handle_input_bytes(b"j");
+    state.handle_input_bytes(b"d");
+    let written = std::fs::read_to_string(&path).unwrap();
+    assert!(written.contains("done = \"pop\""), "{written}");
+    assert!(written.contains("request = \"ping\""), "{written}");
+    finish_tones_test(&path);
+}
+
+#[test]
+fn tones_picker_renders_choices_and_current_markers_and_previews_on_click() {
+    use crate::sound::{BuiltInSound, SoundSelection};
+
+    let _guard = crate::config::test_config_env_lock().lock().unwrap();
+    let (mut state, path) = tones_picker_state(
+        "[ui.sound]\nenabled = false\ndone = \"bell\"\nrequest = \"ping\"\n",
+        "render",
+    );
+    // The picker opens on the current done sound.
+    assert_eq!(
+        selected_tone_row(&state),
+        1 + BuiltInSound::ALL
+            .iter()
+            .position(|sound| *sound == BuiltInSound::Bell)
+            .unwrap()
+    );
+
+    let frame = state.compose(106, 30).expect("tones frame");
+    let text = frame_rows(&frame).join("\n");
+    assert!(text.contains("notification sounds"), "{text}");
+    assert!(text.contains("sound alerts are off"), "{text}");
+    for sound in BuiltInSound::ALL {
+        assert!(
+            text.contains(sound.name()),
+            "missing {}: {text}",
+            sound.name()
+        );
+    }
+    let bell_row = text.lines().find(|row| row.contains("bell")).unwrap();
+    assert!(bell_row.contains("done ✓"), "{bell_row}");
+    let ping_row = text.lines().find(|row| row.contains("ping")).unwrap();
+    assert!(ping_row.contains("request ✓"), "{ping_row}");
+
+    // Clicking a row selects and previews it (even with alerts off) but writes nothing.
+    let (rect, index) = state.hits.settings_choices[2];
+    let click = state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: rect.x + 2,
+        row: rect.y,
+        modifiers: KeyModifiers::empty(),
+    })]);
+    assert_eq!(selected_tone_row(&state), index);
+    assert!(matches!(
+        &click.actions[..],
+        [ClientShellAction::PreviewSound {
+            selection: SoundSelection::BuiltIn(BuiltInSound::Ping),
+            ..
+        }]
+    ));
+    assert!(std::fs::read_to_string(&path)
+        .unwrap()
+        .contains("done = \"bell\""));
+
+    // p replays the highlighted row.
+    let replay = state.handle_input_bytes(b"p");
+    assert!(matches!(
+        &replay.actions[..],
+        [ClientShellAction::PreviewSound { .. }]
+    ));
+    finish_tones_test(&path);
+}
+
+#[test]
+fn tones_picker_marks_nothing_for_a_custom_file_and_preview_keys_are_inert_elsewhere() {
+    let _guard = crate::config::test_config_env_lock().lock().unwrap();
+    let (mut state, path) = tones_picker_state("[ui.sound]\ndone = \"mine.wav\"\n", "custom");
+    let frame = state.compose(106, 30).expect("tones frame");
+    let text = frame_rows(&frame).join("\n");
+    assert!(
+        !text.contains("done ✓"),
+        "a custom file has no picker row: {text}"
+    );
+
+    // Outside the tones tab, d, r and p do nothing and Up/Down never preview.
+    state.handle_input_bytes(b"\t");
+    for key in [b"d", b"r", b"p", b"j"] {
+        let outcome = state.handle_input_bytes(key);
+        assert!(outcome.actions.is_empty());
+    }
+    assert!(!std::fs::read_to_string(&path).unwrap().contains("request"));
+    finish_tones_test(&path);
 }

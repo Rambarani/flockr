@@ -1537,6 +1537,7 @@ impl ClientShellState {
                     .copied()
                 {
                     self.select_settings_choice(index);
+                    self.preview_selected_tone(outcome);
                     let immediate = matches!(
                         self.overlay,
                         Some(ClientShellOverlay::Settings(ClientSettingsOverlay {

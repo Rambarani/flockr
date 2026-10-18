@@ -28,6 +28,8 @@ pub struct Config {
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct UiConfig {
+    /// Accepts a string or a table.
+    pub sound_agent: AgentSoundSetting,
     /// Sidebar width in columns. Default: 26.
     pub sidebar_width: u16,
     /// Host cursor policy. Default: auto.
@@ -76,6 +78,13 @@ pub enum TabBarRightEntryConfig {
         command: String,
         interval_seconds: u64,
     },
+}
+
+pub enum AgentSoundSetting {
+    Default,
+    On,
+    Off,
+    Custom(AgentSoundCustom),
 }
 
 #[derive(Debug, Deserialize)]
@@ -149,6 +158,12 @@ class CollectKeysTests(unittest.TestCase):
             ["hostname", "datetime", "command"],
         )
         self.assertNotIn("values", entries["keys.zoom"])
+
+    def test_open_value_enums_are_not_value_checked(self) -> None:
+        entries = {entry["key"]: entry for entry in collect_entries(sample_model())}
+
+        self.assertIn("ui.sound_agent", entries)
+        self.assertNotIn("values", entries["ui.sound_agent"])
 
 
 class CheckTests(unittest.TestCase):

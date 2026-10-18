@@ -59,7 +59,7 @@ pub(super) fn handle_shell_notification_effects(
             shell::ClientShellNotificationEffect::Sound { sound, agent } => {
                 let agent = agent.as_deref().and_then(crate::detect::parse_agent_label);
                 if sound_config.allows(agent) {
-                    crate::sound::play(sound, sound_config);
+                    crate::sound::play(sound, sound_config, agent);
                 }
             }
             shell::ClientShellNotificationEffect::Terminal { title, body } => {
@@ -161,7 +161,7 @@ pub(super) fn handle_notify_with_notifiers(
                 return;
             };
             if sound_config.enabled {
-                crate::sound::play(sound, sound_config);
+                crate::sound::play(sound, sound_config, None);
             }
         }
         NotifyKind::Toast => {

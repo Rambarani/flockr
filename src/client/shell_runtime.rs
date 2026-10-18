@@ -55,6 +55,11 @@ pub(super) fn dispatch_client_shell_actions(
                     }
                 }
             }
+            shell::ClientShellAction::PreviewSound {
+                sound,
+                selection,
+                volume,
+            } => crate::sound::preview(sound, selection, volume),
             shell::ClientShellAction::ReplayMouse(events) => replay_mouse.extend(events),
             shell::ClientShellAction::Keybind(action) => {
                 debug!(

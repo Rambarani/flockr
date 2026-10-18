@@ -26,6 +26,20 @@ fn toast_index(delivery: crate::config::ToastDelivery) -> usize {
     }
 }
 
+fn tone_choices() -> Vec<crate::sound::SoundChoice> {
+    crate::sound::SoundChoice::all()
+}
+
+/// Picker row for the sound `sound` currently plays when no agent overrides it.
+/// A custom file has no row, so nothing is marked.
+pub(super) fn tone_index(
+    config: &crate::config::SoundConfig,
+    sound: crate::sound::Sound,
+) -> Option<usize> {
+    let current = crate::sound::SoundChoice::from_selection(&config.selection_for(sound, None))?;
+    tone_choices().iter().position(|choice| *choice == current)
+}
+
 pub(super) fn integration_needs_install(info: &crate::api::schema::IntegrationInfo) -> bool {
     info.state == crate::api::schema::IntegrationState::Outdated
         || info.available && info.state == crate::api::schema::IntegrationState::NotInstalled
@@ -50,6 +64,9 @@ impl ClientShellState {
             ClientSettingsSection::Theme => theme_index(&self.config.theme_name),
             ClientSettingsSection::Indicators => indicator_index(self.config.status_indicators),
             ClientSettingsSection::Sound => usize::from(!self.config.sound_enabled),
+            ClientSettingsSection::Tones => {
+                tone_index(&self.config.sound, crate::sound::Sound::Done).unwrap_or(0)
+            }
             ClientSettingsSection::Toast => toast_index(self.config.toast_delivery),
             ClientSettingsSection::Integrations => 0,
         }
@@ -98,6 +115,7 @@ impl ClientShellState {
             Some(ClientShellOverlay::Settings(settings)) => match settings.section {
                 ClientSettingsSection::Theme => crate::config::THEME_NAMES.len(),
                 ClientSettingsSection::Indicators | ClientSettingsSection::Sound => 2,
+                ClientSettingsSection::Tones => tone_choices().len(),
                 ClientSettingsSection::Toast => 4,
                 ClientSettingsSection::Integrations => settings.integrations.len(),
             },
@@ -137,6 +155,56 @@ impl ClientShellState {
         ) {
             self.preview_selected_theme();
         }
+    }
+
+    /// Play the highlighted picker row so the user hears it before choosing.
+    pub(super) fn preview_selected_tone(&mut self, outcome: &mut ClientShellInput) {
+        self.preview_selected_tone_as(crate::sound::Sound::Done, outcome);
+    }
+
+    fn preview_selected_tone_as(
+        &mut self,
+        sound: crate::sound::Sound,
+        outcome: &mut ClientShellInput,
+    ) {
+        let Some(ClientShellOverlay::Settings(ClientSettingsOverlay {
+            section: ClientSettingsSection::Tones,
+            selected,
+            ..
+        })) = self.overlay.as_ref()
+        else {
+            return;
+        };
+        let Some(choice) = tone_choices().get(*selected).copied() else {
+            return;
+        };
+        outcome.actions.push(ClientShellAction::PreviewSound {
+            sound,
+            selection: choice.selection(),
+            volume: self.config.sound.volume_for(None),
+        });
+    }
+
+    /// Write the highlighted picker row to the done and/or request sound.
+    fn apply_selected_tone(&mut self, done: bool, request: bool, outcome: &mut ClientShellInput) {
+        let Some(ClientShellOverlay::Settings(ClientSettingsOverlay {
+            section: ClientSettingsSection::Tones,
+            selected,
+            ..
+        })) = self.overlay.as_ref()
+        else {
+            return;
+        };
+        let Some(choice) = tone_choices().get(*selected).copied() else {
+            return;
+        };
+        self.save_settings_edit(
+            crate::config::ConfigEdit::SoundTones {
+                done: done.then_some(choice),
+                request: request.then_some(choice),
+            },
+            outcome,
+        );
     }
 
     fn preview_selected_theme(&mut self) {
@@ -210,6 +278,7 @@ impl ClientShellState {
             ClientSettingsSection::Sound => {
                 self.save_settings_edit(crate::config::ConfigEdit::Sound(selected == 0), outcome);
             }
+            ClientSettingsSection::Tones => self.apply_selected_tone(true, true, outcome),
             ClientSettingsSection::Toast => {
                 let delivery = match selected {
                     0 => crate::config::ToastDelivery::Off,
@@ -383,13 +452,39 @@ impl ClientShellState {
         }
         if matches!(code, KeyCode::Up | KeyCode::Char('k')) && modifiers.is_empty() {
             self.move_settings_selection(-1);
+            self.preview_selected_tone(outcome);
             outcome.repaint = true;
             return true;
         }
         if matches!(code, KeyCode::Down | KeyCode::Char('j')) && modifiers.is_empty() {
             self.move_settings_selection(1);
+            self.preview_selected_tone(outcome);
             outcome.repaint = true;
             return true;
+        }
+        let on_tones = matches!(
+            self.overlay,
+            Some(ClientShellOverlay::Settings(ClientSettingsOverlay {
+                section: ClientSettingsSection::Tones,
+                ..
+            }))
+        );
+        if on_tones && modifiers.is_empty() {
+            match code {
+                KeyCode::Char('p') => {
+                    self.preview_selected_tone(outcome);
+                    return true;
+                }
+                KeyCode::Char('d') => {
+                    self.apply_selected_tone(true, false, outcome);
+                    return true;
+                }
+                KeyCode::Char('r') => {
+                    self.apply_selected_tone(false, true, outcome);
+                    return true;
+                }
+                _ => {}
+            }
         }
         if matches!(code, KeyCode::Enter | KeyCode::Char(' ')) && modifiers.is_empty() {
             self.apply_settings_choice(outcome);

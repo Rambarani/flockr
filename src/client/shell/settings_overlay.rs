@@ -37,6 +37,7 @@ pub(super) fn render_settings_overlay(
     buffer: &mut Buffer,
     settings: &ClientSettingsOverlay,
     integration_updates_available: bool,
+    sound: &crate::config::SoundConfig,
     palette: &Palette,
 ) -> Option<OverlayRender> {
     let integration_height = 14u16
@@ -182,6 +183,16 @@ pub(super) fn render_settings_overlay(
                 &mut choice_hits,
             );
         }
+        ClientSettingsSection::Tones => {
+            render_tones(
+                buffer,
+                content,
+                settings.selected,
+                sound,
+                palette,
+                &mut choice_hits,
+            );
+        }
         ClientSettingsSection::Toast => {
             render_choice_section(
                 buffer,
@@ -213,6 +224,8 @@ pub(super) fn render_settings_overlay(
             primary,
             if settings.section == ClientSettingsSection::Integrations {
                 " ↵ install "
+            } else if settings.section == ClientSettingsSection::Tones {
+                " ↵ both "
             } else {
                 " ↵ apply "
             },
@@ -239,7 +252,11 @@ pub(super) fn render_settings_overlay(
         inner.x,
         inner.bottom().saturating_sub(2),
         inner.width,
-        " ↑↓ select  tab section",
+        if settings.section == ClientSettingsSection::Tones {
+            " ↑↓ preview  d done  r request  p replay  tab section"
+        } else {
+            " ↑↓ select  tab section"
+        },
         Style::default().fg(palette.overlay1).bg(palette.panel_bg),
     );
 
@@ -291,6 +308,87 @@ fn render_choice_section(
         }
         let rect = Rect::new(area.x, y, area.width, 1);
         draw_choice(buffer, rect, choice, index == selected, false, palette);
+        hits.push((rect, index));
+    }
+}
+
+/// The notification sound picker: the classic sound plus every built-in tone,
+/// tagged with the notifications each one currently plays for.
+fn render_tones(
+    buffer: &mut Buffer,
+    area: Rect,
+    selected: usize,
+    sound: &crate::config::SoundConfig,
+    palette: &Palette,
+    hits: &mut Vec<(Rect, usize)>,
+) {
+    put_text(
+        buffer,
+        area.x,
+        area.y,
+        area.width,
+        "notification sounds",
+        Style::default()
+            .fg(palette.text)
+            .bg(palette.panel_bg)
+            .add_modifier(Modifier::BOLD),
+    );
+    let description = if sound.enabled {
+        "highlight to preview; ↵ sets done and request, d or r sets one"
+    } else {
+        "sound alerts are off (sound tab); highlighting still previews"
+    };
+    put_text(
+        buffer,
+        area.x,
+        area.y + 1,
+        area.width,
+        description,
+        Style::default().fg(palette.overlay1).bg(palette.panel_bg),
+    );
+    let done = super::super::settings::tone_index(sound, crate::sound::Sound::Done);
+    let request = super::super::settings::tone_index(sound, crate::sound::Sound::Request);
+    for (index, choice) in crate::sound::SoundChoice::all().into_iter().enumerate() {
+        let y = area.y + 3 + index as u16;
+        if y >= area.bottom() {
+            break;
+        }
+        let rect = Rect::new(area.x, y, area.width, 1);
+        let style = choice_style(index == selected, palette);
+        buffer.set_style(rect, style);
+        let marker = if index == selected { "▸" } else { " " };
+        let name = if choice == crate::sound::SoundChoice::Default {
+            "default"
+        } else {
+            choice.config_value()
+        };
+        put_text(
+            buffer,
+            rect.x,
+            rect.y,
+            rect.width,
+            &format!(" {marker} {name:<9} {}", choice.description()),
+            style,
+        );
+        let mut tags = Vec::new();
+        if done == Some(index) {
+            tags.push("done ✓");
+        }
+        if request == Some(index) {
+            tags.push("request ✓");
+        }
+        let tags = tags.join("  ");
+        let tags_width = display_width(&tags);
+        if tags_width > 0 && tags_width + 1 < rect.width {
+            put_text(
+                buffer,
+                rect.right() - tags_width - 1,
+                rect.y,
+                tags_width,
+                &tags,
+                style,
+            );
+        }
         hits.push((rect, index));
     }
 }

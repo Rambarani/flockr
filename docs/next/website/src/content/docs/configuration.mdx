@@ -511,24 +511,53 @@ On Windows, `system` notifications remain in Notification Center. Clicking one s
 
 ## Sound
 
-Sound notifications play through the local Herdr client. Custom sounds must be mp3 files; Herdr resolves relative paths from the config file's directory.
+Sound notifications play through the local Herdr client. Pick a built-in sound by name or point at your own file, and set the volume:
 
 ```toml
 [ui.sound]
-path = "sounds/notification.mp3"
-done_path = "sounds/done.mp3"
-request_path = "sounds/request.mp3"
+enabled = true
+volume = 0.6
+done = "chime"
+request = "ping"
 ```
 
-`path` sets one sound for all sound notifications. `done_path` and `request_path` override only the finished and needs-input sounds.
+`done` plays when an agent finishes and `request` plays when it needs input. Each accepts `default` (the classic Herdr sounds), a built-in name, or a file path. Built-in names are case-insensitive:
 
-Per-agent sound overrides accept `default`, `on`, or `off`. Use detected agent labels such as `claude`, `codex`, `devin`, or `droid` as keys. Droid is muted by default.
+| Name | Sounds like |
+| --- | --- |
+| `chime` | three rising soft notes |
+| `ping` | one short high note |
+| `pop` | quick falling bubble |
+| `bell` | long ringing bell |
+| `blip` | two dry beeps |
+| `chirp` | fast rising sweep |
+
+The built-in sounds are synthesized by Herdr when they play, so there are no audio files to install. To use a file, give its path: relative paths resolve from the config file's directory, and a bare word that is not a built-in name is treated as a file, so write `./chime` for a file named `chime`. Herdr plays any format the platform player supports: mp3 and wav everywhere, plus aiff, m4a, caf, and flac on macOS (`afplay`), wma on Windows, and ogg and opus on Linux players that decode them. An unsupported, missing, or unplayable file falls back to the default sound, and `herdr config check` reports why.
+
+`volume` runs from `0.0` (silent) to `1.0` (full) and defaults to `1.0`. It maps to `afplay -v` on macOS and is passed on a best-effort basis to `paplay`, `pw-play`, `ffplay`, `mpg123`, `mpv`, and the Windows media player. Values outside the range are clamped and reported as a diagnostic.
+
+The older `path`, `done_path`, and `request_path` keys keep working and accept the same formats. When several keys apply, the most specific one wins: an agent's own sound, then `done` or `request`, then `done_path` or `request_path`, then `path`, then the default.
+
+### Per-agent sounds
+
+Per-agent overrides take the string `default`, `on`, or `off`, or a table with the agent's own sounds and volume. Use detected agent labels such as `claude`, `codex`, `devin`, or `droid` as keys. Droid is muted by default.
 
 ```toml
 [ui.sound.agents]
 droid = "off"
-claude = "on"
+codex = "on"
+
+[ui.sound.agents.claude]
+done = "bell"
+request = "chirp"
+volume = 0.4
 ```
+
+A table sets only the keys it lists; anything it leaves out uses the global `[ui.sound]` value. A table never mutes the agent. Use `"off"` for that.
+
+### Choosing a sound in the app
+
+Open settings and switch to the **tones** tab. Highlighting a row plays it, even when sound alerts are off. Press `Enter` to use it for both notifications, `d` for done only, or `r` for request only; `p` replays the highlighted sound. Herdr writes only the `done` and `request` keys under `[ui.sound]` and leaves the rest of your config file as it was. Sounds you set per agent or with a file path stay as written. The **sound** tab still turns alerts on or off.
 
 ## Advanced configuration
 

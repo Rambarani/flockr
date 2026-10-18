@@ -388,15 +388,28 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Play sounds when agents change state in background workspaces
 [ui.sound]
 # enabled = true
-# Optional custom mp3 sound files. Relative paths are resolved from this config file's directory.
-# path = "sounds/notification.mp3"   # one mp3 file for all sound notifications
-# done_path = "sounds/done.mp3"      # overrides only finished notifications
-# request_path = "sounds/request.mp3" # overrides only needs-attention notifications
+# Playback volume from 0.0 (silent) to 1.0 (full).
+# volume = 1.0
+# Sounds for finished and needs-attention notifications: "default", a built-in
+# name (chime, ping, pop, bell, blip, chirp), or a sound file path. Relative paths
+# are resolved from this config file's directory. mp3 and wav work everywhere;
+# macOS also plays aiff, m4a, and caf.
+# done = "chime"
+# request = "ping"
+# Older path keys still work: one file for all notifications, or per kind.
+# path = "sounds/notification.mp3"
+# done_path = "sounds/done.wav"
+# request_path = "sounds/request.wav"
 
-# Per-agent overrides: default | on | off
+# Per-agent overrides: default | on | off, or a table with its own sounds.
 # By default, droid is muted.
 # [ui.sound.agents]
 # droid = "off"
+#
+# [ui.sound.agents.claude]
+# done = "bell"
+# request = "chirp"
+# volume = 0.4
 
 [session]
 # Resume supported AI-agent panes into their native conversation sessions after

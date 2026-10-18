@@ -3,6 +3,11 @@ pub(crate) enum ConfigEdit<'a> {
     Theme(&'a str),
     StatusIndicators(super::StatusIndicatorStyle),
     Sound(bool),
+    /// Choose the done and/or request sound; `None` leaves that key untouched.
+    SoundTones {
+        done: Option<crate::sound::SoundChoice>,
+        request: Option<crate::sound::SoundChoice>,
+    },
     ToastDelivery(super::ToastDelivery),
 }
 
@@ -12,6 +17,7 @@ impl ConfigEdit<'_> {
             Self::Theme(_) => "theme",
             Self::StatusIndicators(_) => "status indicators",
             Self::Sound(_) => "sound setting",
+            Self::SoundTones { .. } => "notification sounds",
             Self::ToastDelivery(_) => "toast setting",
         }
     }
@@ -31,6 +37,20 @@ impl ConfigEdit<'_> {
             ),
             Self::Sound(enabled) => {
                 super::upsert_section_bool(content, "ui.sound", "enabled", enabled)
+            }
+            Self::SoundTones { done, request } => {
+                let mut content = content.to_owned();
+                for (key, choice) in [("done", done), ("request", request)] {
+                    if let Some(choice) = choice {
+                        content = super::upsert_section_value(
+                            &content,
+                            "ui.sound",
+                            key,
+                            &format!("\"{}\"", choice.config_value()),
+                        );
+                    }
+                }
+                content
             }
             Self::ToastDelivery(delivery) => {
                 let value = match delivery {
@@ -105,5 +125,56 @@ mod tests {
             toml::from_str::<toml::Value>(&written).is_ok(),
             "written config is not valid TOML: {written:?}"
         );
+    }
+
+    fn tones(
+        done: Option<crate::sound::BuiltInSound>,
+        request: Option<crate::sound::BuiltInSound>,
+    ) -> ConfigEdit<'static> {
+        use crate::sound::SoundChoice;
+        ConfigEdit::SoundTones {
+            done: done.map(SoundChoice::BuiltIn),
+            request: request.map(SoundChoice::BuiltIn),
+        }
+    }
+
+    #[test]
+    fn sound_tones_creates_the_section_in_an_empty_config() {
+        use crate::sound::BuiltInSound;
+
+        let written = tones(Some(BuiltInSound::Chime), Some(BuiltInSound::Bell)).apply("");
+        let config: crate::config::Config = toml::from_str(&written).unwrap();
+        assert_eq!(config.ui.sound.done.as_deref(), Some("chime"));
+        assert_eq!(config.ui.sound.request.as_deref(), Some("bell"));
+    }
+
+    #[test]
+    fn sound_tones_edits_only_the_requested_keys_and_keeps_everything_else() {
+        use crate::sound::{BuiltInSound, SoundChoice};
+
+        let original = "# top comment\n[ui]\nsidebar_width = 30\n\n[ui.sound]\nenabled = false\ndone = \"pop\"\npath = \"a.mp3\"\n\n[ui.sound.agents]\nclaude = \"off\"\n\n[theme]\nname = \"nord\"\n";
+        let written = tones(None, Some(BuiltInSound::Ping)).apply(original);
+        let config: crate::config::Config = toml::from_str(&written).unwrap();
+        // Untouched: the other key, the legacy path, the agents table, other sections.
+        assert_eq!(config.ui.sound.done.as_deref(), Some("pop"));
+        assert_eq!(config.ui.sound.request.as_deref(), Some("ping"));
+        assert!(!config.ui.sound.enabled);
+        assert_eq!(config.ui.sound.path, Some("a.mp3".into()));
+        assert_eq!(
+            config.ui.sound.agents.claude,
+            crate::config::sound::AgentSoundSetting::Off
+        );
+        assert_eq!(config.ui.sidebar_width, 30);
+        assert!(written.starts_with("# top comment"));
+        assert!(written.contains("name = \"nord\""));
+
+        // Replacing a value rewrites it in place rather than duplicating the key.
+        let written = ConfigEdit::SoundTones {
+            done: Some(SoundChoice::Default),
+            request: None,
+        }
+        .apply(&written);
+        assert_eq!(written.matches("done =").count(), 1, "{written}");
+        assert!(written.contains("done = \"default\""));
     }
 }

@@ -27,6 +27,7 @@ pub(crate) struct ClientShellConfig {
     pub(super) group_agents_by_workspace: bool,
     pub(super) status_indicators: crate::config::StatusIndicatorStyle,
     pub(super) sound_enabled: bool,
+    pub(super) sound: crate::config::SoundConfig,
     pub(super) toast_delivery: crate::config::ToastDelivery,
     pub(super) toast_delay_seconds: u64,
     pub(super) toast_position: crate::config::ToastHerdrPosition,
@@ -255,6 +256,12 @@ pub(crate) enum ClientShellAction {
     },
     ReplayMouse(Vec<crossterm::event::MouseEvent>),
     Keybind(crate::input::KeybindAction),
+    /// Play a sound from the settings picker, even when sound alerts are off.
+    PreviewSound {
+        sound: crate::sound::Sound,
+        selection: crate::sound::SoundSelection,
+        volume: f32,
+    },
 }
 
 #[derive(Default)]
@@ -387,6 +394,7 @@ pub(super) enum ClientSettingsSection {
     Theme,
     Indicators,
     Sound,
+    Tones,
     Toast,
     Integrations,
 }
@@ -396,6 +404,7 @@ impl ClientSettingsSection {
         Self::Theme,
         Self::Indicators,
         Self::Sound,
+        Self::Tones,
         Self::Toast,
         Self::Integrations,
     ];
@@ -405,6 +414,7 @@ impl ClientSettingsSection {
             Self::Theme => "theme",
             Self::Indicators => "indicators",
             Self::Sound => "sound",
+            Self::Tones => "tones",
             Self::Toast => "toasts",
             Self::Integrations => "integrations",
         }

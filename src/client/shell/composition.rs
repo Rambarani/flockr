@@ -668,6 +668,7 @@ impl ClientShellState {
                     snapshot,
                     &self.endpoints,
                     &self.active_endpoint_id,
+                    &self.config.sound,
                     &self.config.keybinds,
                     &self.config.palette,
                 )?;

@@ -70,18 +70,23 @@ impl App {
         Ok(())
     }
 
-    /// Refresh a job's feed after a successful run, if it has one.
-    pub(crate) fn refresh_feed_after_run(&mut self, job_id: &str) {
+    /// Refresh a job's feed after a successful run, if it has one. Returns
+    /// whether a refresh was started (its result arrives as a feed task).
+    pub(crate) fn refresh_feed_after_run(&mut self, job_id: &str) -> bool {
         let Some(job) = self
             .jobs
             .job_def(job_id)
             .filter(|job| job.feed.is_some())
             .cloned()
         else {
-            return;
+            return false;
         };
-        if let Err(err) = self.start_feed_task(job, None) {
-            tracing::debug!(job = %job_id, err = %err, "feed refresh after run skipped");
+        match self.start_feed_task(job, None) {
+            Ok(()) => true,
+            Err(err) => {
+                tracing::debug!(job = %job_id, err = %err, "feed refresh after run skipped");
+                false
+            }
         }
     }
 
@@ -105,6 +110,9 @@ impl App {
         let job_id = result.job_id.clone();
         let state_dir = self.jobs.state_dir_for(&job_id);
         let finished = self.feeds.finish(result, &state_dir);
+        if let Some(pending) = self.pending_handoffs.remove(&job_id) {
+            self.evaluate_handoff(pending);
+        }
         if finished.changed || finished.action.is_some() {
             let title = self.feed_summary(&job_id).map(|summary| summary.title);
             self.emit_event(EventEnvelope {

@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 pub mod agents;
 pub mod commands;
 pub mod common;
+pub mod decision;
 pub mod events;
 pub mod feed;
 pub mod integrations;
@@ -19,6 +20,7 @@ pub mod worktrees;
 pub use agents::*;
 pub use commands::*;
 pub use common::*;
+pub use decision::*;
 pub use events::*;
 pub use feed::*;
 pub use integrations::*;
@@ -273,6 +275,16 @@ pub enum Method {
     FeedRefresh(FeedTarget),
     #[serde(rename = "feed.run_action")]
     FeedRunAction(FeedRunActionParams),
+    #[serde(rename = "job.set_schedule")]
+    JobSetSchedule(JobSetScheduleParams),
+    #[serde(rename = "decision.list")]
+    DecisionList(DecisionListParams),
+    #[serde(rename = "decision.start")]
+    DecisionStart(DecisionTarget),
+    #[serde(rename = "decision.snooze")]
+    DecisionSnooze(DecisionSnoozeParams),
+    #[serde(rename = "decision.dismiss")]
+    DecisionDismiss(DecisionTarget),
 }
 
 #[cfg(test)]

@@ -25,6 +25,7 @@ macro_rules! println {
 mod agent;
 mod api;
 mod completion;
+mod decision;
 mod feed;
 mod integration;
 mod job;
@@ -135,6 +136,7 @@ pub fn maybe_run(args: &[String]) -> std::io::Result<CommandOutcome> {
         "session" => run_session_command(&args[2..])?,
         "upstream" => upstream::run_upstream_command(&args[2..])?,
         "job" => job::run_job_command(&args[2..])?,
+        "decision" => decision::run_decision_command(&args[2..])?,
         "feed" => feed::run_feed_command(&args[2..])?,
         _ => return Ok(CommandOutcome::NotCli),
     };

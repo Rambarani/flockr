@@ -35,6 +35,7 @@ pub(super) enum PaletteAction {
     },
     Settings(ClientSettingsSection),
     RunJob(String),
+    OpenDecisions,
     OpenFeed(String),
     RefreshFeed(String),
 }
@@ -191,6 +192,21 @@ impl ClientShellState {
                     action: PaletteAction::RunJob(job_id.clone()),
                 });
             }
+        }
+        if !self.jobs.decisions_unsupported {
+            let waiting =
+                if self.jobs.decision_count_endpoint.as_ref() == Some(&self.active_endpoint_id) {
+                    self.jobs.decision_count
+                } else {
+                    0
+                };
+            items.push(PaletteItem {
+                id: "decisions".to_owned(),
+                kind: "decision",
+                title: format!("decisions ({waiting})"),
+                detail: "questions jobs asked".to_owned(),
+                action: PaletteAction::OpenDecisions,
+            });
         }
         for (job_id, title) in self.feed_palette_entries() {
             items.push(PaletteItem {
@@ -519,6 +535,10 @@ impl ClientShellState {
                 self.select_settings_section(section, outcome);
             }
             PaletteAction::RunJob(job_id) => self.run_job_from_palette(job_id, outcome),
+            PaletteAction::OpenDecisions => {
+                self.open_decisions_overlay();
+                outcome.repaint = true;
+            }
             PaletteAction::OpenFeed(job_id) => {
                 self.open_feed_overlay(Some(job_id));
                 outcome.repaint = true;

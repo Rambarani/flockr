@@ -9,6 +9,13 @@ pub(crate) enum ConfigEdit<'a> {
         request: Option<crate::sound::SoundChoice>,
     },
     ToastDelivery(super::ToastDelivery),
+    /// Set the schedule of a system job: `[jobs.system.<name>]` gets `key`
+    /// (`every` or `schedule`) and loses the other one.
+    SystemJobSchedule {
+        name: &'a str,
+        key: &'a str,
+        value: &'a str,
+    },
 }
 
 impl ConfigEdit<'_> {
@@ -19,6 +26,7 @@ impl ConfigEdit<'_> {
             Self::Sound(_) => "sound setting",
             Self::SoundTones { .. } => "notification sounds",
             Self::ToastDelivery(_) => "toast setting",
+            Self::SystemJobSchedule { .. } => "job schedule",
         }
     }
 
@@ -62,6 +70,13 @@ impl ConfigEdit<'_> {
                 let content = super::upsert_section_value(content, "ui.toast", "delivery", value);
                 super::remove_section_key(&content, "ui.toast", "enabled")
             }
+            Self::SystemJobSchedule { name, key, value } => {
+                let section = format!("jobs.system.{name}");
+                let other = if key == "every" { "schedule" } else { "every" };
+                let quoted = format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""));
+                let content = super::upsert_section_value(content, &section, key, &quoted);
+                super::remove_section_key(&content, &section, other)
+            }
         }
     }
 }
@@ -92,6 +107,49 @@ pub(crate) fn write_edit(edit: ConfigEdit<'_>) -> Result<(), String> {
     update_file_at(&super::config_path(), edit.description(), |content| {
         edit.apply(content)
     })
+}
+
+/// Write a system job's schedule into `config.toml` through
+/// `ConfigEdit::SystemJobSchedule`, refusing to save a file that would not
+/// read back as asked (for example when the job's table is written in a form
+/// the line editor does not recognise and would end up duplicated).
+pub(crate) fn write_system_job_schedule(name: &str, key: &str, value: &str) -> Result<(), String> {
+    write_system_job_schedule_at(&super::config_path(), name, key, value)
+}
+
+fn write_system_job_schedule_at(
+    path: &std::path::Path,
+    name: &str,
+    key: &str,
+    value: &str,
+) -> Result<(), String> {
+    let content = match super::io::read_optional_config(path) {
+        Ok(Some(content)) => content,
+        Ok(None) => String::new(),
+        Err(error) => return Err(format!("failed to read config before saving: {error}")),
+    };
+    let edited = ConfigEdit::SystemJobSchedule { name, key, value }.apply(&content);
+    let table: toml::Table = toml::from_str(&edited).map_err(|error| {
+        format!(
+            "config.toml writes [jobs.system.{name}] in a form flockr cannot edit ({}); set {key} = \"{value}\" there by hand",
+            error.message()
+        )
+    })?;
+    let written = table
+        .get("jobs")
+        .and_then(|jobs| jobs.get("system"))
+        .and_then(|system| system.get(name))
+        .and_then(toml::Value::as_table);
+    let ok = written.is_some_and(|written| {
+        written.get(key).and_then(toml::Value::as_str) == Some(value)
+            && !written.contains_key(if key == "every" { "schedule" } else { "every" })
+    });
+    if !ok {
+        return Err(format!(
+            "config.toml writes [jobs.system.{name}] in a form flockr cannot edit; set {key} = \"{value}\" there by hand"
+        ));
+    }
+    update_file_at(path, "job schedule", |_| edited.clone())
 }
 
 #[cfg(test)]
@@ -176,5 +234,64 @@ mod tests {
         .apply(&written);
         assert_eq!(written.matches("done =").count(), 1, "{written}");
         assert!(written.contains("done = \"default\""));
+    }
+
+    fn temp_config(name: &str, content: Option<&str>) -> std::path::PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let dir = std::env::temp_dir().join(format!(
+            "flockr-config-sysjob-{name}-{}-{nanos}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        if let Some(content) = content {
+            std::fs::write(&path, content).unwrap();
+        }
+        path
+    }
+
+    #[test]
+    fn system_job_schedule_creates_the_table_in_an_empty_config() {
+        let path = temp_config("empty", None);
+        write_system_job_schedule_at(&path, "upstream-herdr", "every", "2h").unwrap();
+        let config: crate::config::Config =
+            toml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(
+            config.jobs.system["upstream-herdr"].every.as_deref(),
+            Some("2h")
+        );
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn system_job_schedule_swaps_keys_and_keeps_everything_else() {
+        let original = "# my config\n[ui]\nsidebar_width = 30\n\n[jobs.system.upstream-herdr]\nevery = \"24h\"\nenabled = false\n\n[theme]\nname = \"nord\"\n";
+        let path = temp_config("swap", Some(original));
+        write_system_job_schedule_at(&path, "upstream-herdr", "schedule", "0 9 * * *").unwrap();
+        let written = std::fs::read_to_string(&path).unwrap();
+        let config: crate::config::Config = toml::from_str(&written).unwrap();
+        let job = &config.jobs.system["upstream-herdr"];
+        assert_eq!(job.schedule.as_deref(), Some("0 9 * * *"));
+        assert_eq!(job.every, None, "the other key goes");
+        assert_eq!(job.enabled, Some(false), "unrelated keys stay");
+        assert_eq!(config.ui.sidebar_width, 30);
+        assert_eq!(config.theme.name.as_deref(), Some("nord"));
+        assert!(written.contains("# my config"));
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn system_job_schedule_refuses_a_table_it_cannot_find() {
+        // The same table written with dotted keys: appending a header would
+        // define it twice, so nothing is written.
+        let original = "[jobs.system]\nupstream-herdr.every = \"24h\"\n";
+        let path = temp_config("dotted", Some(original));
+        let err = write_system_job_schedule_at(&path, "upstream-herdr", "every", "2h").unwrap_err();
+        assert!(err.contains("cannot edit"), "{err}");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 }

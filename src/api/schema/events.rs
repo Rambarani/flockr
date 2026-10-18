@@ -87,6 +87,8 @@ pub enum Subscription {
     JobRunFinished {},
     #[serde(rename = "feed.updated")]
     FeedUpdated {},
+    #[serde(rename = "decision.created")]
+    DecisionCreated {},
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -225,6 +227,7 @@ pub enum EventKind {
     LayoutUpdated,
     JobRunFinished,
     FeedUpdated,
+    DecisionCreated,
 }
 
 impl EventKind {
@@ -258,6 +261,7 @@ impl EventKind {
             EventKind::LayoutUpdated => "layout.updated",
             EventKind::JobRunFinished => "job.run_finished",
             EventKind::FeedUpdated => "feed.updated",
+            EventKind::DecisionCreated => "decision.created",
         }
     }
 }
@@ -292,6 +296,7 @@ pub const KNOWN_EVENT_KINDS: &[EventKind] = &[
     EventKind::LayoutUpdated,
     EventKind::JobRunFinished,
     EventKind::FeedUpdated,
+    EventKind::DecisionCreated,
 ];
 
 pub const PLUGIN_HOOK_EVENT_KINDS: &[EventKind] = &[
@@ -577,5 +582,8 @@ pub enum EventData {
         unread: u32,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         stale: bool,
+    },
+    DecisionCreated {
+        decision: super::decision::DecisionInfo,
     },
 }

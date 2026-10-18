@@ -485,13 +485,13 @@
           "key": "upstream.enabled",
           "type": "boolean",
           "default": "true",
-          "description": "Check the upstream herdr releases on GitHub (herdrdev/herdr) in the background and notify inside flockr when a release newer than the synced upstream base appears. Release notes are cached in the state directory so `flockr upstream review` works offline."
+          "description": "Check the upstream herdr releases on GitHub (herdrdev/herdr) in the background and ask inside flockr when a release newer than the synced upstream base appears. This switches the system job `system.upstream-herdr` (see `[jobs.system.upstream-herdr]`); release notes are cached in the state directory so `flockr upstream review` works offline."
         },
         {
           "key": "upstream.check_interval_hours",
           "type": "integer",
           "default": "24",
-          "description": "Minimum hours between upstream release checks. Values below 1 are treated as 1."
+          "description": "Deprecated: use `every` in `[jobs.system.upstream-herdr]`. Hours between upstream release checks; it is still honored as the default interval of the `system.upstream-herdr` job and reported as a config diagnostic when set. Values below 1 are treated as 1."
         },
         {
           "key": "upstream.include_prereleases",
@@ -516,6 +516,18 @@
           "type": "keybinding",
           "default": "\"prefix+u\"",
           "description": "Key that opens the pending upstream updates review popup (Copy updates, Skip this version, Later). An empty string disables the binding. The popup is also listed in keybinding help."
+        }
+      ]
+    },
+    {
+      "id": "jobs",
+      "title": "Jobs",
+      "keys": [
+        {
+          "key": "jobs.system",
+          "type": "table of tables",
+          "default": "none",
+          "description": "Overrides for the jobs flockr ships with, keyed by name without the `system.` prefix, such as `[jobs.system.upstream-herdr]`. Each table takes `every` (an interval such as \"24h\") or `schedule` (a 5-field cron expression in local time), exactly one of them, plus `enabled` (true or false) and `notify` (never, on_failure, on_change or always). The Jobs overlay and `flockr job schedule` write these tables for you. User jobs are configured in their own `job.toml`, not here."
         }
       ]
     },

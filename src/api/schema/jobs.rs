@@ -72,7 +72,7 @@ fn is_zero(value: &u32) -> bool {
 pub struct JobInfo {
     pub job_id: String,
     pub title: String,
-    /// `user`, or `plugin:<plugin id>`.
+    /// `user`, `system` (built into flockr) or `plugin:<plugin id>`.
     pub source: String,
     pub command: Vec<String>,
     /// The cron expression, or `every 1h`.
@@ -84,6 +84,10 @@ pub struct JobInfo {
     /// An `enable`/`disable` command overrides the job file's `enabled`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub enabled_overridden: bool,
+    /// The schedule comes from an override in the job's state, not its file
+    /// (`flockr job schedule` could not edit the file safely).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub schedule_overridden: bool,
     /// `login-shell` or `server`.
     pub env: String,
     pub notify: String,
@@ -145,4 +149,25 @@ pub struct JobLogsParams {
     /// Keep only the last N lines of each stream.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lines: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct JobSetScheduleParams {
+    pub job_id: String,
+    /// `every 2h` (or a bare `2h`), or a 5-field cron expression such as
+    /// `0 9 * * 1-5`. Intervals are at least one minute.
+    pub schedule: String,
+}
+
+/// Where a changed schedule was stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum JobScheduleStore {
+    /// `[jobs.system.<name>]` in config.toml (system jobs).
+    Config,
+    /// The `schedule` or `every` key of the job's `job.toml`.
+    JobFile,
+    /// An override in the job's state file, because the job's own file could
+    /// not be edited safely (plugin jobs always use this).
+    State,
 }

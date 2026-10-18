@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use crate::api::schema::{
     EventData, EventEnvelope, EventKind, JobListParams, JobLogsParams, JobRunStatus, JobRunTrigger,
-    JobSetEnabledParams, JobTarget, ResponseResult,
+    JobScheduleStore, JobSetEnabledParams, JobSetScheduleParams, JobTarget, ResponseResult,
 };
 use crate::jobs::manager::Notice;
 use crate::jobs::runner::JobRunResult;
@@ -26,6 +26,9 @@ const MIN_TICK_INTERVAL: Duration = Duration::from_millis(250);
 /// Retry delay while a queued job toast waits for the toast slot.
 const NOTICE_RETRY: Duration = Duration::from_secs(1);
 const MAX_PENDING_NOTICES: usize = 16;
+/// How long a toast that asks the user something stays up, longer than a
+/// status toast.
+const ACTIONABLE_TOAST_DURATION: Duration = Duration::from_secs(12);
 /// Lines of each stream returned by `job.logs` when the caller sets no limit.
 const DEFAULT_LOG_LINES: usize = 2_000;
 
@@ -69,6 +72,29 @@ impl App {
         self.next_jobs_tick = Some(Instant::now());
     }
 
+    /// Build the system jobs (see `crate::jobs::system`) from `[upstream]` and
+    /// `[jobs.system.*]` and hand them to the registry. Returns the problems
+    /// found in the overrides, for the config diagnostics.
+    pub(crate) fn apply_system_jobs(&mut self) -> Vec<String> {
+        if !self.jobs.is_active() {
+            return Vec::new();
+        }
+        let exe = crate::platform::launch_executable().unwrap_or_else(|err| {
+            tracing::warn!(err = %err, "cannot find the flockr executable for system jobs");
+            std::path::PathBuf::from("flockr")
+        });
+        let built = crate::jobs::system::build(&crate::jobs::system::SystemContext {
+            exe,
+            upstream: &self.upstream_config,
+            jobs: &self.jobs_config,
+            background_updates: super::super::auto_updates_enabled(self.policy.background_updates),
+        });
+        if self.jobs.set_system_jobs(built.jobs) {
+            self.next_jobs_tick = Some(Instant::now());
+        }
+        built.diagnostics
+    }
+
     /// One scheduler pass: pick up edited job files, start due jobs, deliver
     /// queued toasts and arm the timer for the next pass. Returns whether the
     /// frame changed.
@@ -84,10 +110,14 @@ impl App {
             changed |= self.start_job_run(&job_id, trigger, now_ms).is_ok();
         }
         self.start_first_feed_refreshes();
+        self.wake_snoozed_decisions(now_ms);
         changed |= self.deliver_job_notices();
         let mut wait = MAX_TICK_INTERVAL;
         if let Some(due_ms) = self.jobs.next_deadline_ms() {
             wait = wait.min(Duration::from_millis(due_ms.saturating_sub(now_ms)));
+        }
+        if let Some(wake_ms) = self.decisions.next_snooze_expiry_ms() {
+            wait = wait.min(Duration::from_millis(wake_ms.saturating_sub(now_ms)));
         }
         if !self.pending_job_notices.is_empty() {
             wait = wait.min(NOTICE_RETRY);
@@ -151,8 +181,23 @@ impl App {
         let Some(finished) = self.jobs.finish_run(result) else {
             return false;
         };
-        if finished.info.status == JobRunStatus::Success {
-            self.refresh_feed_after_run(&finished.job_id);
+        let feed_refreshing = finished.info.status == JobRunStatus::Success
+            && self.refresh_feed_after_run(&finished.job_id);
+        if let Some(def) = finished.def.clone() {
+            if def.handoff.is_some() || finished.record.handoff.is_some() {
+                let pending = crate::jobs::handoff::PendingHandoff {
+                    record: finished.record.clone(),
+                    def,
+                    previous_fingerprint: finished.previous_fingerprint.clone(),
+                };
+                if feed_refreshing {
+                    // Wait for the refresh so the prompt sees the new items.
+                    self.pending_handoffs
+                        .insert(finished.job_id.clone(), pending);
+                } else {
+                    self.evaluate_handoff(pending);
+                }
+            }
         }
         self.emit_event(EventEnvelope {
             event: EventKind::JobRunFinished,
@@ -169,13 +214,18 @@ impl App {
                 // is for the app's own rendering.
                 self.job_client_notices.push(notice.clone());
             }
-            if self.pending_job_notices.len() >= MAX_PENDING_NOTICES {
-                self.pending_job_notices.pop_front();
-            }
-            self.pending_job_notices.push_back(notice);
+            self.queue_job_notice(notice);
         }
         self.deliver_job_notices();
         true
+    }
+
+    /// Queue a toast for the in-frame slot.
+    pub(crate) fn queue_job_notice(&mut self, notice: Notice) {
+        if self.pending_job_notices.len() >= MAX_PENDING_NOTICES {
+            self.pending_job_notices.pop_front();
+        }
+        self.pending_job_notices.push_back(notice);
     }
 
     /// Show queued job results as in-frame toasts, one at a time when the
@@ -186,27 +236,36 @@ impl App {
 
         let mut changed = false;
         match self.state.toast_config.delivery {
-            ToastDelivery::Off => self.pending_job_notices.clear(),
+            // A question for the user shows in the frame even when toasts are
+            // off, like the upstream notice always did.
+            ToastDelivery::Off => self.pending_job_notices.retain(|notice| notice.actionable),
             ToastDelivery::Terminal | ToastDelivery::System => self.pending_job_notices.clear(),
-            ToastDelivery::Flockr => {
-                if self.state.toast.is_none() {
-                    if let Some(notice) = self.pending_job_notices.pop_front() {
-                        let previous = self.state.toast.clone();
-                        self.state.toast = Some(ToastNotification {
-                            kind: if notice.failed {
-                                ToastKind::NeedsAttention
-                            } else {
-                                ToastKind::Finished
-                            },
-                            title: notice.title,
-                            context: notice.body,
-                            position: None,
-                            target: None,
-                        });
-                        self.sync_toast_deadline(previous);
-                        changed = true;
-                    }
+            ToastDelivery::Flockr => {}
+        }
+        if matches!(
+            self.state.toast_config.delivery,
+            ToastDelivery::Off | ToastDelivery::Flockr
+        ) && self.state.toast.is_none()
+        {
+            if let Some(notice) = self.pending_job_notices.pop_front() {
+                let previous = self.state.toast.clone();
+                let actionable = notice.actionable;
+                self.state.toast = Some(ToastNotification {
+                    kind: if notice.failed {
+                        ToastKind::NeedsAttention
+                    } else {
+                        ToastKind::Finished
+                    },
+                    title: notice.title,
+                    context: notice.body,
+                    position: None,
+                    target: None,
+                });
+                self.sync_toast_deadline(previous);
+                if actionable {
+                    self.toast_deadline = Some(Instant::now() + ACTIONABLE_TOAST_DURATION);
                 }
+                changed = true;
             }
         }
         changed
@@ -288,6 +347,134 @@ impl App {
                 responses::encode_success(id, ResponseResult::JobUpdated { job })
             }
             Err(error) => begin_error_response(id, &params.job_id, error),
+        }
+    }
+
+    /// `job.set_schedule`: system jobs write `[jobs.system.<name>]` in
+    /// config.toml; other jobs get their `job.toml` schedule line replaced, or,
+    /// when the file cannot be edited safely, an override in their state.
+    pub(super) fn handle_job_set_schedule(
+        &mut self,
+        id: String,
+        params: JobSetScheduleParams,
+    ) -> String {
+        use crate::jobs::definition::JobSource;
+        use crate::jobs::schedule_edit::{edit_job_toml, parse_schedule_input};
+
+        self.refresh_jobs(false);
+        let input = match parse_schedule_input(&params.schedule) {
+            Ok(input) => input,
+            Err(message) => return responses::encode_error(id, "invalid_schedule", message),
+        };
+        let Some(def) = self.jobs.job_def(&params.job_id).cloned() else {
+            return match self.jobs.info(&params.job_id, now_unix_ms()) {
+                Some(_) => responses::encode_error(
+                    id,
+                    "job_invalid",
+                    format!(
+                        "job {} has problems; fix its job file before changing its schedule",
+                        params.job_id
+                    ),
+                ),
+                None => job_not_found(id, &params.job_id),
+            };
+        };
+        let mut note = None;
+        let stored_in = match &def.source {
+            JobSource::System => {
+                let Some(name) = crate::jobs::system::system_job_name(&def.id) else {
+                    return responses::encode_error(
+                        id,
+                        "job_invalid",
+                        format!("{} is not a known system job", def.id),
+                    );
+                };
+                if let Err(message) =
+                    crate::config::write_system_job_schedule(name, input.key(), input.value())
+                {
+                    return responses::encode_error(id, "schedule_write_failed", message);
+                }
+                // Read the config back so the job picks the new schedule up now.
+                match crate::config::load_live_config() {
+                    Ok(loaded) => {
+                        self.jobs_config = loaded.config.jobs.clone();
+                        self.upstream_config = loaded.config.upstream.clone();
+                    }
+                    Err(diagnostics) => {
+                        return responses::encode_error(
+                            id,
+                            "schedule_write_failed",
+                            format!(
+                                "the schedule was written but config.toml no longer loads: {}",
+                                diagnostics.join("; ")
+                            ),
+                        );
+                    }
+                }
+                let diagnostics = self.apply_system_jobs();
+                for diagnostic in diagnostics {
+                    tracing::warn!(%diagnostic, "system job configuration");
+                }
+                JobScheduleStore::Config
+            }
+            JobSource::User => {
+                let path = def.dir.join("job.toml");
+                let edited = std::fs::read_to_string(&path)
+                    .map_err(|err| format!("cannot read {}: {err}", path.display()))
+                    .and_then(|content| edit_job_toml(&content, &input));
+                match edited {
+                    Ok(content) => {
+                        if let Err(err) = std::fs::write(&path, content) {
+                            return responses::encode_error(
+                                id,
+                                "schedule_write_failed",
+                                format!("could not write {}: {err}", path.display()),
+                            );
+                        }
+                        let _ = self.jobs.set_schedule_override(&def.id, None);
+                        JobScheduleStore::JobFile
+                    }
+                    Err(why) => {
+                        if let Err(error) = self
+                            .jobs
+                            .set_schedule_override(&def.id, Some(input.describe()))
+                        {
+                            return begin_error_response(id, &params.job_id, error);
+                        }
+                        note = Some(format!(
+                            "job.toml was not changed ({why}); the schedule is stored as an override in the job's state. Remove it by editing the file and running `flockr job schedule` again."
+                        ));
+                        JobScheduleStore::State
+                    }
+                }
+            }
+            JobSource::Plugin { .. } => {
+                if let Err(error) = self
+                    .jobs
+                    .set_schedule_override(&def.id, Some(input.describe()))
+                {
+                    return begin_error_response(id, &params.job_id, error);
+                }
+                note = Some(
+                    "plugin job schedules come from the plugin manifest; the new schedule is stored as an override in the job's state"
+                        .into(),
+                );
+                JobScheduleStore::State
+            }
+        };
+        self.refresh_jobs(true);
+        self.jobs.restart_schedule(&params.job_id, now_unix_ms());
+        self.next_jobs_tick = Some(Instant::now());
+        match self.jobs.info(&params.job_id, now_unix_ms()) {
+            Some(job) => responses::encode_success(
+                id,
+                ResponseResult::JobScheduleUpdated {
+                    job,
+                    stored_in,
+                    note,
+                },
+            ),
+            None => job_not_found(id, &params.job_id),
         }
     }
 
@@ -898,6 +1085,175 @@ mod tests {
             !crate::server::client_commands::supports_client_shell_method(&Method::JobEnvRefresh(
                 crate::api::schema::EmptyParams::default()
             ))
+        );
+    }
+
+    fn set_schedule(
+        fx: &mut Fixture,
+        id: &str,
+        text: &str,
+    ) -> Result<ResponseResult, (String, String)> {
+        let response = fx.call(Method::JobSetSchedule(JobSetScheduleParams {
+            job_id: id.into(),
+            schedule: text.into(),
+        }));
+        match serde_json::from_str::<SuccessResponse>(&response) {
+            Ok(success) => Ok(success.result),
+            Err(_) => {
+                let error = serde_json::from_str::<ErrorResponse>(&response)
+                    .unwrap_or_else(|err| panic!("neither success nor error: {response}: {err}"))
+                    .error;
+                Err((error.code, error.message))
+            }
+        }
+    }
+
+    #[test]
+    fn schedule_of_a_file_job_is_rewritten_in_its_job_toml() {
+        let mut fx = Fixture::new("sched-file");
+        fx.write_job("echo", ECHO_JOB);
+        let Ok(ResponseResult::JobScheduleUpdated {
+            job,
+            stored_in,
+            note,
+        }) = set_schedule(&mut fx, "echo", "every 2h")
+        else {
+            panic!("expected an updated schedule");
+        };
+        assert_eq!(stored_in, JobScheduleStore::JobFile);
+        assert!(note.is_none());
+        assert_eq!(job.schedule, "every 2h");
+        assert!(!job.schedule_overridden);
+        let text = std::fs::read_to_string(fx.root.join("config/echo/job.toml")).unwrap();
+        assert!(text.contains("every = \"2h\""), "{text}");
+        assert_eq!(
+            text,
+            ECHO_JOB.replace("every = \"1h\"", "every = \"2h\""),
+            "only the schedule line changed"
+        );
+        // Cron works too and swaps the key.
+        let Ok(ResponseResult::JobScheduleUpdated { job, .. }) =
+            set_schedule(&mut fx, "echo", "0 9 * * 1-5")
+        else {
+            panic!("expected an updated schedule");
+        };
+        assert_eq!(job.schedule, "0 9 * * 1-5");
+        let text = std::fs::read_to_string(fx.root.join("config/echo/job.toml")).unwrap();
+        assert!(
+            text.contains("schedule = \"0 9 * * 1-5\"") && !text.contains("every"),
+            "{text}"
+        );
+        // The scheduler restarted from now: the next run is in the future.
+        assert!(job.next_run_unix_ms.unwrap() > crate::jobs::now_unix_ms());
+    }
+
+    #[test]
+    fn schedule_falls_back_to_a_state_override_when_the_file_cannot_be_edited() {
+        let mut fx = Fixture::new("sched-state");
+        // The schedule is a multi-line string, which the line editor leaves alone.
+        let original = "command = [\"true\"]\nevery = \"\"\"1h\"\"\"\nenv = \"server\"\n";
+        fx.write_job("odd", original);
+        let Ok(ResponseResult::JobScheduleUpdated {
+            job,
+            stored_in,
+            note,
+        }) = set_schedule(&mut fx, "odd", "every 30m")
+        else {
+            panic!("expected an updated schedule");
+        };
+        assert_eq!(stored_in, JobScheduleStore::State);
+        assert!(note.unwrap().contains("override"));
+        assert!(job.schedule_overridden);
+        assert_eq!(job.schedule, "every 30m");
+        assert_eq!(
+            std::fs::read_to_string(fx.root.join("config/odd/job.toml")).unwrap(),
+            original,
+            "the job file is untouched"
+        );
+        // The override is in the job's state file and survives a reload.
+        let state = std::fs::read_to_string(fx.root.join("state/odd/state.json")).unwrap();
+        assert!(state.contains("every 30m"), "{state}");
+        fx.app.reload_jobs_now();
+        assert_eq!(fx.app.jobs.info("odd", 0).unwrap().schedule, "every 30m");
+    }
+
+    #[test]
+    fn bad_schedules_and_unknown_jobs_are_refused() {
+        let mut fx = Fixture::new("sched-bad");
+        fx.write_job("echo", ECHO_JOB);
+        fx.write_job("broken", "command = []\n");
+        assert_eq!(
+            set_schedule(&mut fx, "echo", "every 5s").unwrap_err().0,
+            "invalid_schedule"
+        );
+        assert_eq!(
+            set_schedule(&mut fx, "echo", "whenever").unwrap_err().0,
+            "invalid_schedule"
+        );
+        assert_eq!(
+            set_schedule(&mut fx, "nope", "every 1h").unwrap_err().0,
+            "job_not_found"
+        );
+        assert_eq!(
+            set_schedule(&mut fx, "broken", "every 1h").unwrap_err().0,
+            "job_invalid"
+        );
+        let text = std::fs::read_to_string(fx.root.join("config/echo/job.toml")).unwrap();
+        assert_eq!(text, ECHO_JOB, "refused edits change nothing");
+    }
+
+    #[test]
+    fn system_job_schedule_is_written_to_the_config_and_applied() {
+        let _guard = crate::config::test_config_env_lock().lock().unwrap();
+        let mut fx = Fixture::new("sched-system");
+        let config_path = fx.root.join("config.toml");
+        std::fs::write(&config_path, "[ui]\nsidebar_width = 31\n").unwrap();
+        std::env::set_var(crate::config::CONFIG_PATH_ENV_VAR, &config_path);
+
+        fx.app.apply_system_jobs();
+        fx.app.reload_jobs_now();
+        let info = fx
+            .app
+            .jobs
+            .info("system.upstream-herdr", 0)
+            .expect("system job");
+        assert_eq!(info.source, "system");
+        assert_eq!(info.schedule, "every 1d");
+
+        let result = set_schedule(&mut fx, "system.upstream-herdr", "every 2h");
+        let written = std::fs::read_to_string(&config_path).unwrap();
+        std::env::remove_var(crate::config::CONFIG_PATH_ENV_VAR);
+        let Ok(ResponseResult::JobScheduleUpdated { job, stored_in, .. }) = result else {
+            panic!("expected an updated schedule: {result:?}");
+        };
+        assert_eq!(stored_in, JobScheduleStore::Config);
+        assert_eq!(job.schedule, "every 2h", "applied without a restart");
+        assert!(
+            written.contains("[jobs.system.upstream-herdr]") && written.contains("every = \"2h\""),
+            "{written}"
+        );
+        assert!(
+            written.contains("sidebar_width = 31"),
+            "the rest of the config stays"
+        );
+    }
+
+    #[test]
+    fn system_jobs_list_with_source_system_and_can_run_by_hand() {
+        let mut fx = Fixture::new("system-list");
+        fx.write_job("mine", ECHO_JOB);
+        fx.app.apply_system_jobs();
+        let ResponseResult::JobList { jobs, .. } = fx.ok(Method::JobList(JobListParams::default()))
+        else {
+            panic!("expected a job list");
+        };
+        let sources: Vec<_> = jobs
+            .iter()
+            .map(|job| (job.job_id.as_str(), job.source.as_str()))
+            .collect();
+        assert_eq!(
+            sources,
+            [("mine", "user"), ("system.upstream-herdr", "system")]
         );
     }
 }

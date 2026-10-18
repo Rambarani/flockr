@@ -661,7 +661,7 @@ pub(super) enum ClientShellOverlay {
     Settings(ClientSettingsOverlay),
     Palette(super::palette::ClientPaletteOverlay),
     Dashboard(super::agent_dashboard::ClientDashboardOverlay),
-    Jobs(super::jobs_overlay::ClientJobsOverlay),
+    Jobs(Box<super::jobs_overlay::ClientJobsOverlay>),
     Feed(super::feed_overlay::ClientFeedOverlay),
 }
 

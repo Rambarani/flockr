@@ -140,26 +140,6 @@ impl App {
         }
     }
 
-    pub(crate) fn run_upstream_check(&mut self) {
-        if !background_update_check_enabled(
-            self.policy.background_updates,
-            self.upstream_config.enabled,
-        ) {
-            self.next_upstream_check = None;
-            return;
-        }
-
-        self.next_upstream_check = Some(Instant::now() + AUTO_UPDATE_CHECK_INTERVAL);
-
-        let upstream_tx = self.event_tx.clone();
-        let upstream_config = self.upstream_config.clone();
-        if let Err(err) = crate::thread_spawn::spawn_named("flockr-upstream-check", move || {
-            crate::upstream::check::background_check(&upstream_config, upstream_tx)
-        }) {
-            tracing::warn!(err = %err, "failed to spawn upstream check thread");
-        }
-    }
-
     pub(crate) fn next_headless_loop_deadline_with_git_refresh(
         &self,
         now: Instant,
@@ -185,7 +165,6 @@ impl App {
             self.restored_worktree_validation_retry_at,
             self.next_auto_update_check,
             self.next_agent_manifest_update_check,
-            self.next_upstream_check,
             self.next_jobs_tick,
             self.agent_metadata_deadline,
             self.pending_agent_resume_deadline,

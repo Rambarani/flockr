@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::agents::AgentInfo;
 use super::common::{ClientWindowTitleReason, NotificationShowReason};
+use super::decision::DecisionInfo;
 use super::events::EventEnvelope;
 use super::feed::{FeedItemInfo, FeedSummary};
 use super::integrations::{
@@ -341,6 +342,34 @@ pub enum ResponseResult {
         started: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
+    },
+    JobScheduleUpdated {
+        job: JobInfo,
+        /// Where the new schedule was written.
+        stored_in: super::jobs::JobScheduleStore,
+        /// Says why the schedule went somewhere unusual.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        note: Option<String>,
+    },
+    DecisionList {
+        /// Advances whenever any decision changes.
+        revision: u64,
+        /// The request's `since_revision` is current; `decisions` is empty.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        unchanged: bool,
+        /// Decisions waiting for an answer (snoozed ones not counted).
+        pending: u32,
+        #[serde(default)]
+        decisions: Vec<DecisionInfo>,
+    },
+    DecisionUpdated {
+        decision: DecisionInfo,
+    },
+    DecisionStarted {
+        decision: DecisionInfo,
+        /// The tab the agent was started in.
+        tab_id: String,
+        pane_id: String,
     },
     ConfigReload {
         status: crate::config::ConfigReloadStatus,

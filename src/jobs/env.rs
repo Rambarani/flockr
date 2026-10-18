@@ -134,6 +134,14 @@ impl LoginEnvCache {
         snapshot
     }
 
+    /// The cached environment if there is one, however old; never captures.
+    pub(crate) fn peek(&self) -> Option<EnvSnapshot> {
+        self.snapshot
+            .try_lock()
+            .ok()
+            .and_then(|guard| guard.as_ref().cloned())
+    }
+
     /// Capture again regardless of age. Used by `flockr job env refresh`.
     pub(crate) fn refresh(&self) -> EnvSnapshot {
         let mut guard = self
@@ -418,16 +426,37 @@ pub(crate) fn resolve_job_env(
     cache: &LoginEnvCache,
     flockr_vars: Vec<(String, String)>,
 ) -> Result<ResolvedEnv, String> {
+    resolve_job_env_with(job, || Some(cache.get()), flockr_vars)
+}
+
+/// Like `resolve_job_env`, for callers that must not wait for a login-shell
+/// capture: an environment that was never captured contributes nothing (the
+/// shell the caller starts supplies its own).
+pub(crate) fn resolve_job_env_cached(
+    job: &JobDef,
+    cache: &LoginEnvCache,
+    flockr_vars: Vec<(String, String)>,
+) -> Result<ResolvedEnv, String> {
+    resolve_job_env_with(job, || cache.peek(), flockr_vars)
+}
+
+fn resolve_job_env_with(
+    job: &JobDef,
+    login_snapshot: impl FnOnce() -> Option<EnvSnapshot>,
+    flockr_vars: Vec<(String, String)>,
+) -> Result<ResolvedEnv, String> {
     let mut merged: BTreeMap<String, String> = BTreeMap::new();
     let (clear, mut note) = match job.env {
         EnvMode::Server => (false, "server environment".to_owned()),
-        EnvMode::LoginShell => {
-            let snapshot = cache.get();
-            for (name, value) in snapshot.vars.iter() {
-                merged.insert(name.clone(), value.clone());
+        EnvMode::LoginShell => match login_snapshot() {
+            Some(snapshot) => {
+                for (name, value) in snapshot.vars.iter() {
+                    merged.insert(name.clone(), value.clone());
+                }
+                (true, snapshot.note())
             }
-            (true, snapshot.note())
-        }
+            None => (true, "login shell not captured yet".to_owned()),
+        },
     };
     if let Some(path) = &job.env_file {
         let content = std::fs::read_to_string(path)

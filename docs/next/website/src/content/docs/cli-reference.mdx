@@ -421,16 +421,16 @@ A timeout or `agent_prompt_stalled` does not prove the prompt was never delivere
 ## Upstream herdr
 
 ```sh
-flockr upstream check [--json]   # query GitHub now and list releases newer than the synced base
+flockr upstream check [--json|--job]  # query GitHub now and list releases newer than the synced base
 flockr upstream status [--json]  # synced base, last check, pending and skipped releases, repo path
 flockr upstream review           # the review popup: Copy updates, Skip this version, Later
-flockr upstream copy [TAG]       # open a Flockr tab that runs `upstream sync` (default: latest pending)
+flockr upstream copy [TAG]       # open a Flockr tab that runs `upstream sync` (starts the matching decision; default: latest pending)
 flockr upstream skip TAG         # stop notifying about a release
 flockr upstream sync TAG         # worktree + agent that merges the release; never touches your checkout
 flockr upstream apply TAG [--yes]  # merge a verified sync branch into flockr and rebuild
 ```
 
-`check` and `status` print JSON with `--json`. `sync` and `apply` need `[upstream] repo_path` or a binary built from the source checkout; see [Configuration](/docs/configuration/#upstream-herdr-watcher).
+`check` and `status` print JSON with `--json`. `check --job` is what the `system.upstream-herdr` job runs: it always asks GitHub, records the result and prints a handoff line for a release you were not told about yet. `sync` and `apply` need `[upstream] repo_path` or a binary built from the source checkout; see [Configuration](/docs/configuration/#upstream-herdr-watcher).
 
 ## Jobs
 
@@ -441,10 +441,22 @@ flockr job run <id> [--wait]      # run now; with --wait, exit non-zero if the r
 flockr job logs <id> [-n LINES]   # stdout then stderr of the last run
 flockr job enable <id>            # overrides `enabled` in job.toml
 flockr job disable <id>
+flockr job schedule <id> <every 2h|CRON>   # change when a job runs (system jobs write config.toml)
 flockr job env refresh            # capture the login-shell environment again
 ```
 
-See [Jobs](/docs/jobs/) for the job file format.
+`list` has a SOURCE column: `user`, `system` (built into Flockr, such as `system.upstream-herdr`) or `plugin`. `schedule` takes an interval (`every 2h` or `2h`, at least a minute) or a five-field cron expression, quoted or as separate words. See [Jobs](/docs/jobs/) for the job file format.
+
+## Decisions
+
+```sh
+flockr decision list [--all] [--json]       # pending decisions (--all includes started and dismissed)
+flockr decision start <id>                  # open the agent tab for a decision
+flockr decision snooze <id> [--for 1h]      # hide it for a while, default 1 hour
+flockr decision dismiss <id>
+```
+
+A job's `[handoff]` raises a decision after a run; nothing starts until you answer. Ids look like `d3`. See [Jobs: Handoff](/docs/jobs/#handoff-ask-then-start-an-agent).
 
 ## Feeds
 

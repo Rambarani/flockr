@@ -50,6 +50,7 @@ pub(super) fn command() -> Command {
         .subcommand(upstream_command())
         .subcommand(job_command())
         .subcommand(feed_command())
+        .subcommand(decision_command())
         .subcommand(plugin_command());
     configure_help(command, 0)
 }
@@ -152,7 +153,10 @@ fn upstream_command() -> Command {
         .subcommand(
             Command::new("check")
                 .about("Check GitHub for new upstream herdr releases now")
-                .arg(json_flag()),
+                .arg(json_flag())
+                .arg(flag("job").help(
+                    "Run as the system.upstream-herdr job: record the check and print a handoff line for a new release",
+                )),
         )
         .subcommand(
             Command::new("status")
@@ -236,11 +240,56 @@ fn job_command() -> Command {
                 .arg(job_id()),
         )
         .subcommand(
+            Command::new("schedule")
+                .about("Change when a job runs (an interval such as `every 2h`, or cron)")
+                .arg(job_id())
+                .arg(
+                    Arg::new("schedule")
+                        .value_name("SCHEDULE")
+                        .required(true)
+                        .num_args(1..)
+                        .help("`every 2h` (or `2h`), or a 5-field cron expression such as `0 9 * * 1-5`"),
+                ),
+        )
+        .subcommand(
             Command::new("env")
                 .about("Manage the login-shell environment jobs run with")
                 .subcommand(
                     Command::new("refresh").about("Capture the login-shell environment again now"),
                 ),
+        )
+}
+
+fn decision_command() -> Command {
+    let decision_id = || {
+        Arg::new("id")
+            .value_name("ID")
+            .required(true)
+            .help("Decision id such as d3, as shown by `flockr decision list`")
+    };
+    Command::new("decision")
+        .about("Answer the questions jobs ask before starting an agent")
+        .subcommand(
+            Command::new("list")
+                .about("List pending decisions")
+                .arg(flag("all").help("Include started and dismissed decisions"))
+                .arg(json_flag()),
+        )
+        .subcommand(
+            Command::new("start")
+                .about("Open the agent tab for a decision")
+                .arg(decision_id()),
+        )
+        .subcommand(
+            Command::new("snooze")
+                .about("Hide a decision for a while, then ask again")
+                .arg(decision_id())
+                .arg(option("for", "DURATION").help("How long, such as 30m or 2h (default: 1h)")),
+        )
+        .subcommand(
+            Command::new("dismiss")
+                .about("Dismiss a decision without starting anything")
+                .arg(decision_id()),
         )
 }
 

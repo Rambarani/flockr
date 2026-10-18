@@ -102,8 +102,8 @@ pub(crate) struct FeedDef {
     pub(crate) title: Option<String>,
 }
 
-/// The optional `[handoff]` table. Validated now; the decision flow that
-/// uses it (persisted pending decision, tab and agent launch) comes later.
+/// The optional `[handoff]` table: after a run the job may ask the user to
+/// start an agent tab. Evaluated by `super::handoff`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct HandoffDef {
     pub(crate) when: String,
@@ -111,7 +111,10 @@ pub(crate) struct HandoffDef {
     pub(crate) agent_command: Option<String>,
     pub(crate) cwd: Option<String>,
     pub(crate) tab_title: Option<String>,
+    /// Prompt template file, relative to the job directory.
     pub(crate) prompt_file: Option<String>,
+    /// Inline prompt template (alternative to `prompt_file`).
+    pub(crate) prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -195,6 +198,8 @@ struct RawHandoff {
     tab_title: Option<String>,
     #[serde(default)]
     prompt_file: Option<String>,
+    #[serde(default)]
+    prompt: Option<String>,
 }
 
 fn valid_handoff_when(when: &str) -> bool {
@@ -299,7 +304,7 @@ pub(crate) fn format_duration(duration: Duration) -> String {
     out
 }
 
-fn expand_tilde(path: &str) -> PathBuf {
+pub(crate) fn expand_tilde(path: &str) -> PathBuf {
     if let Some(rest) = path.strip_prefix("~/") {
         if let Some(home) = std::env::var_os("HOME") {
             return PathBuf::from(home).join(rest);
@@ -312,7 +317,7 @@ fn expand_tilde(path: &str) -> PathBuf {
     PathBuf::from(path)
 }
 
-fn resolve_path(base: &Path, path: &str) -> PathBuf {
+pub(crate) fn resolve_path(base: &Path, path: &str) -> PathBuf {
     let path = expand_tilde(path);
     if path.is_absolute() {
         path
@@ -480,6 +485,21 @@ fn build_job(
             ));
             return None;
         }
+        if handoff.prompt.is_some() && handoff.prompt_file.is_some() {
+            diagnostics.push(
+                "handoff.prompt/prompt_file: set at most one, an inline `prompt` or a `prompt_file`"
+                    .into(),
+            );
+            return None;
+        }
+        if handoff
+            .agent_command
+            .as_deref()
+            .is_some_and(|command| command.trim().is_empty())
+        {
+            diagnostics.push("handoff.agent_command: must not be empty".into());
+            return None;
+        }
         Some(HandoffDef {
             when,
             ask: handoff.ask,
@@ -487,6 +507,7 @@ fn build_job(
             cwd: handoff.cwd,
             tab_title: handoff.tab_title,
             prompt_file: handoff.prompt_file,
+            prompt: handoff.prompt,
         })
     });
 

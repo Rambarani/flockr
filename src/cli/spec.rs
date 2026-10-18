@@ -1017,6 +1017,16 @@ fn path_arg(name: &'static str, value_name: &'static str) -> Arg {
     required(name, value_name).value_hint(ValueHint::AnyPath)
 }
 
+/// Right-click targets. The deprecated upstream spelling stays accepted but
+/// hidden from help and completions (see `legacy_herdr`).
+fn right_click_values() -> PossibleValuesParser {
+    PossibleValuesParser::new([
+        PossibleValue::new("flockr"),
+        PossibleValue::new("pane"),
+        PossibleValue::new(crate::legacy_herdr::LEGACY_RIGHT_CLICK_VALUE).hide(true),
+    ])
+}
+
 #[cfg(test)]
 mod tests {
     use clap::{Arg, Command};
@@ -1402,14 +1412,4 @@ mod tests {
             assert!(!output.is_empty(), "empty {shell:?} completion output");
         }
     }
-}
-
-/// Right-click targets. The deprecated upstream spelling stays accepted but
-/// hidden from help and completions (see `legacy_herdr`).
-fn right_click_values() -> PossibleValuesParser {
-    PossibleValuesParser::new([
-        PossibleValue::new("flockr"),
-        PossibleValue::new("pane"),
-        PossibleValue::new(crate::legacy_herdr::LEGACY_RIGHT_CLICK_VALUE).hide(true),
-    ])
 }

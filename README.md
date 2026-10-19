@@ -475,7 +475,7 @@ The command prints one JSON object on stdout, at most 4 MiB, and **nothing else*
 
 Limits: 500 items; 200 characters for `id` and `title`. Unknown fields are ignored. A bad item or action is dropped with a note (see `flockr feed show`) rather than failing the feed. `flockr job schema --feed` prints the exact JSON Schema.
 
-**Action keys:** a single visible character. Not allowed: named keys (`Enter`, `esc`, arrows, `tab`, `space`), or `j k q g G R S /`. In a feed with groups, `[`, `]` and `0` to `9` are reserved too. Running an action starts its command with the job's environment plus `FLOCKR_FEED_ITEM_ID` and `FLOCKR_FEED_ACTION_KEY` (60 s max), then refreshes the feed. Commands stay on the server; clients send only job, item id and key.
+**Action keys:** a single visible character. Not allowed: named keys (`Enter`, `esc`, arrows, `tab`, `space`), or `j k q g G R S / x X w`. In a feed with groups, `[`, `]` and `0` to `9` are reserved too. Running an action starts its command with the job's environment plus `FLOCKR_FEED_ITEM_ID` and `FLOCKR_FEED_ACTION_KEY` (60 s max), then refreshes the feed. Commands stay on the server; clients send only job, item id and key.
 
 ### Adapters
 
@@ -519,19 +519,45 @@ Master-detail view: list on the left, detail pane on the right (title, state, su
 | item action keys | Run that action on the selected item (listed at the bottom of the pane) |
 | `R` | Refresh the feed (run the feed command again) |
 | `S` | **Sync now**: run the feed's job; the feed refreshes when it succeeds |
-| `esc` or `q` | Clear the filter, then close |
+| `x` | Select / unselect the current item (a `✓` column; the header shows `N selected`) |
+| `X` | Clear the selection |
+| `w` | **Work on it**: open a new tab and start an agent (default `claude`) with the selected items, or the current item if none are selected |
+| `esc` or `q` | Leave zoom, then clear the selection, then the filter, then close |
 
-#### Multi-select and work (`x` / `w`) - IN PROGRESS, verify after merge
+#### Work on items in a new agent tab (`x` / `w`)
 
-> **Status: not in this branch yet.** This describes the feature being built on branch `feat/feed-work` from its spec. It is not documented in `docs/` yet and has not been verified against the code. After it merges, check `docs/next/website/src/content/docs/jobs.mdx` and `flockr job schema` (look for `feed.work`) and correct this section.
+Select items with `x` (or click the `✓` column, or ctrl/cmd-click a row). Selections survive category tabs and filtering, and are cleared when you switch feeds. Press `w`: flockr renders a prompt from the items, writes it to `<state_dir>/jobs/<id>/work/<time>.md`, opens a focused tab, and starts the agent with it. Up to 50 items per request.
 
-Spec as given:
+Configure it per job with an optional `[feed.work]` table (all keys optional):
 
-- `x` toggles selection of the current item in the Feed overlay (multi-select).
-- `w` opens a new tab and starts Claude with the selected items.
-- The behavior is configured by a `[feed.work]` table in `job.toml`.
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `agent_command` | `"claude"` | Command to start; `{prompt_file}` is replaced by the prompt file path, otherwise the prompt is passed as the first argument |
+| `cwd` | the job's `cwd`, else `$HOME` | Tab folder (template). A templated folder that doesn't exist falls back to the default with a warning |
+| `tab_title` | `"{{job.title}} · {{count}} items"` | Tab title (template) |
+| `prompt` / `prompt_file` | built-in (below) | Prompt template; use one, not both |
 
-The exact keys of `[feed.work]`, what happens with no selection, and the prompt template are not specified here. Do not guess them; read the merged docs.
+Template variables: `{{items}}` (readable list: badge, title, link, fields, body), `{{items_json}}`, `{{count}}`, `{{date}}`, `{{job.id}}`, `{{job.title}}`, `{{feed.title}}`, `{{item.id|title|subtitle|badge|url|state|group|updated_at|body}}` and `{{item.field.<label>}}` for the **first** selected item (labels are lowercased, other characters become `_`, so `Repo` → `{{item.field.repo}}`).
+
+Built-in prompt: *"Here are N items from &lt;feed title&gt; I want to work on: … Read each link/ticket, summarize what each needs, and propose a plan. Ask before changing code."*
+
+Example for workbox (the adapter adds a `Repo` field for GitHub/Bitbucket items; Jira items have none):
+
+```toml
+[feed.work]
+agent_command = "claude"
+cwd = "~/code/work/{{item.field.repo}}"   # falls back if the folder doesn't exist
+tab_title = "workbox · {{count}} items"
+prompt = """
+I picked {{count}} items from my workbox list:
+
+{{items}}
+
+Read each link, say what each needs, propose a plan, and ask before changing code.
+"""
+```
+
+`flockr job validate` checks `[feed.work]` (unknown variables, missing prompt file or agent program), and `flockr job run <id> --dry-run` previews the `w` prompt using the first two feed items. A selection that spans several repos opens in the first item's repo.
 
 ### Feed CLI
 
@@ -646,7 +672,7 @@ flockr job schedule workbox-sync "0 10 * * 1-5"
 **What you see:**
 
 - A **Today (workbox)** section under the agent list in the sidebar, with the unread count. Click a row to open the item. Right-click for done / seen / today.
-- `prefix+f` opens the Feed overlay: category tabs, detail pane, `d` `s` `t` actions, `R` refresh, `S` sync now.
+- `prefix+f` opens the Feed overlay: category tabs, detail pane, `d` `s` `t` actions, `R` refresh, `S` sync now, `x` select and `w` to start Claude on the selected items.
 - When a sync changes something, a toast asks "N items need you. Start Claude?". The question waits in the Decisions tab (`prefix+t`, then `tab`). `enter` opens a tab running `claude` with `prompt.md` filled in. Nothing starts until you press it.
 - If the feed command fails (for example offline), the last list stays and the sidebar header shows `!`.
 
@@ -735,7 +761,7 @@ You are Claude (or another agent) reading this to help the user with flockr. Fol
 8. **Where docs live:** `docs/next/website/src/content/docs/*.mdx` (jobs, keyboard, configuration, agents, concepts, session-state, socket-api, plugins, cli-reference). Schemas: `docs/next/api/flockr-job.schema.json`, `flockr-feed.schema.json`, `flockr-api.schema.json`. Repo rules for contributors: `AGENTS.md` and `CONTRIBUTING.md`.
 9. **Feature work rules:** do not edit `skills/flockr/SKILL.md` (it tracks the latest stable release), root `CHANGELOG.md` or `docs/next/CHANGELOG.md` in normal feature or fix work. Put user-facing docs under `docs/next/website/src/content/docs/`.
 10. **Naming:** the product is flockr. Use "herdr" only for the upstream project, the `system.upstream-herdr` job, legacy `HERDR_*` compatibility, and migration.
-11. **Say what you did not verify.** The `x` / `w` feed work feature in section 8 is documented from a spec and unverified until `feat/feed-work` is merged.
+11. **Say what you did not verify.** If you could not run a command or confirm a behaviour, say so instead of guessing.
 
 ---
 

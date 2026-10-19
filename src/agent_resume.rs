@@ -154,7 +154,7 @@ pub fn normalize_session_start_source(value: Option<String>) -> Option<String> {
     match value.as_deref().map(str::trim) {
         Some(
             source @ ("startup" | "resume" | "clear" | "compact" | "branch" | "new" | "fork"
-            | "select"),
+            | "select" | "prompt"),
         ) => Some(source.to_string()),
         _ => None,
     }

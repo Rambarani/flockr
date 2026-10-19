@@ -3,7 +3,7 @@
 # managed by flockr; reinstalling or updating the integration overwrites this file.
 # add custom hooks beside this file instead of editing it.
 # FLOCKR_INTEGRATION_ID=claude
-# FLOCKR_INTEGRATION_VERSION=11
+# FLOCKR_INTEGRATION_VERSION=12
 
 set -eu
 
@@ -51,7 +51,11 @@ if hook_input_file:
 if "CURSOR_VERSION" in os.environ or "cursor_version" in hook_input:
     raise SystemExit(0)
 hook_event_name = str(hook_input.get("hook_event_name") or "")
-if hook_event_name != "SessionStart":
+# SessionStart reports the session Claude launched with. With
+# `--resume X --fork-session` that is still X; the fork's own id first shows up
+# in later events, so UserPromptSubmit reports it too. The server ignores a
+# report that repeats the current session.
+if hook_event_name not in ("SessionStart", "UserPromptSubmit"):
     raise SystemExit(0)
 is_subagent = bool(hook_input.get("agent_id"))
 if is_subagent:
@@ -62,7 +66,10 @@ session_id = hook_input.get("session_id")
 agent_session_id = session_id if isinstance(session_id, str) and session_id else None
 transcript_path = hook_input.get("transcript_path")
 agent_session_path = transcript_path if isinstance(transcript_path, str) and transcript_path else None
-session_start_source = hook_input.get("source") if hook_event_name == "SessionStart" else None
+if hook_event_name == "SessionStart":
+    session_start_source = hook_input.get("source")
+else:
+    session_start_source = "prompt"
 if not isinstance(session_start_source, str) or not session_start_source:
     session_start_source = None
 if agent_session_id:

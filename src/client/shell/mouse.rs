@@ -1734,8 +1734,14 @@ impl ClientShellState {
                     Some(ClientShellOverlay::ConfirmClose(_)) => {
                         self.accept_close_confirmation(outcome);
                     }
+                    Some(ClientShellOverlay::ConfirmFeedAction(_)) => {
+                        self.answer_feed_action_confirmation(true, outcome);
+                    }
                     _ => {}
                 }
+            } else if matches!(self.overlay, Some(ClientShellOverlay::ConfirmFeedAction(_))) {
+                // Cancel button or a click outside: do not run it.
+                self.answer_feed_action_confirmation(false, outcome);
             } else if super::contains(self.hits.overlay_clear, point) {
                 if let Some(ClientShellOverlay::Rename(rename)) = self.overlay.as_mut() {
                     rename.input.clear();

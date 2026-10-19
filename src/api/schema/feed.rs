@@ -21,6 +21,11 @@ pub struct FeedActionInfo {
     /// The single key that runs the action in the Feed overlay.
     pub key: String,
     pub title: String,
+    /// A question to ask (y/n) before the action runs, for example
+    /// "Delete NH-1406 from workbox?". Absent when the action runs at once,
+    /// and from older servers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirm: Option<String>,
 }
 
 /// A labelled value shown in an item's detail view.

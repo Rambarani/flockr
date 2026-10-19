@@ -50,10 +50,12 @@ fn item(id: &str, title: &str, state: FeedItemState) -> FeedItemInfo {
             FeedActionInfo {
                 key: "d".into(),
                 title: "done".into(),
+                confirm: None,
             },
             FeedActionInfo {
                 key: "s".into(),
                 title: "seen".into(),
+                confirm: None,
             },
         ],
     }
@@ -2790,4 +2792,111 @@ fn x_x_and_w_are_reserved_action_keys() {
             "{key}"
         );
     }
+}
+
+// ----- confirm questions --------------------------------------------------
+
+/// The workbox feed with a `D` delete action that asks first, on every item.
+fn feed_with_delete() -> (FeedSummary, Vec<FeedItemInfo>) {
+    let (summary, mut items) = workbox_feed();
+    for item in &mut items {
+        item.actions.push(FeedActionInfo {
+            key: "D".into(),
+            title: "delete".into(),
+            confirm: Some(format!("Delete {} from workbox?", item.id)),
+        });
+    }
+    (summary, items)
+}
+
+fn delete_request(item_id: &str) -> Method {
+    Method::FeedRunAction(FeedRunActionParams {
+        job_id: "workbox-sync".into(),
+        item_id: item_id.into(),
+        key: "D".into(),
+    })
+}
+
+#[test]
+fn an_overlay_action_with_a_confirm_question_waits_for_y() {
+    let mut state = overlay_state(vec![feed_with_delete()]);
+    let id = selected_item(&state);
+    let input = press(&mut state, 'D');
+    assert!(
+        requests(&input).is_empty(),
+        "nothing runs before the answer"
+    );
+    assert!(matches!(
+        state.overlay,
+        Some(ClientShellOverlay::ConfirmFeedAction(_))
+    ));
+    let frame = compose(&mut state);
+    assert!(
+        frame.contains(&format!("Delete {id} from workbox?")),
+        "{frame}"
+    );
+
+    // Any other key keeps the question open.
+    let input = press(&mut state, 'x');
+    assert!(requests(&input).is_empty());
+    assert!(matches!(
+        state.overlay,
+        Some(ClientShellOverlay::ConfirmFeedAction(_))
+    ));
+
+    let input = press(&mut state, 'y');
+    assert_eq!(requests(&input)[0].method, delete_request(&id));
+    assert!(
+        matches!(state.overlay, Some(ClientShellOverlay::Feed(_))),
+        "the Feed overlay is back"
+    );
+}
+
+#[test]
+fn answering_n_or_esc_drops_the_action_and_restores_the_overlay() {
+    let mut state = overlay_state(vec![feed_with_delete()]);
+    let id = selected_item(&state);
+    for answer_key in [key(KeyCode::Char('n')), key(KeyCode::Esc)] {
+        press(&mut state, 'D');
+        let input = state.handle_raw_events(vec![answer_key]);
+        assert!(requests(&input).is_empty());
+        assert!(matches!(state.overlay, Some(ClientShellOverlay::Feed(_))));
+        assert_eq!(selected_item(&state), id, "the selection is kept");
+    }
+}
+
+#[test]
+fn actions_without_confirm_still_run_at_once() {
+    let mut state = overlay_state(vec![feed_with_delete()]);
+    let input = press(&mut state, 'd');
+    assert!(matches!(
+        requests(&input)[0].method,
+        Method::FeedRunAction(_)
+    ));
+    assert!(matches!(state.overlay, Some(ClientShellOverlay::Feed(_))));
+}
+
+#[test]
+fn the_sidebar_menu_asks_before_a_confirm_action_and_n_cancels() {
+    let mut state = state_with_feeds(&Config::default(), vec![feed_with_delete()]);
+    let row = state.hits.feed.rows[0].rect;
+    right_click(&mut state, row);
+    // Open link, done, seen, delete.
+    let mut outcome = ClientShellInput::default();
+    state.activate_context_menu_item(3, &mut outcome);
+    assert!(requests(&outcome).is_empty());
+    assert!(matches!(
+        state.overlay,
+        Some(ClientShellOverlay::ConfirmFeedAction(_))
+    ));
+    let input = press(&mut state, 'n');
+    assert!(requests(&input).is_empty());
+    assert!(state.overlay.is_none());
+
+    right_click(&mut state, row);
+    let mut outcome = ClientShellInput::default();
+    state.activate_context_menu_item(3, &mut outcome);
+    let input = press(&mut state, 'y');
+    assert_eq!(requests(&input)[0].method, delete_request("nh-1"));
+    assert!(state.overlay.is_none());
 }

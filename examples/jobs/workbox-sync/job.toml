@@ -19,8 +19,8 @@ notify = "on_failure"
 # when the server starts if the feed has never been read. It prints the
 # JSON array of `workbox list --json`, which `flockr feed adapt workbox`
 # turns into a feed: unread items get a dot, Enter or a click opens the link,
-# and each item has done (d), seen (s) and today (t) actions that run
-# `workbox mark`.
+# and each item has done (d), seen (s), today (t) and delete (D, asks y/n first)
+# actions that run `workbox mark`.
 [feed]
 command = ["sh", "-c", "workbox list --json | flockr feed adapt workbox --title 'Today (workbox)'"]
 title = "Today (workbox)"

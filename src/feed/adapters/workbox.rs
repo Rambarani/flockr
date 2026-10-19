@@ -4,8 +4,8 @@
 //! Each item becomes a feed item whose id is workbox's item id, badge is its
 //! key, state is `unread` or `read`, and subtitle is
 //! `<source> · <reason>[ · <where>]`. The actions mark the item done (`d`),
-//! seen (`s`), or toggle it on the today list (`t`) by running
-//! `workbox mark <id> <action>`. The detail view gets `fields` (Source,
+//! seen (`s`), toggle it on the today list (`t`), or delete it (`D`, after a
+//! y/n question) by running `workbox mark <id> <action>`. The detail view gets `fields` (Source,
 //! Reason, Where, Repo (the repository name of a GitHub or Bitbucket item's
 //! `owner/repo#123`), Status, From, Key, Snoozed until, Today) and the snippet as
 //! `body`, the same facts workbox's own detail pane shows.
@@ -204,6 +204,14 @@ fn action(bin: &str, id: &str, key: &str, title: &str, verb: &str) -> serde_json
     })
 }
 
+/// The delete action: `workbox mark <id> delete` hides the item for good (it
+/// survives syncs; `undelete` restores it), so the client asks y/n first.
+fn delete_action(bin: &str, id: &str, label: &str) -> serde_json::Value {
+    let mut delete = action(bin, id, "D", "delete", "delete");
+    delete["confirm"] = format!("Delete {label} from workbox?").into();
+    delete
+}
+
 /// Convert workbox's JSON array into a feed document. `Err` is a message for
 /// stderr; the warnings name items that were skipped.
 pub(crate) fn adapt(
@@ -265,6 +273,7 @@ pub(crate) fn adapt(
                 } else {
                     action(bin, id, "t", "today", "today")
                 },
+                delete_action(bin, id, non_empty(&item.key).unwrap_or(id)),
             ]),
         );
         feed_items.push(serde_json::Value::Object(entry));
@@ -327,7 +336,7 @@ mod tests {
             .iter()
             .map(|action| action["key"].as_str().unwrap())
             .collect();
-        assert_eq!(keys, ["d", "s", "t"]);
+        assert_eq!(keys, ["d", "s", "t", "D"]);
         assert_eq!(
             first["actions"][0]["command"],
             serde_json::json!(["workbox", "mark", "jira:NH-1412", "done"])
@@ -339,6 +348,41 @@ mod tests {
         assert_eq!(
             first["actions"][2]["command"],
             serde_json::json!(["workbox", "mark", "jira:NH-1412", "today"])
+        );
+        assert_eq!(first["actions"][3]["title"], "delete");
+        assert_eq!(
+            first["actions"][3]["command"],
+            serde_json::json!(["workbox", "mark", "jira:NH-1412", "delete"])
+        );
+        assert_eq!(
+            first["actions"][3]["confirm"],
+            "Delete NH-1412 from workbox?"
+        );
+        assert!(
+            first["actions"][0].get("confirm").is_none(),
+            "only delete asks first"
+        );
+    }
+
+    #[test]
+    fn delete_follows_the_bin_override_and_survives_the_feed_parser() {
+        let options = AdaptOptions {
+            bin: "/opt/stub/workbox".into(),
+            ..AdaptOptions::default()
+        };
+        let (feed, _) = adapted(&options);
+        let second = &feed["items"][1];
+        assert_eq!(
+            second["actions"][3]["command"],
+            serde_json::json!(["/opt/stub/workbox", "mark", "gh:o/r#12", "delete"])
+        );
+        let parsed = parse_feed(&feed.to_string()).expect("parses");
+        assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+        let delete = &parsed.items[1].actions[3];
+        assert_eq!(delete.key, "D");
+        assert_eq!(
+            delete.confirm.as_deref(),
+            Some("Delete o/r#12 from workbox?")
         );
     }
 
@@ -440,7 +484,7 @@ mod tests {
         assert_eq!(parsed.items[0].state, FeedItemState::Unread);
         assert_eq!(
             parsed.items[0].actions.len(),
-            3,
+            4,
             "no action key is reserved"
         );
     }

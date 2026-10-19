@@ -22,10 +22,10 @@ instead, copy `job.toml` and `prompt.md` from this directory to
 ## What you get
 
 - **Sidebar**: a collapsible `Today (workbox) 3` section (3 is the unread
-  count). Click a row to open the item, right-click for **done**, **seen** and
-  **today**, click the header to collapse, click `+N more` for the overlay.
-- **Feed overlay** (`prefix+f`): the full list. `enter` opens the link, `d`, `s`
-  and `t` run the actions, `/` filters, `R` refreshes, `esc` closes. `x`
+  count). Click a row to open the item, right-click for **done**, **seen**,
+  **today** and **delete** (asks y/n first), click the header to collapse, click `+N more` for the overlay.
+- **Feed overlay** (`prefix+f`): the full list. `enter` opens the link, `d`, `s`,
+  `t` and `D` run the actions, `/` filters, `R` refreshes, `esc` closes. `x`
   marks items (`X` clears), and `w` opens a tab and starts Claude with the marked
   items (the current item when none is marked) as the prompt; see the
   commented `[feed.work]` block in `job.toml` for the working directory
@@ -51,7 +51,7 @@ instead, copy `job.toml` and `prompt.md` from this directory to
    item id, the badge its key, the state `unread` or `read`, the subtitle
    `<source> · <reason> · <where>`.
 4. An action such as **done** runs `workbox mark <id> done` with the same
-   environment, then the feed command runs again so the list drops the item.
+   environment (**delete** runs `workbox mark <id> delete` after a y/n question), then the feed command runs again so the list drops the item.
 
 5. After a successful run and its feed refresh, the `[handoff]` table decides
    whether to ask. `when = "on_change"` asks when the sync's stdout or the feed

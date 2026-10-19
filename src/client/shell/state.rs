@@ -302,6 +302,7 @@ pub(super) enum ClientShellOverlayKind {
     ReleaseNotes,
     Rename,
     ConfirmClose,
+    ConfirmFeedAction,
     Help,
     Navigator,
     WorktreeCreate,
@@ -638,6 +639,18 @@ pub(super) struct ClientTabCloseConfirmation {
     pub(super) workspace: WorkspaceNavigationTarget,
 }
 
+/// The y/n question a feed action with `confirm` asks before it runs.
+#[derive(Debug)]
+pub(super) struct ClientConfirmFeedActionOverlay {
+    pub(super) job_id: String,
+    pub(super) item_id: String,
+    pub(super) key: String,
+    pub(super) origin: super::feed_state::FeedOrigin,
+    pub(super) question: String,
+    /// The Feed overlay this question interrupted, put back afterwards.
+    pub(super) return_to: Option<super::feed_overlay::ClientFeedOverlay>,
+}
+
 #[derive(Debug)]
 pub(super) struct ClientConfirmCloseOverlay {
     pub(super) workspace_id: String,
@@ -654,6 +667,7 @@ pub(super) enum ClientShellOverlay {
     ReleaseNotes(crate::app::state::ReleaseNotesState),
     Rename(ClientRenameOverlay),
     ConfirmClose(ClientConfirmCloseOverlay),
+    ConfirmFeedAction(Box<ClientConfirmFeedActionOverlay>),
     Help(ClientHelpOverlay),
     Navigator(ClientNavigatorOverlay),
     WorktreeCreate(ClientWorktreeCreateOverlay),
@@ -676,6 +690,7 @@ impl ClientShellOverlay {
             Self::ReleaseNotes(_) => ClientShellOverlayKind::ReleaseNotes,
             Self::Rename(_) => ClientShellOverlayKind::Rename,
             Self::ConfirmClose(_) => ClientShellOverlayKind::ConfirmClose,
+            Self::ConfirmFeedAction(_) => ClientShellOverlayKind::ConfirmFeedAction,
             Self::Help(_) => ClientShellOverlayKind::Help,
             Self::Navigator(_) => ClientShellOverlayKind::Navigator,
             Self::WorktreeCreate(_) => ClientShellOverlayKind::WorktreeCreate,

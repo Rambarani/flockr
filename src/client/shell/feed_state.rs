@@ -531,7 +531,67 @@ impl ClientShellState {
     }
 
     /// Run an item's action on the server, then the server refreshes the feed.
+    /// An action with a `confirm` question asks y/n first.
     pub(super) fn run_feed_action(
+        &mut self,
+        job_id: String,
+        item_id: String,
+        key: String,
+        origin: FeedOrigin,
+        outcome: &mut ClientShellInput,
+    ) {
+        let question = self
+            .feed_item(&job_id, &item_id)
+            .and_then(|item| item.actions.into_iter().find(|action| action.key == key))
+            .and_then(|action| action.confirm);
+        if let Some(question) = question {
+            let return_to = match self.overlay.take() {
+                Some(ClientShellOverlay::Feed(overlay)) => Some(overlay),
+                other => {
+                    self.overlay = other;
+                    None
+                }
+            };
+            self.overlay = Some(ClientShellOverlay::ConfirmFeedAction(Box::new(
+                ClientConfirmFeedActionOverlay {
+                    job_id,
+                    item_id,
+                    key,
+                    origin,
+                    question,
+                    return_to,
+                },
+            )));
+            outcome.repaint = true;
+            return;
+        }
+        self.send_feed_action(job_id, item_id, key, origin, outcome);
+    }
+
+    /// The answer to a confirm question: run the action on y, drop it on n.
+    pub(super) fn answer_feed_action_confirmation(
+        &mut self,
+        accepted: bool,
+        outcome: &mut ClientShellInput,
+    ) {
+        let Some(ClientShellOverlay::ConfirmFeedAction(confirm)) = self.overlay.take() else {
+            return;
+        };
+        let confirm = *confirm;
+        self.overlay = confirm.return_to.map(ClientShellOverlay::Feed);
+        if accepted {
+            self.send_feed_action(
+                confirm.job_id,
+                confirm.item_id,
+                confirm.key,
+                confirm.origin,
+                outcome,
+            );
+        }
+        outcome.repaint = true;
+    }
+
+    fn send_feed_action(
         &mut self,
         job_id: String,
         item_id: String,

@@ -182,7 +182,7 @@ fn items_text(items: &[FeedItemInfo]) -> String {
         }
         out.push_str(&block);
     }
-    out
+    out.trim_end().to_owned()
 }
 
 fn first_item_vars(

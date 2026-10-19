@@ -15,6 +15,7 @@ use crate::feed::format::{parse_feed, ItemRecord, ParsedFeed, MAX_FEED_BYTES};
 use crate::jobs::definition::JobDef;
 use crate::jobs::display;
 use crate::jobs::env::LoginEnvCache;
+use crate::jobs::feed_work;
 use crate::jobs::handoff::{self, EvalInput, EvalResult, FeedSnapshot};
 use crate::jobs::runner::ExecResult;
 use crate::jobs::state::{find_handoff_line, RunRecord, OUTPUT_TAIL_BYTES};
@@ -397,5 +398,76 @@ pub(crate) fn render(job: &JobDef, dry: &DryRun) -> String {
             }
         },
     }
+    render_work(&mut out, job, dry);
     out
+}
+
+/// How many feed items the work preview marks.
+const WORK_PREVIEW_ITEMS: usize = 2;
+
+/// The `w` preview: what pressing it on the first feed items would start.
+fn render_work(out: &mut String, job: &JobDef, dry: &DryRun) {
+    let Some(feed) = &job.feed else {
+        return;
+    };
+    out.push_str("\nwork (w in the Feed overlay)\n");
+    let FeedOutcome::Parsed(parsed) = &dry.feed else {
+        out.push_str("    not rendered: the feed was not read in this run\n");
+        return;
+    };
+    let items: Vec<FeedItemInfo> = parsed
+        .items
+        .iter()
+        .take(WORK_PREVIEW_ITEMS)
+        .map(item_info)
+        .collect();
+    if items.is_empty() {
+        out.push_str("    not rendered: the feed has no items\n");
+        return;
+    }
+    let title = feed
+        .title
+        .clone()
+        .or_else(|| parsed.title.clone())
+        .unwrap_or_else(|| job.title.clone());
+    let date = handoff::local_date(crate::jobs::now_unix_ms());
+    let source = if feed.work.is_some() {
+        "from [feed.work]"
+    } else {
+        "built-in defaults; no [feed.work]"
+    };
+    match feed_work::plan(&feed_work::WorkInput {
+        job,
+        feed_title: &title,
+        items: &items,
+        date: &date,
+    }) {
+        Err(error) => out.push_str(&format!("    error: {error}\n")),
+        Ok(plan) => {
+            out.push_str(&format!(
+                "    marking the first {} item{} ({source}):\n",
+                items.len(),
+                if items.len() == 1 { "" } else { "s" }
+            ));
+            out.push_str(&format!("    tab title  {}\n", plan.tab_title));
+            let cwd = plan
+                .cwd
+                .clone()
+                .unwrap_or_else(|| feed_work::default_cwd(job));
+            out.push_str(&format!("    cwd        {}\n", cwd.display()));
+            let prompt_path = std::path::Path::new("<state dir>/work/<time>.md");
+            match handoff::launch_command(&plan.agent_command, Some(prompt_path)) {
+                Ok(command) => out.push_str(&format!("    agent      {command}\n")),
+                Err(error) => out.push_str(&format!(
+                    "    agent      {} (cannot launch: {error})\n",
+                    plan.agent_command
+                )),
+            }
+            for warning in &plan.warnings {
+                out.push_str(&format!("    warning: {warning}\n"));
+            }
+            out.push_str("    prompt\n");
+            out.push_str(&indented(&clip_block(&plan.prompt, PROMPT_PREVIEW_CHARS)));
+        }
+    }
 }

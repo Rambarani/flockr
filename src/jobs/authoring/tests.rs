@@ -671,6 +671,40 @@ fn a_dry_run_shows_the_output_the_feed_and_the_rendered_handoff() {
     assert!(text.contains("(1 unread, exit 0)"), "{text}");
     assert!(text.contains("agent      claude \"$(cat"), "{text}");
     assert!(matches!(result.feed, FeedOutcome::Parsed(_)));
+    // The `w` preview uses the built-in defaults without a [feed.work] table.
+    assert!(text.contains("work (w in the Feed overlay)"), "{text}");
+    assert!(text.contains("built-in defaults; no [feed.work]"), "{text}");
+    assert!(
+        text.contains("Here are 2 items from T I want to work on:"),
+        "{text}"
+    );
+    assert!(text.contains("tab title  dry · 2 items"), "{text}");
+}
+
+#[test]
+fn a_dry_run_previews_a_configured_feed_work_table() {
+    let sandbox = Sandbox::new("dry-work");
+    let job = dry_job(
+        &sandbox,
+        "dry-work",
+        "[feed]\ncommand = [\"sh\", \"-c\", \"echo '{\\\"version\\\":1,\\\"items\\\":[{\\\"id\\\":\\\"a\\\",\\\"title\\\":\\\"A\\\"}]}'\"]\n\
+         [feed.work]\nagent_command = \"claude --add-dir /tmp {prompt_file}\"\ncwd = \"/tmp\"\ntab_title = \"W {{item.id}}\"\nprompt = \"look at {{item.title}} ({{count}})\"\n",
+        "true\n",
+    );
+    let (result, text) = dry(&sandbox, &job, Options::default());
+    assert_eq!(dry_run::exit_code(&result), 0, "{text}");
+    assert!(
+        text.contains("marking the first 1 item (from [feed.work])"),
+        "{text}"
+    );
+    assert!(text.contains("tab title  W a"), "{text}");
+    assert!(text.contains("cwd        /tmp"), "{text}");
+    assert!(
+        text.contains("agent      claude --add-dir /tmp '<state dir>/work/<time>.md'")
+            || text.contains("agent      claude --add-dir /tmp <state dir>/work/<time>.md"),
+        "{text}"
+    );
+    assert!(text.contains("look at A (1)"), "{text}");
 }
 
 #[test]

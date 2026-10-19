@@ -96,6 +96,7 @@ A dry run executes the job once in the foreground, with the job's real environme
 
 - The exit code, duration, stdout and stderr, and the feed command's parsed summary (items, unread count, diagnostics), when the job succeeded.
 - The evaluated [handoff](#handoff-ask-then-start-an-agent): the question, tab title, directory, the agent command that would be typed, and the rendered prompt, with warnings for variables that had no value. A first run counts as a change for `when = "on_change"`.
+- For a job with a `[feed]`, the `w` preview: the tab title, directory, agent command and prompt that [working on items](#work-on-items-feedwork) would start for the first two feed items (the built-in defaults when there is no `[feed.work]`).
 - Nothing is recorded: no run in the history, no feed stored, no toast, no decision. `FLOCKR_JOB_STATE_DIR` points at a scratch directory that is deleted afterwards.
 - `--no-exec` skips the command and the feed and renders the handoff for a successful run with empty stdout.
 - The exit code is non-zero when the command fails, the feed is unusable or the handoff cannot be built.

@@ -52,3 +52,7 @@ Summary of modifications made in flockr (see `git log` for the exact changes):
 11. Feature: job authoring kit. `flockr job new|validate|build|schema|skill`,
     `flockr job run --dry-run`, JSON Schemas under `docs/next/api/`, and the
     `flockr-jobs` skill (`skills/flockr-jobs/`).
+
+Artwork. herdr's logo, social card and screenshot are not used. assets/logo.svg and
+assets/logo.png are flockr's own mark. The notification sounds in assets/sounds
+come from herdr under the same Apache-2.0 license.

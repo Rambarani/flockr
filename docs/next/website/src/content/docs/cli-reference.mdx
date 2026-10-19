@@ -428,7 +428,7 @@ flockr upstream status [--json]  # synced base, last check, pending and skipped 
 flockr upstream review           # the review popup: Copy updates, Skip this version, Later
 flockr upstream copy [TAG]       # open a Flockr tab that runs `upstream sync` (starts the matching decision; default: latest pending)
 flockr upstream skip TAG         # stop notifying about a release
-flockr upstream sync TAG         # worktree + agent that merges the release; never touches your checkout
+flockr upstream sync TAG         # worktree with upstream's changes applied as a 3-way patch + an agent to resolve them; never touches your checkout
 flockr upstream apply TAG [--yes]  # merge a verified sync branch into flockr and rebuild
 ```
 

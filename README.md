@@ -64,7 +64,7 @@ flockr inherits everything herdr does:
 | Feeds | A job publishes a list of items. Shown in a sidebar section and a Feed overlay with categories, a detail pane, actions and sync now. | [section 8](#8-feeds) |
 | Handoff and decisions | A job can ask "start an agent on this?". Start opens a Claude tab. Nothing starts without your answer. | [section 9](#9-handoff-and-decisions) |
 | System jobs | Jobs built into flockr, such as the upstream herdr watcher. | [section 7](#system-jobs), [section 12](#12-upstream-herdr-sync) |
-| Upstream herdr sync | Watches herdr releases and merges them into flockr safely, in an isolated worktree. | [section 12](#12-upstream-herdr-sync) |
+| Upstream herdr sync | Watches herdr releases and copies their changes into flockr safely, in an isolated worktree. | [section 12](#12-upstream-herdr-sync) |
 | Job authoring kit and `flockr-jobs` skill | `job new`, `validate`, `run --dry-run`, schemas, and a Claude skill that knows the workflow. | [section 11](#11-writing-jobs-with-claude) |
 | herdr compatibility aliases | `HERDR_*` variables, `herdr:<id>` hook sources and old config values still work. | [section 3](#3-migrating-from-herdr-or-running-side-by-side) |
 
@@ -729,8 +729,10 @@ How it works:
 1. The system job `system.upstream-herdr` checks the herdr releases (GitHub API for `herdrdev/herdr`) once a day. It fails quietly when offline.
 2. When a release is newer than the synced base (recorded in `.flockr/upstream-base`), it raises a **decision**: a toast like `herdr v0.9.7 is out (3 features, 5 fixes). Copy updates?`.
 3. `prefix+u` (or `flockr upstream review`) opens a review popup listing pending releases with notes and the choices **Copy updates**, **Skip this version**, **Later**.
-4. **Copy updates** opens a new flockr tab running `flockr upstream sync <tag>`. The sync never touches your checkout or the `flockr` branch: it adds a git remote `upstream` if missing, fetches tags, creates a worktree at `<repo_path>/../flockr-sync-<tag>` on a new branch `upstream-sync/<tag>`, and starts your agent with a prompt. The agent merges the tag, keeps flockr's rename, `HERDR_*` aliases, hosting URLs and features, and runs build, tests, clippy and fmt. When all pass it records the verified commit.
-5. Nothing reaches `flockr` until you run `flockr upstream apply <tag>`. It checks the sync branch is verified and your checkout is clean and on `flockr`, asks for confirmation (`--yes` skips it), merges, runs `cargo build --release`, removes the worktree and records the new base.
+4. **Copy updates** opens a new flockr tab running `flockr upstream sync <tag>`. The sync never touches your checkout or the `flockr` branch: it adds a git remote `upstream` if missing, fetches tags, creates a worktree at `<repo_path>/../flockr-sync-<tag>` on a new branch `upstream-sync/<tag>`, and applies upstream's changes there. flockr's git history has no common ancestor with herdr's, so it does not merge the tag. It replays upstream's diff from the recorded base (`.flockr/upstream-base`) to `<tag>` file by file as a 3-way merge: clean files are staged, conflicts are written into the files as markers (`<<<<<<< flockr` ... `>>>>>>> herdr <tag>`). Files flockr renamed (for example `herdr_x.rs` to `flockr_x.rs`) receive upstream's change at their new path; files flockr deleted are listed as skipped. The result (clean, conflicted, skipped) is written into the prompt, and your agent resolves it: it keeps flockr's rename, `HERDR_*` aliases, hosting URLs and features, and runs build, tests, clippy and fmt. When all pass it records the verified commit.
+5. Nothing reaches `flockr` until you run `flockr upstream apply <tag>`. It checks the sync branch is verified, has no conflict markers left, and your checkout is clean and on `flockr`, asks for confirmation (`--yes` skips it), merges (the sync branch is flockr history, so this is a fast-forward or ordinary merge), runs `cargo build --release`, removes the worktree and records the new base.
+
+Limits: a rename is recognised above 40% similarity; a clean text merge can still leave `herdr` wording in code that flockr renamed, so the agent reviews every merged hunk; the sync needs the recorded base tag to exist locally (it is fetched with `git fetch upstream --tags`).
 
 ```toml
 [upstream]
@@ -748,7 +750,7 @@ review_key = "prefix+u"
 | `flockr upstream review` | The review popup. |
 | `flockr upstream copy [TAG]` | Open the sync tab (default: latest pending). |
 | `flockr upstream skip TAG` | Stop notifying about a release. |
-| `flockr upstream sync TAG` | Worktree plus agent that merges the release. |
+| `flockr upstream sync TAG` | Worktree with upstream's changes applied as a 3-way patch, plus an agent to resolve them. |
 | `flockr upstream apply TAG [--yes]` | Merge a verified sync branch into flockr and rebuild. |
 
 Debug builds do not run the watcher on a schedule; `flockr job run system.upstream-herdr` runs it by hand. Timing is set under `[jobs.system.upstream-herdr]`. Reference: [configuration, upstream herdr watcher](docs/next/website/src/content/docs/configuration.mdx).

@@ -2,18 +2,21 @@
 //!
 //! flockr is a fork of herdr (see `NOTICE`). This module keeps track of which
 //! upstream release flockr is synced to, checks the upstream GitHub releases in
-//! the background, and prepares an isolated worktree where an agent merges a
-//! new upstream tag without touching the checked-out `flockr` branch.
+//! the background, and prepares an isolated worktree where an agent adopts a
+//! new upstream tag's changes without touching the checked-out `flockr` branch.
 //!
 //! - `release`: release records, version selection and release-note bucketing.
 //! - `state`: persisted watcher state (last check, notified/skipped tags).
 //! - `check`: the failure-soft, interval-gated release check.
 //! - `sync`: git preflight, worktree creation, prompt file and agent launch.
+//! - `patch`: replays upstream's `<base>..<tag>` changes onto the worktree as a
+//!   per-file 3-way merge, because flockr shares no git history with herdr.
 //! - `apply`: user-triggered merge of a finished sync branch into `flockr`.
 //! - `review`: the interactive popup behind `flockr upstream review`.
 
 pub(crate) mod apply;
 pub(crate) mod check;
+pub(crate) mod patch;
 pub(crate) mod release;
 pub(crate) mod review;
 pub(crate) mod state;

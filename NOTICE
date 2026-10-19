@@ -38,3 +38,17 @@ Summary of modifications made in flockr (see `git log` for the exact changes):
    app, and `flockr upstream sync|apply` merges a release into flockr through an
    isolated git worktree. The upstream version flockr is synced to is recorded
    in `.flockr/upstream-base`.
+7. Feature: UI additions: renaming workspaces and agents (double-click, right-click
+   menu, keys), a which-key popup, a command palette, an agent preview popup, an
+   agent dashboard, and collapsible workspace groups in the agent sidebar.
+8. Feature: jobs (`src/jobs/`). Scheduled commands (`job.toml`, every or cron)
+   with timeouts, login-shell environment capture, catch-up runs, a Jobs overlay
+   and the `flockr job` CLI, including system jobs (ids starting with `system.`).
+9. Feature: feeds. Jobs can publish a feed of items (feed format v1, `flockr feed`
+   CLI, `flockr feed adapt workbox`), shown in a sidebar section and a Feed overlay
+   with categories, a detail pane, item actions and sync now.
+10. Feature: handoff and decisions. A job can ask whether to start an agent tab
+    after a run (`[handoff]`, `flockr decision` CLI, Decisions tab).
+11. Feature: job authoring kit. `flockr job new|validate|build|schema|skill`,
+    `flockr job run --dry-run`, JSON Schemas under `docs/next/api/`, and the
+    `flockr-jobs` skill (`skills/flockr-jobs/`).

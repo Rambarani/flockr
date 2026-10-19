@@ -694,6 +694,7 @@ impl ClientShellState {
                     tab_id,
                     warnings,
                     skipped,
+                    draft,
                     ..
                 }),
             ) => {
@@ -702,10 +703,14 @@ impl ClientShellState {
                 } else {
                     tab_title
                 };
-                let mut text = format!(
-                    "started {agent} with {count} item{} in tab {label}",
-                    if count == 1 { "" } else { "s" }
-                );
+                let plural = if count == 1 { "" } else { "s" };
+                let mut text = if draft {
+                    format!(
+                        "opened {agent} with {count} item{plural} as a draft — add your note and press Enter"
+                    )
+                } else {
+                    format!("started {agent} with {count} item{plural} in tab {label}")
+                };
                 if !skipped.is_empty() {
                     text.push_str(&format!(" ({} no longer in the feed)", skipped.len()));
                 }

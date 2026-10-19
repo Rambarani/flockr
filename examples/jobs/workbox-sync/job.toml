@@ -39,6 +39,9 @@ title = "Today (workbox)"
 #   from `where` ("platform-ui" for acme/platform-ui#571). Jira
 #   items have none, and a directory that does not exist falls back to the
 #   job's cwd or your home directory. {{item.*}} is the FIRST marked item.
+# - submit / prefill: by default the agent starts with no prompt and the prompt is
+#   typed into its input box without Enter, so you can add to it. prefill =
+#   "mention" types only `@<prompt file>` instead of the whole text.
 # - prompt: inline here, or `prompt_file = "work.md"` next to this file.
 # - Variables: {{items}} {{items_json}} {{count}} {{date}} {{job.id}}
 #   {{job.title}} {{feed.title}} {{item.title}} {{item.url}} {{item.badge}}
@@ -48,6 +51,8 @@ title = "Today (workbox)"
 # agent_command = "claude"
 # cwd = "~/code/work/{{item.field.repo}}"
 # tab_title = "workbox · {{count}} items"
+# submit = false     # default: the prompt waits in Claude's input box as a draft;
+#                    # add your note and press Enter. true runs it at once.
 # prompt = """
 # Today is {{date}}. I picked {{count}} items from my workbox list to work on:
 #

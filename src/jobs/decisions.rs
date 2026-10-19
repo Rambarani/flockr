@@ -10,6 +10,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use super::definition::Prefill;
 use crate::api::schema::{DecisionInfo, DecisionStatus};
 
 /// Decisions kept, pending and resolved together. When the list is full the
@@ -38,6 +39,12 @@ pub(crate) struct DecisionRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) context: Option<serde_json::Value>,
     pub(crate) content_hash: String,
+    /// Submit the prompt to the agent. Records stored before the option
+    /// existed submit, as they always did.
+    #[serde(default = "default_submit", skip_serializing_if = "is_true")]
+    pub(crate) submit: bool,
+    #[serde(default, skip_serializing_if = "is_default_prefill")]
+    pub(crate) prefill: Prefill,
     pub(crate) status: DecisionStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) snoozed_until_unix_ms: Option<u64>,
@@ -97,6 +104,20 @@ pub(crate) struct NewDecision {
     pub(crate) prompt_file: Option<String>,
     pub(crate) context: Option<serde_json::Value>,
     pub(crate) content_hash: String,
+    pub(crate) submit: bool,
+    pub(crate) prefill: Prefill,
+}
+
+fn default_submit() -> bool {
+    true
+}
+
+fn is_true(value: &bool) -> bool {
+    *value
+}
+
+fn is_default_prefill(value: &Prefill) -> bool {
+    *value == Prefill::default()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -245,6 +266,8 @@ impl DecisionStore {
             prompt_file: new.prompt_file,
             context: new.context,
             content_hash: new.content_hash,
+            submit: new.submit,
+            prefill: new.prefill,
             status: DecisionStatus::Pending,
             snoozed_until_unix_ms: None,
             resolved_unix_ms: None,
@@ -421,6 +444,8 @@ mod tests {
             prompt_file: Some("/tmp/p.md".into()),
             context: Some(serde_json::json!({"tag": "v1"})),
             content_hash: hash.into(),
+            submit: true,
+            prefill: Prefill::default(),
         }
     }
 
@@ -435,6 +460,29 @@ mod tests {
                 std::process::id()
             ))
             .join("decisions.json")
+    }
+
+    #[test]
+    fn a_record_stored_before_submit_existed_still_submits() {
+        let mut store = DecisionStore::in_memory();
+        store.add(new("a", "h1"), 100);
+        let json = serde_json::to_value(store.get(1).unwrap()).unwrap();
+        assert!(json.get("submit").is_none(), "the default is not written");
+        assert!(json.get("prefill").is_none());
+        let old: DecisionRecord = serde_json::from_value(json).unwrap();
+        assert!(old.submit);
+        assert_eq!(old.prefill, Prefill::Paste);
+
+        let mut drafted = new("b", "h2");
+        drafted.submit = false;
+        drafted.prefill = Prefill::Mention;
+        store.add(drafted, 200);
+        let json = serde_json::to_value(store.get(2).unwrap()).unwrap();
+        assert_eq!(json["submit"], false);
+        assert_eq!(json["prefill"], "mention");
+        let back: DecisionRecord = serde_json::from_value(json).unwrap();
+        assert!(!back.submit);
+        assert_eq!(back.prefill, Prefill::Mention);
     }
 
     #[test]

@@ -237,6 +237,8 @@ cwd = "~/Desktop/poc/workbox"      # the tab's working directory; default: the j
 tab_title = "workbox · {{date}}"   # default: "{{job.title}} · {{date}}"
 prompt_file = "prompt.md"          # a template in the job directory ...
 # prompt = "Triage {{count}} items:\n{{feed_json}}"   # ... or an inline template (not both)
+# submit = true                    # default; false leaves the prompt as an unsent draft
+# prefill = "paste"                # with submit = false: "paste" (default) or "mention"
 ```
 
 | Key | Meaning |
@@ -244,6 +246,8 @@ prompt_file = "prompt.md"          # a template in the job directory ...
 | `when` | Which runs ask. `on_success`: the run succeeded. `on_failure`: it failed, timed out or could not start. `always`: every run. `exit:<code>`: it exited with that code. `on_change`: the run's stdout or the job's feed differs from the previous run's (the first run counts as a change). Default `on_change`. |
 | `ask` | The question, a template. Default `<job title> has something for you. Start an agent?` |
 | `agent_command` | What the tab runs. Default `claude`. A template; values filled into it are shell-quoted. |
+| `submit` | Default `true`: the prompt is passed to the agent, which runs it at once, as a handoff always did (an upstream sync must run). `false`: the agent starts alone and the prompt is typed into its input box as a draft, without Enter, so you can add to it. Has no effect when `agent_command` contains `{prompt_file}`. |
+| `prefill` | With `submit = false`: `"paste"` (default) types the whole prompt as a bracketed paste, `"mention"` types one line, `@<prompt file>`. Not allowed with `submit = true`. |
 | `cwd` | The tab's working directory, a template. `~` and paths relative to the job directory work. It must exist when you press Start. |
 | `tab_title` | The tab's name, a template, cut to 60 characters. |
 | `prompt_file` or `prompt` | The prompt template: a file in the job directory, or inline text. At most one. Without either the agent starts with no prompt. |
@@ -255,8 +259,18 @@ The rendered prompt is written to `<state dir>/jobs/<id>/handoffs/<run>.md` (the
 - If `agent_command` contains `{prompt_file}`, it is replaced by the quoted path of the file: `agent_command = "claude --append-system-prompt-file {prompt_file}"`.
 - Otherwise the prompt text is passed as the first argument: `claude "$(cat '<file>')"`.
 - With no prompt at all the command runs exactly as written. (The upstream decision works this way: its command is `flockr upstream sync <tag>`, which builds its own prompt.)
+- With `submit = false` and no `{prompt_file}` in the command, the agent starts alone and the prompt is typed afterwards as a draft; see [Leave the prompt as a draft](#leave-the-prompt-as-a-draft).
 
 The command is typed into the new tab's shell, so the agent owns a real terminal and you can watch and steer it.
+
+### Leave the prompt as a draft
+
+Passing the prompt as an argument makes agents such as Claude Code submit it at once. With `submit = false` (the default for [`[feed.work]`](#work-on-items-feedwork), opt-in for a handoff) Flockr starts the agent with no prompt and puts the prompt in its input box without pressing Enter, so you add your own instructions and press Enter yourself.
+
+- **Readiness.** Flockr does not sleep on its server thread. It queues the prompt and checks the new pane on the server's timer every 100 ms. For an agent Flockr detects (the program name matches a known agent such as `claude`), it waits until the pane is an agent terminal with status idle or done on two checks in a row, the same status `flockr agent wait` uses, and until the terminal has turned bracketed paste on. After 20 seconds it types anyway and logs a warning. For an agent Flockr cannot detect there is nothing to wait for, so it waits a fixed 1.5 seconds.
+- **Typing.** The text goes in as a bracketed paste (`ESC[200~ … ESC[201~`) with no Enter after it. With `prefill = "paste"` (default) that is the whole prompt; Claude Code shows a long paste as `[Pasted text #1 +N lines]`, which is fine. With `prefill = "mention"` it is one line, `@<absolute prompt file path> `, followed by a space, so the draft stays compact. A path with whitespace is quoted, `@"<path>" `. If the terminal never turned bracketed paste on, a multi-line prompt would submit at its first newline, so Flockr types the one-line mention instead.
+- **`{prompt_file}` wins.** If `agent_command` contains `{prompt_file}`, you chose how the agent receives the file, Flockr cannot know whether that command submits, and `submit` and `prefill` have no effect. `flockr job validate` says so.
+- **The mention file.** The prompt file is under the job's state directory, outside your project. Claude Code reads `@` mentions of absolute paths, but it may ask for permission to read a file outside the working directory. If that is a nuisance, use `prefill = "paste"`.
 
 ### Templates
 
@@ -502,7 +516,7 @@ The overlay polls every 2 seconds while it is open. Clicking a row selects it, a
 
 ### Work on items (`[feed.work]`)
 
-Select items with `x` (or ctrl-click), press `w`, and Flockr opens a new tab and starts an agent with those items as its prompt. With nothing selected, `w` uses the current item. The overlay closes so the new tab, which is focused, is in view, and a notice says `started claude with 3 items in tab …`. The server does the work through the `feed.work` API method, with the same code as a decision's Start: the tab is typed into like any shell, so the agent owns a real terminal, and it starts with the job's environment rules (your login shell's variables by default). Nothing is stored in the feed.
+Select items with `x` (or ctrl-click), press `w`, and Flockr opens a new tab and starts an agent with those items as its prompt. With nothing selected, `w` uses the current item. The overlay closes so the new tab, which is focused, is in view, and a notice says `opened claude with 3 items as a draft — add your note and press Enter` (`started claude with 3 items in tab …` when `submit = true`). The server does the work through the `feed.work` API method, with the same code as a decision's Start: the tab is typed into like any shell, so the agent owns a real terminal, and it starts with the job's environment rules (your login shell's variables by default). Nothing is stored in the feed.
 
 Everything is optional. Without a `[feed.work]` table, `claude` starts in the job's `cwd` when the job file sets one, else your home directory, with the built-in prompt:
 
@@ -525,11 +539,15 @@ cwd = "~/code/{{item.field.repo}}"           # default: the job's cwd, else $HOM
 tab_title = "{{job.title}} · {{count}} items"         # default
 # prompt = "Review these:\n{{items}}"                 # inline template ...
 prompt_file = "work.md"                               # ... or a file next to job.toml (not both)
+# submit = false                                      # default: the prompt is a draft you send yourself
+# prefill = "paste"                                   # with submit = false: "paste" (default) or "mention"
 ```
 
 | Key | Meaning |
 | --- | --- |
-| `agent_command` | The agent CLI. `{prompt_file}` expands to the quoted prompt path; without it the prompt becomes the first argument, as `claude "$(cat <file>)"`. Values from templates are shell-quoted. Default `claude`. |
+| `agent_command` | The agent CLI. `{prompt_file}` expands to the quoted prompt path (`submit` and `prefill` then have no effect). Without it, `submit = true` passes the prompt as the first argument, as `claude "$(cat <file>)"`; `submit = false` starts the agent alone. Values from templates are shell-quoted. Default `claude`. |
+| `submit` | Default `false`: start the agent with no prompt and [type the prompt into its input box as a draft](#leave-the-prompt-as-a-draft), without Enter, so you add your own instructions and press Enter. `true`: the agent runs the prompt at once. |
+| `prefill` | With `submit = false`: `"paste"` (default, the whole prompt as a bracketed paste) or `"mention"` (one line, `@<prompt file>`). Not allowed with `submit = true`. |
 | `cwd` | Directory of the new tab; `~` and templates work. A directory that does not exist falls back to the default, and the notice says so. |
 | `tab_title` | Title of the new tab, one line, at most 60 characters. |
 | `prompt`, `prompt_file` | The prompt template, inline or a file relative to the job directory. Not both. |

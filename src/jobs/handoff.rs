@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use super::definition::{expand_tilde, resolve_path, HandoffDef, JobDef};
+use super::definition::{expand_tilde, resolve_path, HandoffDef, JobDef, Prefill};
 use super::state::{RunRecord, HANDOFF_MARKER};
 use crate::api::schema::JobRunStatus;
 
@@ -101,6 +101,9 @@ pub(crate) struct Offer {
     /// Identifies the content, for de-duplication.
     pub(crate) content_hash: String,
     pub(crate) warnings: Vec<String>,
+    /// Submit the prompt to the agent (`[handoff].submit`, default true).
+    pub(crate) submit: bool,
+    pub(crate) prefill: Prefill,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -599,6 +602,8 @@ pub(crate) fn evaluate(input: &EvalInput<'_>) -> Result<EvalResult, String> {
             context: merged.context,
             content_hash,
             warnings,
+            submit: table.and_then(|table| table.submit).unwrap_or(true),
+            prefill: table.and_then(|table| table.prefill).unwrap_or_default(),
         }),
         fingerprint,
     })
@@ -627,6 +632,81 @@ pub(crate) fn launch_command(agent_command: &str, prompt: Option<&Path>) -> Resu
         return Err("on Windows the agent command must contain a {prompt_file} placeholder".into());
     }
     Ok(format!("{agent_command} \"$(cat {quoted})\""))
+}
+
+/// How an agent tab starts: the shell command to type, and, when the prompt
+/// is to be left as a draft, how to put it in the input box once the agent is
+/// ready.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AgentLaunch {
+    pub(crate) command: String,
+    /// `Some` when the prompt is not on the command line and must be typed
+    /// into the agent's input box without Enter.
+    pub(crate) draft: Option<Prefill>,
+}
+
+/// Decide how the agent starts. `submit = true` is `launch_command` as it
+/// always was. With `submit = false` the agent starts with no prompt argument
+/// and `draft` says how the prompt follows. A command that contains
+/// `{prompt_file}` keeps its explicit file mechanism whatever `submit` says:
+/// the user chose how the agent receives the file, and flockr cannot know
+/// whether that command submits.
+pub(crate) fn agent_launch(
+    agent_command: &str,
+    prompt: Option<&Path>,
+    submit: bool,
+    prefill: Prefill,
+) -> Result<AgentLaunch, String> {
+    let draft = !submit && prompt.is_some() && !agent_command.contains("{prompt_file}");
+    if !draft {
+        return Ok(AgentLaunch {
+            command: launch_command(agent_command, prompt)?,
+            draft: None,
+        });
+    }
+    Ok(AgentLaunch {
+        command: launch_command(agent_command, None)?,
+        draft: Some(prefill),
+    })
+}
+
+/// One line for a preview: whether the prompt is submitted or left as a draft.
+pub(crate) fn submit_note(agent_command: &str, submit: bool, prefill: Prefill) -> String {
+    if submit {
+        return "submit     yes: the prompt is passed to the agent, which runs it at once".into();
+    }
+    if agent_command.contains("{prompt_file}") {
+        return "submit     no, but the command passes {prompt_file} itself, so the agent gets the file as that command does".into();
+    }
+    let typed = match prefill {
+        Prefill::Paste => "the prompt is pasted",
+        Prefill::Mention => "an @mention of the prompt file is typed",
+    };
+    format!(
+        "submit     no: the agent starts with no prompt; {typed} into its input box (prefill = \"{}\"), without Enter",
+        prefill.as_str()
+    )
+}
+
+/// The text a `mention` draft types: `@<path> ` (the trailing space ends the
+/// mention). A path with whitespace is quoted, `@"<path>" `.
+pub(crate) fn mention_text(prompt: &Path) -> String {
+    let path = prompt.display().to_string();
+    if path.chars().any(char::is_whitespace) {
+        format!("@\"{path}\" ")
+    } else {
+        format!("@{path} ")
+    }
+}
+
+/// The program an agent command runs, skipping leading `NAME=value`
+/// assignments: `claude` for `FOO=1 /usr/bin/claude --x`.
+pub(crate) fn agent_program(agent_command: &str) -> Option<&str> {
+    agent_command
+        .split_whitespace()
+        .find(|word| !word.contains('=') || word.starts_with('/'))
+        .and_then(|program| program.rsplit('/').next())
+        .filter(|program| !program.is_empty())
 }
 
 /// Where the rendered prompt of `run_id` is written.
@@ -1167,6 +1247,90 @@ mod tests {
         );
         assert!(launch_command("cat {prompt_file}", None).is_err());
         assert!(launch_command("  ", None).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn agent_launch_submits_by_default_and_drafts_without_a_prompt_argument() {
+        let file = Path::new("/tmp/w/1.md");
+        // submit = true is launch_command, exactly as before.
+        let submitted = agent_launch("claude", Some(file), true, Prefill::Paste).unwrap();
+        assert_eq!(submitted.command, "claude \"$(cat '/tmp/w/1.md')\"");
+        assert_eq!(submitted.draft, None);
+        // submit = false: the agent alone, the prompt follows as a draft.
+        let draft = agent_launch("claude --model x", Some(file), false, Prefill::Mention).unwrap();
+        assert_eq!(draft.command, "claude --model x");
+        assert_eq!(draft.draft, Some(Prefill::Mention));
+        let draft = agent_launch("claude", Some(file), false, Prefill::Paste).unwrap();
+        assert_eq!(draft.draft, Some(Prefill::Paste));
+        // An explicit {prompt_file} keeps its mechanism whatever submit says.
+        let explicit =
+            agent_launch("agent --f {prompt_file}", Some(file), false, Prefill::Paste).unwrap();
+        assert_eq!(explicit.command, "agent --f '/tmp/w/1.md'");
+        assert_eq!(explicit.draft, None);
+        // No prompt, nothing to draft.
+        let none = agent_launch("flockr upstream sync v1", None, false, Prefill::Paste).unwrap();
+        assert_eq!(
+            (none.command.as_str(), none.draft),
+            ("flockr upstream sync v1", None)
+        );
+        assert!(agent_launch("  ", Some(file), false, Prefill::Paste).is_err());
+    }
+
+    #[test]
+    fn mention_text_ends_with_a_space_and_quotes_paths_with_whitespace() {
+        assert_eq!(mention_text(Path::new("/s/work/1.md")), "@/s/work/1.md ");
+        assert_eq!(
+            mention_text(Path::new("/s/my work/1.md")),
+            "@\"/s/my work/1.md\" "
+        );
+    }
+
+    #[test]
+    fn the_agent_program_skips_assignments_and_directories() {
+        assert_eq!(agent_program("claude --x"), Some("claude"));
+        assert_eq!(
+            agent_program("FOO=1 BAR=/x /usr/local/bin/claude -p"),
+            Some("claude")
+        );
+        assert_eq!(agent_program("  "), None);
+    }
+
+    #[test]
+    fn a_handoff_submits_by_default_and_honours_submit_and_prefill() {
+        let run = |extra: &str| {
+            let job = job(&format!(
+                "[handoff]\nwhen = \"always\"\nprompt = \"p\"\n{extra}"
+            ));
+            eval(
+                &job,
+                &record(JobRunStatus::Success, Some(0), "x"),
+                None,
+                None,
+            )
+            .unwrap()
+            .offer
+            .unwrap()
+        };
+        let default = run("");
+        assert!(default.submit, "a handoff still runs its prompt by default");
+        assert_eq!(default.prefill, Prefill::Paste);
+        let draft = run("submit = false\nprefill = \"mention\"\n");
+        assert!(!draft.submit);
+        assert_eq!(draft.prefill, Prefill::Mention);
+        // A dynamic handoff with no table also submits.
+        let dynamic = job("");
+        let stdout = "{\"flockr_handoff\":{\"ask\":\"a\",\"prompt\":\"p\"}}\n";
+        let offer = eval(
+            &dynamic,
+            &record(JobRunStatus::Success, Some(0), stdout),
+            None,
+            None,
+        )
+        .unwrap()
+        .offer
+        .unwrap();
+        assert!(offer.submit);
     }
 
     #[test]

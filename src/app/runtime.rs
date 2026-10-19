@@ -166,6 +166,7 @@ impl App {
             self.next_auto_update_check,
             self.next_agent_manifest_update_check,
             self.next_jobs_tick,
+            self.next_draft_deadline(),
             self.agent_metadata_deadline,
             self.pending_agent_resume_deadline,
             self.session_save_deadline,

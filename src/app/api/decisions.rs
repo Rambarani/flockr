@@ -23,6 +23,7 @@ use crate::jobs::manager::Notice;
 use crate::jobs::now_unix_ms;
 
 use super::responses;
+use crate::app::draft_prompt::DraftRequest;
 use crate::app::App;
 
 /// Bytes of a rendered prompt returned for a preview.
@@ -30,6 +31,15 @@ const PROMPT_PREVIEW_BYTES: usize = 64 * 1024;
 /// Variables the login-shell snapshot carries that must not be copied into a
 /// new tab: the tab sets its own.
 const TAB_ENV_SKIP: &[&str] = &["PWD", "OLDPWD", "SHLVL", "_"];
+
+/// A prompt to leave in the agent's input box instead of submitting.
+pub(crate) struct DraftSource {
+    pub(crate) prefill: crate::jobs::definition::Prefill,
+    /// The rendered prompt file; read when the agent is ready.
+    pub(crate) prompt_file: std::path::PathBuf,
+    /// Flockr can detect this agent.
+    pub(crate) known_agent: bool,
+}
 
 /// The API error codes `open_agent_tab` reports, so each caller keeps its own.
 #[derive(Clone, Copy)]
@@ -130,6 +140,8 @@ impl App {
                 prompt_file,
                 context: offer.context,
                 content_hash: offer.content_hash,
+                submit: offer.submit,
+                prefill: offer.prefill,
             },
             now_ms,
         );
@@ -368,12 +380,30 @@ impl App {
             }
             None => None,
         };
-        let command = handoff::launch_command(&record.agent_command, prompt_path.as_deref())
-            .map_err(|message| ("decision_command_invalid", message))?;
+        let launch = match prompt_path.as_deref() {
+            Some(path) => handoff::agent_launch(
+                &record.agent_command,
+                Some(path),
+                record.submit,
+                record.prefill,
+            ),
+            None => handoff::agent_launch(&record.agent_command, None, true, record.prefill),
+        }
+        .map_err(|message| ("decision_command_invalid", message))?;
+        let draft = launch
+            .draft
+            .zip(prompt_path.as_deref())
+            .map(|(prefill, path)| DraftSource {
+                prefill,
+                prompt_file: path.to_path_buf(),
+                known_agent: handoff::agent_program(&record.agent_command)
+                    .is_some_and(|program| crate::detect::parse_agent_label(program).is_some()),
+            });
         self.open_agent_tab(
             &record.job_id,
             &cwd,
-            command,
+            launch.command,
+            draft,
             (!record.tab_title.is_empty()).then(|| record.tab_title.clone()),
             AgentTabErrorCodes {
                 tab_failed: "decision_tab_failed",
@@ -385,16 +415,40 @@ impl App {
     /// Open a focused tab in `cwd` with the job's environment rules, titled
     /// `label`, and type `command` into it. The one code path under both a
     /// decision's Start and `feed.work`, so the agent owns a real terminal
-    /// and the user can watch and steer it. `Err` is an API error code and
-    /// message.
+    /// and the user can watch and steer it. With a `draft`, the prompt is
+    /// queued to be typed into the agent's input box, without Enter, once
+    /// the agent is ready; nothing here waits. `Err` is an API error code
+    /// and message.
     pub(crate) fn open_agent_tab(
         &mut self,
         job_id: &str,
         cwd: &Path,
         command: String,
+        draft: Option<DraftSource>,
         label: Option<String>,
         codes: AgentTabErrorCodes,
     ) -> Result<(String, String), (&'static str, String)> {
+        // Read the prompt before any tab opens, so a failure leaves nothing behind.
+        let draft = match draft {
+            Some(source) => {
+                let prompt_text = std::fs::read_to_string(&source.prompt_file).map_err(|err| {
+                    (
+                        codes.launch_failed,
+                        format!(
+                            "cannot read the prompt file {}: {err}",
+                            source.prompt_file.display()
+                        ),
+                    )
+                })?;
+                Some(DraftRequest {
+                    prefill: source.prefill,
+                    prompt_text,
+                    mention_text: handoff::mention_text(&source.prompt_file),
+                    known_agent: source.known_agent,
+                })
+            }
+            None => None,
+        };
         let env = self.decision_tab_env(job_id);
 
         let created = self.handle_tab_create(
@@ -432,6 +486,9 @@ impl App {
                 codes.launch_failed,
                 format!("opened tab {tab_id} but could not start the agent in it: {sent}"),
             ));
+        }
+        if let Some(request) = draft {
+            self.queue_draft(pane_id.clone(), request, std::time::Instant::now());
         }
         Ok((tab_id, pane_id))
     }
@@ -790,6 +847,79 @@ mod tests {
             fx.err(Method::DecisionStart(target("d1"))).0,
             "decision_resolved"
         );
+        shutdown_test_runtimes(&mut fx.app);
+    }
+
+    fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
+        haystack
+            .windows(needle.len())
+            .any(|window| window == needle)
+    }
+
+    #[tokio::test]
+    async fn a_handoff_start_submits_the_prompt_unless_the_table_says_submit_false() {
+        use super::super::test_support::{
+            wait_for_bracketed_paste, wait_for_received, write_stub_shell,
+        };
+        use crate::app::draft_prompt::DRAFT_UNKNOWN_AGENT_DELAY;
+
+        let mut fx = Fixture::new("start-draft");
+        let work = fx.root.join("work");
+        std::fs::create_dir_all(&work).unwrap();
+        let (script, out) = write_stub_shell(&work, true);
+        fx.app.state.default_shell = script.display().to_string();
+        fx.write_job(
+            "demo",
+            &handoff_job(&work, "agent_command = \"stubagent\"\n"),
+        );
+        fx.run_job("demo");
+        let prompt_file = fx.list()[0].prompt_file.clone().unwrap();
+
+        // Default: submit = true, the prompt rides on the command line.
+        let ResponseResult::DecisionStarted { .. } = fx.ok(Method::DecisionStart(target("d1")))
+        else {
+            panic!("expected a started decision");
+        };
+        assert!(fx.app.pending_drafts.is_empty());
+        let received = wait_for_received(&out, |bytes| {
+            contains_bytes(
+                bytes,
+                format!("stubagent \"$(cat '{prompt_file}')\"").as_bytes(),
+            )
+        });
+        assert!(!contains_bytes(&received, b"\x1b[200~"));
+        shutdown_test_runtimes(&mut fx.app);
+
+        // submit = false: the agent starts alone and the prompt is pasted
+        // later, with no Enter after it.
+        fx.write_job(
+            "draft",
+            &handoff_job(
+                &work,
+                "agent_command = \"stubagent\"\nsubmit = false\nprefill = \"paste\"\n",
+            ),
+        );
+        fx.run_job("draft");
+        let decision = fx
+            .list()
+            .into_iter()
+            .find(|decision| decision.job_id == "draft")
+            .unwrap();
+        let ResponseResult::DecisionStarted { pane_id, .. } =
+            fx.ok(Method::DecisionStart(target(&decision.decision_id)))
+        else {
+            panic!("expected a started decision");
+        };
+        assert_eq!(fx.app.pending_drafts.len(), 1);
+        wait_for_bracketed_paste(&fx.app, &pane_id);
+        let queued = std::time::Instant::now();
+        assert!(fx.app.service_pending_drafts(
+            queued + DRAFT_UNKNOWN_AGENT_DELAY + std::time::Duration::from_millis(200)
+        ));
+        let prompt = std::fs::read_to_string(decision.prompt_file.unwrap()).unwrap();
+        let expected = format!("\x1b[200~{prompt}\x1b[201~");
+        let received = wait_for_received(&out, |bytes| contains_bytes(bytes, expected.as_bytes()));
+        assert!(received.ends_with(expected.as_bytes()), "{received:?}");
         shutdown_test_runtimes(&mut fx.app);
     }
 

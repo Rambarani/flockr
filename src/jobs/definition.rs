@@ -105,6 +105,62 @@ pub(crate) struct FeedDef {
     pub(crate) work: Option<FeedWorkDef>,
 }
 
+/// What goes into the agent's input box when `submit = false`: the whole
+/// prompt as a bracketed paste, or a one-line `@<prompt file>` mention.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum Prefill {
+    #[default]
+    Paste,
+    Mention,
+}
+
+impl Prefill {
+    pub(crate) fn parse(text: &str) -> Option<Self> {
+        match text {
+            "paste" => Some(Self::Paste),
+            "mention" => Some(Self::Mention),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Paste => "paste",
+            Self::Mention => "mention",
+        }
+    }
+}
+
+/// Parse the `prefill` key shared by `[feed.work]` and `[handoff]`. `None` is
+/// a rejected value (already reported in `diagnostics`).
+fn parse_prefill_key(
+    table: &str,
+    submit: Option<bool>,
+    prefill: Option<&str>,
+    diagnostics: &mut Vec<String>,
+) -> Option<Option<Prefill>> {
+    let parsed = match prefill {
+        Some(text) => {
+            let Some(prefill) = Prefill::parse(text) else {
+                diagnostics.push(format!(
+                    "{table}.prefill: '{text}' is not valid; use paste or mention"
+                ));
+                return None;
+            };
+            Some(prefill)
+        }
+        None => None,
+    };
+    if submit == Some(true) && parsed.is_some() {
+        diagnostics.push(format!(
+            "{table}.prefill: only applies when submit = false; remove it or set submit = false"
+        ));
+        return None;
+    }
+    Some(parsed)
+}
+
 /// The optional `[feed.work]` table. Every key is optional.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct FeedWorkDef {
@@ -115,6 +171,10 @@ pub(crate) struct FeedWorkDef {
     pub(crate) prompt_file: Option<String>,
     /// Inline prompt template (alternative to `prompt_file`).
     pub(crate) prompt: Option<String>,
+    /// Submit the prompt to the agent (`true`) or leave it in the input box
+    /// as a draft (`false`, the default for `[feed.work]`).
+    pub(crate) submit: Option<bool>,
+    pub(crate) prefill: Option<Prefill>,
 }
 
 /// The optional `[handoff]` table: after a run the job may ask the user to
@@ -130,6 +190,10 @@ pub(crate) struct HandoffDef {
     pub(crate) prompt_file: Option<String>,
     /// Inline prompt template (alternative to `prompt_file`).
     pub(crate) prompt: Option<String>,
+    /// Submit the prompt to the agent (`true`, the default for `[handoff]`)
+    /// or leave it in the input box as a draft.
+    pub(crate) submit: Option<bool>,
+    pub(crate) prefill: Option<Prefill>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -215,6 +279,10 @@ struct RawHandoff {
     prompt_file: Option<String>,
     #[serde(default)]
     prompt: Option<String>,
+    #[serde(default)]
+    submit: Option<bool>,
+    #[serde(default)]
+    prefill: Option<String>,
 }
 
 fn valid_handoff_when(when: &str) -> bool {
@@ -248,6 +316,10 @@ struct RawFeedWork {
     prompt_file: Option<String>,
     #[serde(default)]
     prompt: Option<String>,
+    #[serde(default)]
+    submit: Option<bool>,
+    #[serde(default)]
+    prefill: Option<String>,
 }
 
 /// Valid job id: ASCII letters, digits, `.`, `_`, `-`; starts with a letter or
@@ -516,12 +588,20 @@ fn build_job(
                 diagnostics.push("feed.work.agent_command: must not be empty".into());
                 return None;
             }
+            let prefill = parse_prefill_key(
+                "feed.work",
+                work.submit,
+                work.prefill.as_deref(),
+                &mut diagnostics,
+            )?;
             Some(FeedWorkDef {
                 agent_command: work.agent_command,
                 cwd: work.cwd,
                 tab_title: work.tab_title,
                 prompt_file: work.prompt_file,
                 prompt: work.prompt,
+                submit: work.submit,
+                prefill,
             })
         });
         Some(FeedDef {
@@ -557,6 +637,12 @@ fn build_job(
             diagnostics.push("handoff.agent_command: must not be empty".into());
             return None;
         }
+        let prefill = parse_prefill_key(
+            "handoff",
+            handoff.submit,
+            handoff.prefill.as_deref(),
+            &mut diagnostics,
+        )?;
         Some(HandoffDef {
             when,
             ask: handoff.ask,
@@ -565,6 +651,8 @@ fn build_job(
             tab_title: handoff.tab_title,
             prompt_file: handoff.prompt_file,
             prompt: handoff.prompt,
+            submit: handoff.submit,
+            prefill,
         })
     });
 
@@ -981,5 +1069,47 @@ command = ["x"]
         )
         .unwrap();
         assert!(results.is_empty());
+    }
+    #[test]
+    fn draft_keys_default_to_unset_and_parse_when_given() {
+        let def = |extra: &str| {
+            parse_job_toml(
+                &format!(
+                    "command = [\"x\"]\nevery = \"1h\"\n[feed]\ncommand = [\"f\"]\n[feed.work]\n{extra}[handoff]\n{extra}"
+                ),
+                "j",
+                Path::new("/jobs/j"),
+            )
+        };
+        let plain = def("").unwrap();
+        let work = plain.feed.as_ref().unwrap().work.as_ref().unwrap();
+        assert_eq!((work.submit, work.prefill), (None, None));
+        let handoff = plain.handoff.as_ref().unwrap();
+        assert_eq!((handoff.submit, handoff.prefill), (None, None));
+
+        let set = def("submit = false\nprefill = \"mention\"\n").unwrap();
+        let work = set.feed.as_ref().unwrap().work.as_ref().unwrap();
+        assert_eq!(
+            (work.submit, work.prefill),
+            (Some(false), Some(Prefill::Mention))
+        );
+        let handoff = set.handoff.as_ref().unwrap();
+        assert_eq!(handoff.prefill, Some(Prefill::Mention));
+
+        let errors = def("prefill = \"nope\"\n").unwrap_err();
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("feed.work.prefill: 'nope' is not valid")),
+            "{errors:?}"
+        );
+        let errors = def("submit = true\nprefill = \"paste\"\n").unwrap_err();
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("handoff.prefill: only applies when submit = false")),
+            "{errors:?}"
+        );
+        assert!(def("submit = \"yes\"\n").is_err());
     }
 }

@@ -708,6 +708,151 @@ fn a_dry_run_previews_a_configured_feed_work_table() {
 }
 
 #[test]
+fn draft_options_are_validated() {
+    let sandbox = Sandbox::new("draft-keys");
+    let work = |extra: &str| {
+        format!("{SH_JOB}[feed]\ncommand = [\"sh\", \"run.sh\"]\n[feed.work]\n{extra}")
+    };
+    let handoff = |extra: &str| format!("{SH_JOB}[handoff]\nprompt = \"p\"\n{extra}");
+
+    let bad = sandbox.job(
+        "bad-prefill",
+        &[("job.toml", &work("prefill = \"typo\"\n")), ("run.sh", "")],
+    );
+    assert_error(
+        &sandbox.validate(&bad, false),
+        "feed.work.prefill: 'typo' is not valid; use paste or mention",
+    );
+    let bad = sandbox.job(
+        "bad-handoff-prefill",
+        &[
+            ("job.toml", &handoff("prefill = \"all\"\n")),
+            ("run.sh", ""),
+        ],
+    );
+    assert_error(
+        &sandbox.validate(&bad, false),
+        "handoff.prefill: 'all' is not valid",
+    );
+
+    let contradiction = sandbox.job(
+        "submit-and-prefill",
+        &[
+            ("job.toml", &work("submit = true\nprefill = \"mention\"\n")),
+            ("run.sh", ""),
+        ],
+    );
+    assert_error(
+        &sandbox.validate(&contradiction, false),
+        "feed.work.prefill: only applies when submit = false",
+    );
+
+    let fine = sandbox.job(
+        "draft-fine",
+        &[
+            ("job.toml", &work("prefill = \"mention\"\n")),
+            ("run.sh", ""),
+        ],
+    );
+    let report = sandbox.validate(&fine, false);
+    assert!(report.errors.is_empty(), "{:?}", report.errors);
+    assert!(!has(&report.warnings, "submit"), "{:?}", report.warnings);
+
+    let not_bool = sandbox.job(
+        "submit-text",
+        &[("job.toml", &work("submit = \"no\"\n")), ("run.sh", "")],
+    );
+    assert!(!sandbox.validate(&not_bool, false).errors.is_empty());
+
+    // A {prompt_file} command keeps its own mechanism: say submit is ignored.
+    let placeholder = sandbox.job(
+        "submit-placeholder",
+        &[
+            (
+                "job.toml",
+                &work("agent_command = \"claude {prompt_file}\"\nsubmit = false\n"),
+            ),
+            ("run.sh", ""),
+        ],
+    );
+    let report = sandbox.validate(&placeholder, false);
+    assert!(
+        has(&report.warnings, "feed.work.submit = false has no effect"),
+        "{:?}",
+        report.warnings
+    );
+    let placeholder = sandbox.job(
+        "handoff-submit-placeholder",
+        &[
+            (
+                "job.toml",
+                &handoff("agent_command = \"claude {prompt_file}\"\nsubmit = false\n"),
+            ),
+            ("run.sh", ""),
+        ],
+    );
+    let report = sandbox.validate(&placeholder, false);
+    assert!(
+        has(&report.warnings, "handoff.submit = false has no effect"),
+        "{:?}",
+        report.warnings
+    );
+}
+
+#[test]
+fn a_dry_run_says_whether_the_prompt_is_submitted_or_left_as_a_draft() {
+    let sandbox = Sandbox::new("dry-draft");
+    let feed = "[feed]\ncommand = [\"sh\", \"-c\", \"echo '{\\\"version\\\":1,\\\"items\\\":[{\\\"id\\\":\\\"a\\\",\\\"title\\\":\\\"A\\\"}]}'\"]\n";
+
+    // [feed.work] defaults to a draft; [handoff] defaults to submitting.
+    let job = dry_job(
+        &sandbox,
+        "dry-draft-default",
+        &format!("{feed}[handoff]\nwhen = \"always\"\nprompt = \"go\"\n"),
+        "true\n",
+    );
+    let (_, text) = dry(&sandbox, &job, Options::default());
+    assert!(
+        text.contains("submit     yes: the prompt is passed to the agent"),
+        "{text}"
+    );
+    assert!(
+        text.contains("submit     no: the agent starts with no prompt; the prompt is pasted into its input box (prefill = \"paste\"), without Enter"),
+        "{text}"
+    );
+
+    let job = dry_job(
+        &sandbox,
+        "dry-draft-mention",
+        &format!(
+            "{feed}[feed.work]\nprefill = \"mention\"\n[handoff]\nwhen = \"always\"\nprompt = \"go\"\nsubmit = false\n"
+        ),
+        "true\n",
+    );
+    let (_, text) = dry(&sandbox, &job, Options::default());
+    assert_eq!(
+        text.matches("an @mention of the prompt file is typed")
+            .count(),
+        1,
+        "the work preview mentions: {text}"
+    );
+    assert!(
+        text.contains("agent      claude\n"),
+        "no prompt argument in the draft launch: {text}"
+    );
+
+    let job = dry_job(
+        &sandbox,
+        "dry-submit-true",
+        &format!("{feed}[feed.work]\nsubmit = true\n"),
+        "true\n",
+    );
+    let (_, text) = dry(&sandbox, &job, Options::default());
+    assert!(text.contains("submit     yes"), "{text}");
+    assert!(text.contains("agent      claude \"$(cat"), "{text}");
+}
+
+#[test]
 fn a_failing_command_exits_non_zero_and_failure_handoffs_ask() {
     let sandbox = Sandbox::new("dryfail");
     let job = dry_job(

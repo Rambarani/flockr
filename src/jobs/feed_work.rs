@@ -17,7 +17,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use super::definition::{resolve_path, FeedWorkDef, JobDef};
+use super::definition::{resolve_path, FeedWorkDef, JobDef, Prefill};
 use super::handoff::{
     cap_head, render, single_line, RenderMode, Vars, DEFAULT_AGENT_COMMAND, MAX_PROMPT_CHARS,
     MAX_TAB_TITLE_CHARS,
@@ -80,6 +80,10 @@ pub(crate) struct WorkPlan {
     /// The agent command with its variables filled in (shell-quoted).
     pub(crate) agent_command: String,
     pub(crate) prompt: String,
+    /// Submit the prompt to the agent (`[feed.work].submit`, default false:
+    /// the prompt is left in the input box as a draft).
+    pub(crate) submit: bool,
+    pub(crate) prefill: Prefill,
     pub(crate) warnings: Vec<String>,
 }
 
@@ -322,6 +326,8 @@ pub(crate) fn plan(input: &WorkInput<'_>) -> Result<WorkPlan, String> {
         cwd,
         agent_command,
         prompt,
+        submit: work.submit.unwrap_or(false),
+        prefill: work.prefill.unwrap_or_default(),
         warnings,
     })
 }
@@ -375,6 +381,22 @@ mod tests {
             items,
             date: "2026-10-19",
         })
+    }
+
+    #[test]
+    fn a_work_plan_is_a_draft_unless_submit_is_true() {
+        let items = [item("1", "Fix login")];
+        let plan = run(&job(""), &items).unwrap();
+        assert!(
+            !plan.submit,
+            "feed.work leaves the prompt as a draft by default"
+        );
+        assert_eq!(plan.prefill, Prefill::Paste);
+        let plan = run(&job("[feed.work]\nsubmit = true\n"), &items).unwrap();
+        assert!(plan.submit);
+        let plan = run(&job("[feed.work]\nprefill = \"mention\"\n"), &items).unwrap();
+        assert!(!plan.submit);
+        assert_eq!(plan.prefill, Prefill::Mention);
     }
 
     #[test]

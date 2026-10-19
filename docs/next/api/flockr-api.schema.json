@@ -12278,6 +12278,10 @@
                   "minimum": 0,
                   "type": "integer"
                 },
+                "draft": {
+                  "description": "True when the agent was started without the prompt and the prompt\nis typed into its input box as a draft, not submitted.",
+                  "type": "boolean"
+                },
                 "job_id": {
                   "type": "string"
                 },

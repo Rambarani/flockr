@@ -32,6 +32,7 @@ const DURATION_PATTERN: &str = "^([0-9]+[smhd])+$";
 
 pub(crate) const NOTIFY_VALUES: &[&str] = &["never", "on_failure", "on_change", "always"];
 pub(crate) const ENV_MODES: &[&str] = &["login-shell", "server"];
+pub(crate) const PREFILL_VALUES: &[&str] = &["paste", "mention"];
 pub(crate) const HANDOFF_WHEN: &[&str] = &["on_success", "on_change", "on_failure", "always"];
 pub(crate) const FEED_STATES: &[&str] = &["unread", "read", "done", "warn", "error"];
 
@@ -96,7 +97,17 @@ fn feed_work_table() -> Value {
                 "type": "string",
                 "minLength": 1,
                 "default": "claude",
-                "description": "The agent CLI, run in a new tab. Add {prompt_file} to pass the rendered prompt file anywhere; otherwise the prompt becomes the first argument."
+                "description": "The agent CLI, run in a new tab. Add {prompt_file} to pass the rendered prompt file anywhere (submit and prefill then do not apply); otherwise, with submit = true the prompt becomes the first argument, and with submit = false the agent starts alone and the prompt is typed into its input box."
+            },
+            "submit": {
+                "type": "boolean",
+                "default": false,
+                "description": "false (default): start the agent with no prompt and type the prompt into its input box as a draft, without Enter, so you add your own note and press Enter. true: pass the prompt to the agent, which runs it at once. Has no effect when agent_command contains {prompt_file}."
+            },
+            "prefill": {
+                "enum": PREFILL_VALUES,
+                "default": "paste",
+                "description": "What is typed when submit is false. paste: the whole prompt as a bracketed paste (Claude Code shows long pastes as a [Pasted text] placeholder). mention: one line, @<prompt file path> and a space, so the draft stays short. Not allowed together with submit = true."
             },
             "cwd": { "type": "string", "description": "Directory of the new tab; ~ and templates work. Default: the job's cwd when it sets one, else your home directory. A directory that does not exist falls back to the default." },
             "tab_title": text(MAX_TAB_TITLE_CHARS, "Title of the new tab (templated; cut to this length). Default: \"{{job.title}} · {{count}} items\"."),
@@ -136,7 +147,17 @@ fn handoff_table() -> Value {
                 "type": "string",
                 "minLength": 1,
                 "default": "claude",
-                "description": "The agent CLI, run in a new tab. Add {prompt_file} to pass the rendered prompt file anywhere; otherwise the prompt becomes the first argument."
+                "description": "The agent CLI, run in a new tab. Add {prompt_file} to pass the rendered prompt file anywhere (submit and prefill then do not apply); otherwise, with submit = true the prompt becomes the first argument, and with submit = false the agent starts alone and the prompt is typed into its input box."
+            },
+            "submit": {
+                "type": "boolean",
+                "default": true,
+                "description": "true (default): pass the prompt to the agent, which runs it at once. false: start the agent with no prompt and type the prompt into its input box as a draft, without Enter. Has no effect when agent_command contains {prompt_file}."
+            },
+            "prefill": {
+                "enum": PREFILL_VALUES,
+                "default": "paste",
+                "description": "What is typed when submit is false. paste: the whole prompt as a bracketed paste. mention: one line, @<prompt file path> and a space. Not allowed together with submit = true."
             },
             "cwd": { "type": "string", "description": "Directory of the new tab; ~ and templates work. Default: the job directory." },
             "tab_title": text(MAX_TAB_TITLE_CHARS, "Title of the new tab (templated; cut to this length)."),

@@ -1441,6 +1441,73 @@ pub(super) mod test_support {
         }
     }
 
+    /// A "shell" that puts its terminal in raw mode, optionally turns
+    /// bracketed paste on like an agent TUI, and writes every byte it
+    /// receives to a file. Returns the script and the file.
+    #[cfg(unix)]
+    pub(crate) fn write_stub_shell(
+        dir: &std::path::Path,
+        bracketed_paste: bool,
+    ) -> (std::path::PathBuf, std::path::PathBuf) {
+        use std::os::unix::fs::PermissionsExt;
+
+        let out = dir.join("stub-received.bin");
+        let script = dir.join("stub-shell.sh");
+        let enable = if bracketed_paste {
+            "printf '\\033[?2004h'\n"
+        } else {
+            ""
+        };
+        std::fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\nstty raw -echo 2>/dev/null\n{enable}exec cat > '{}'\n",
+                out.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        (script, out)
+    }
+
+    /// Wait until the pane's terminal has turned bracketed paste on.
+    #[cfg(unix)]
+    pub(crate) fn wait_for_bracketed_paste(app: &crate::app::App, pane: &str) {
+        let (ws_idx, pane_id) = app.parse_pane_id(pane).expect("pane");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while std::time::Instant::now() < deadline {
+            if app
+                .lookup_runtime_sender(ws_idx, pane_id)
+                .is_some_and(|runtime| runtime.bracketed_paste_enabled())
+            {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        panic!("the stub never turned bracketed paste on");
+    }
+
+    /// Wait until `out` holds a byte string satisfying `done`; returns it.
+    #[cfg(unix)]
+    pub(crate) fn wait_for_received(
+        out: &std::path::Path,
+        done: impl Fn(&[u8]) -> bool,
+    ) -> Vec<u8> {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let bytes = std::fs::read(out).unwrap_or_default();
+            if done(&bytes) {
+                return bytes;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the stub did not receive what was expected; got {:?}",
+                String::from_utf8_lossy(&bytes)
+            );
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+    }
+
     pub(crate) fn shutdown_test_runtimes(app: &mut crate::app::App) {
         let runtimes: Vec<_> = app.terminal_runtimes.drain().collect();
         for (_terminal_id, runtime) in runtimes {

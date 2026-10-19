@@ -10,7 +10,7 @@ use crate::feed::manager::{ActionLookupError, BusyReason, TaskKind, TaskResult};
 use crate::feed::runner::{ActionPlan, TaskPlan};
 use crate::jobs::definition::JobDef;
 
-use super::decisions::AgentTabErrorCodes;
+use super::decisions::{AgentTabErrorCodes, DraftSource};
 use super::responses;
 use crate::app::App;
 use crate::jobs::{feed_work, handoff, now_unix_ms};
@@ -431,21 +431,30 @@ impl App {
                 )
             }
         };
-        let command = match handoff::launch_command(&plan.agent_command, Some(&prompt_path)) {
-            Ok(command) => command,
+        let launch = match handoff::agent_launch(
+            &plan.agent_command,
+            Some(&prompt_path),
+            plan.submit,
+            plan.prefill,
+        ) {
+            Ok(launch) => launch,
             Err(message) => return responses::encode_error(id, "feed_work_invalid", message),
         };
-        let agent = command
-            .split_whitespace()
-            .next()
-            .and_then(|program| program.rsplit('/').next())
-            .unwrap_or("agent")
-            .to_owned();
+        let program = handoff::agent_program(&plan.agent_command);
+        let agent = program.unwrap_or("agent").to_owned();
+        let drafted = launch.draft.is_some();
+        let draft = launch.draft.map(|prefill| DraftSource {
+            prefill,
+            prompt_file: prompt_path.clone(),
+            known_agent: program
+                .is_some_and(|program| crate::detect::parse_agent_label(program).is_some()),
+        });
         let label = (!plan.tab_title.is_empty()).then(|| plan.tab_title.clone());
         match self.open_agent_tab(
             &params.job_id,
             &cwd,
-            command,
+            launch.command,
+            draft,
             label,
             AgentTabErrorCodes {
                 tab_failed: "feed_work_tab_failed",
@@ -463,6 +472,7 @@ impl App {
                     pane_id,
                     tab_title: plan.tab_title,
                     prompt_file: prompt_path.display().to_string(),
+                    draft: drafted,
                     skipped,
                     warnings: plan.warnings,
                 },
@@ -1076,6 +1086,7 @@ mod tests {
             pane_id,
             tab_title,
             prompt_file,
+            draft,
             skipped,
             warnings,
         } = fx.ok(work_params(&["b", "gone", "a", "b"]))
@@ -1085,6 +1096,7 @@ mod tests {
         assert_eq!(job_id, "sync");
         assert_eq!(count, 2, "duplicates and unknown ids are not counted");
         assert_eq!(agent, "claude");
+        assert!(draft, "feed.work leaves the prompt as a draft by default");
         assert_eq!(skipped, ["gone"]);
         assert!(warnings.is_empty(), "{warnings:?}");
         assert!(!tab_id.is_empty() && !pane_id.is_empty());
@@ -1239,5 +1251,216 @@ mod tests {
             "no tab opened"
         );
         assert!(fx.prompt_files().is_empty(), "nothing was written");
+    }
+
+    // ---- feed.work drafts --------------------------------------------------
+
+    use super::super::test_support::{
+        wait_for_bracketed_paste, wait_for_received, write_stub_shell,
+    };
+    use crate::app::draft_prompt::{DRAFT_READY_TIMEOUT, DRAFT_UNKNOWN_AGENT_DELAY};
+
+    fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+        haystack
+            .windows(needle.len())
+            .any(|window| window == needle)
+    }
+
+    /// Start work on item `a` in a tab whose "shell" records its input in
+    /// the returned file. Returns the pane id, the prompt file and that file.
+    fn start_stub_work(
+        fx: &mut Fixture,
+        name: &str,
+        bracketed: bool,
+        table: &str,
+    ) -> (String, PathBuf, PathBuf) {
+        fx.with_workspace();
+        let work = fx.root.join(name);
+        std::fs::create_dir_all(&work).unwrap();
+        let (script, out) = write_stub_shell(&work, bracketed);
+        fx.app.state.default_shell = script.display().to_string();
+        fx.loaded_work_feed(&work, table);
+        let ResponseResult::FeedWorkStarted {
+            pane_id,
+            prompt_file,
+            ..
+        } = fx.ok(work_params(&["a"]))
+        else {
+            panic!("expected a started work request");
+        };
+        (pane_id, PathBuf::from(prompt_file), out)
+    }
+
+    #[tokio::test]
+    async fn a_draft_starts_the_agent_alone_and_pastes_the_prompt_without_enter() {
+        let mut fx = Fixture::new("draft-paste");
+        let (pane, prompt_file, out) = start_stub_work(
+            &mut fx,
+            "paste",
+            true,
+            "[feed.work]\nagent_command = \"stubagent --flag\"\n",
+        );
+        let prompt = std::fs::read_to_string(&prompt_file).unwrap();
+        assert!(prompt.contains("Fix login"), "{prompt}");
+
+        // Starting only typed the command; the prompt is queued, not sent, and
+        // the call returned without waiting for the agent.
+        assert_eq!(fx.app.pending_drafts.len(), 1);
+        assert!(fx.app.next_draft_deadline().is_some());
+        let typed = wait_for_received(&out, |bytes| contains(bytes, b"stubagent --flag"));
+        assert!(
+            !contains(&typed, b"$(cat"),
+            "no prompt argument: {:?}",
+            String::from_utf8_lossy(&typed)
+        );
+        assert!(!contains(&typed, b"Fix login"));
+
+        // Not before the fixed delay for an agent flockr cannot detect.
+        wait_for_bracketed_paste(&fx.app, &pane);
+        let queued = Instant::now();
+        assert!(!fx
+            .app
+            .service_pending_drafts(queued + Duration::from_millis(200)));
+        assert_eq!(fx.app.pending_drafts.len(), 1);
+
+        assert!(fx.app.service_pending_drafts(
+            queued + DRAFT_UNKNOWN_AGENT_DELAY + Duration::from_millis(200)
+        ));
+        assert!(fx.app.pending_drafts.is_empty());
+        let expected = format!("\x1b[200~{prompt}\x1b[201~");
+        let received = wait_for_received(&out, |bytes| contains(bytes, expected.as_bytes()));
+        // The paste is the last thing the agent received: no Enter followed it.
+        assert!(received.ends_with(expected.as_bytes()), "{received:?}");
+        shutdown_test_runtimes(&mut fx.app);
+    }
+
+    #[tokio::test]
+    async fn a_mention_draft_types_one_line_with_the_prompt_file_path() {
+        let mut fx = Fixture::new("draft-mention");
+        let (pane, prompt_file, out) = start_stub_work(
+            &mut fx,
+            "mention",
+            true,
+            "[feed.work]\nagent_command = \"stubagent\"\nprefill = \"mention\"\n",
+        );
+        wait_for_bracketed_paste(&fx.app, &pane);
+        let queued = Instant::now();
+        assert!(fx.app.service_pending_drafts(
+            queued + DRAFT_UNKNOWN_AGENT_DELAY + Duration::from_millis(200)
+        ));
+        let expected = format!("\x1b[200~@{} \x1b[201~", prompt_file.display());
+        let received = wait_for_received(&out, |bytes| contains(bytes, expected.as_bytes()));
+        assert!(received.ends_with(expected.as_bytes()), "{received:?}");
+        assert!(
+            !contains(&received, b"Fix login"),
+            "the prompt text stays in the file"
+        );
+        shutdown_test_runtimes(&mut fx.app);
+    }
+
+    #[tokio::test]
+    async fn a_known_agent_that_never_becomes_ready_gets_the_draft_after_the_timeout() {
+        let mut fx = Fixture::new("draft-timeout");
+        // `claude` is a known agent, but the stub shell is never detected as one.
+        let (pane, prompt_file, out) = start_stub_work(&mut fx, "timeout", true, "");
+        let prompt = std::fs::read_to_string(&prompt_file).unwrap();
+        wait_for_bracketed_paste(&fx.app, &pane);
+        let queued = Instant::now();
+        assert!(!fx
+            .app
+            .service_pending_drafts(queued + DRAFT_READY_TIMEOUT - Duration::from_secs(1)));
+        assert_eq!(
+            fx.app.pending_drafts.len(),
+            1,
+            "still waiting for detection"
+        );
+        assert!(fx
+            .app
+            .service_pending_drafts(queued + DRAFT_READY_TIMEOUT + Duration::from_millis(200)));
+        assert!(fx.app.pending_drafts.is_empty());
+        let expected = format!("\x1b[200~{prompt}\x1b[201~");
+        let received = wait_for_received(&out, |bytes| contains(bytes, expected.as_bytes()));
+        assert!(received.ends_with(expected.as_bytes()));
+        shutdown_test_runtimes(&mut fx.app);
+    }
+
+    #[tokio::test]
+    async fn without_bracketed_paste_a_multi_line_prompt_falls_back_to_one_line() {
+        let mut fx = Fixture::new("draft-plain");
+        let (_pane, prompt_file, out) = start_stub_work(
+            &mut fx,
+            "plain",
+            false,
+            "[feed.work]\nagent_command = \"stubagent\"\n",
+        );
+        let queued = Instant::now();
+        assert!(fx.app.service_pending_drafts(
+            queued + DRAFT_UNKNOWN_AGENT_DELAY + Duration::from_millis(200)
+        ));
+        let expected = format!("@{} ", prompt_file.display());
+        let received = wait_for_received(&out, |bytes| contains(bytes, expected.as_bytes()));
+        assert!(received.ends_with(expected.as_bytes()), "{received:?}");
+        assert!(!contains(&received, b"Fix login"));
+        shutdown_test_runtimes(&mut fx.app);
+    }
+
+    #[tokio::test]
+    async fn submit_true_passes_the_prompt_on_the_command_line_and_queues_nothing() {
+        let mut fx = Fixture::new("draft-submit");
+        let (_pane, prompt_file, out) = start_stub_work(
+            &mut fx,
+            "submit",
+            true,
+            "[feed.work]\nagent_command = \"stubagent\"\nsubmit = true\n",
+        );
+        assert!(fx.app.pending_drafts.is_empty());
+        assert!(fx.app.next_draft_deadline().is_none());
+        let expected = format!("stubagent \"$(cat '{}')\"", prompt_file.display());
+        let received = wait_for_received(&out, |bytes| contains(bytes, expected.as_bytes()));
+        assert!(!contains(&received, b"\x1b[200~"), "no paste");
+        shutdown_test_runtimes(&mut fx.app);
+    }
+
+    #[tokio::test]
+    async fn a_prompt_file_placeholder_keeps_the_explicit_mechanism_whatever_submit_says() {
+        let mut fx = Fixture::new("draft-placeholder");
+        let (_pane, prompt_file, out) = start_stub_work(
+            &mut fx,
+            "placeholder",
+            true,
+            "[feed.work]\nagent_command = \"stubagent --file {prompt_file}\"\nsubmit = false\n",
+        );
+        assert!(fx.app.pending_drafts.is_empty(), "nothing is pasted");
+        let expected = format!("stubagent --file '{}'", prompt_file.display());
+        wait_for_received(&out, |bytes| contains(bytes, expected.as_bytes()));
+        let ResponseResult::FeedWorkStarted { draft, .. } = fx.ok(work_params(&["a"])) else {
+            panic!("expected a started work request");
+        };
+        assert!(
+            !draft,
+            "the response says the prompt was not left as a draft"
+        );
+        shutdown_test_runtimes(&mut fx.app);
+    }
+
+    #[tokio::test]
+    async fn a_draft_for_a_closed_pane_is_dropped() {
+        let mut fx = Fixture::new("draft-closed");
+        let (pane, _prompt_file, _out) = start_stub_work(
+            &mut fx,
+            "closed",
+            true,
+            "[feed.work]\nagent_command = \"stubagent\"\n",
+        );
+        assert_eq!(fx.app.pending_drafts.len(), 1);
+        fx.ok(Method::PaneClose(crate::api::schema::PaneTarget {
+            pane_id: pane,
+        }));
+        let queued = Instant::now();
+        assert!(!fx
+            .app
+            .service_pending_drafts(queued + DRAFT_UNKNOWN_AGENT_DELAY + Duration::from_secs(1)));
+        assert!(fx.app.pending_drafts.is_empty());
+        shutdown_test_runtimes(&mut fx.app);
     }
 }

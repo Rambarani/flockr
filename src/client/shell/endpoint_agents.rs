@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 use super::agent_groups::{
     group_agent_items, group_headers_enabled, item_layout, reveal_index, ungrouped_items,
     AgentGroupMember, AgentGroupSeed, AgentListItem, CollapsedGroups,

@@ -3,6 +3,8 @@ name: flockr-throwaway-repro
 description: Create and control a disposable named Flockr session from inside an existing Flockr session. Use for isolated Flockr runtime, pane, terminal, process, API, persistence, or agent reproductions that should be driven through the CLI/API without touching the default session.
 ---
 
+<!-- Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE. -->
+
 # Flockr throwaway reproduction
 
 Use a disposable named Flockr session when a reproduction needs a real Flockr server, panes, PTYs, agents, or socket API without risking the user's main session.

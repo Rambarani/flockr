@@ -1,3 +1,4 @@
+# Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 """One-time Windows SDK setup and Windows target linting from Unix hosts."""
 
 import argparse

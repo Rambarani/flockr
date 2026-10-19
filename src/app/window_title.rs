@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 //! Outer terminal window title.
 //!
 //! Flockr is a terminal emulator, so `OSC 0`/`OSC 2` written by a pane stops at

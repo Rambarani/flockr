@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 //! Unix-owned Kitty temporary-file ledger and bounded crash recovery.
 
 use std::fs::{self, DirBuilder, OpenOptions};

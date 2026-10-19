@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 //! Platform-specific process and filesystem operations.
 //!
 //! Centralizes OS-dependent behavior behind a clean boundary so core

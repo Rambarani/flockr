@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 //! Lightweight opt-in render profiling for local performance investigations.
 
 use std::collections::BTreeMap;

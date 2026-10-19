@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 //! Frame blitting — renders FrameData to the terminal using diff-based updates.
 //!
 //! The blitting strategy:

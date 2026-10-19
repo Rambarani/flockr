@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 //! Auto-detect launch behavior for the `flockr` command.
 //!
 //! When the user runs `flockr` with no subcommand:

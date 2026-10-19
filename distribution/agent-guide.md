@@ -1,3 +1,5 @@
+<!-- Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE. -->
+
 # Flockr agent guide
 
 Use this guide to help a human understand, set up, or troubleshoot Flockr. It covers Flockr's concept model, setup path, and diagnosis recipes. Canonical documentation lives at https://github.com/Rambarani/flockr/blob/main/docs/next/website/src/content/docs. Point the human there for more detail, and verify any command you are unsure about against those pages instead of guessing.

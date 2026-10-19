@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 pub(crate) const REMOTE_PREFERENCES_ENV_VAR: &str = "FLOCKR_REMOTE_PREFERENCES_IDENTITY";
 pub(crate) const REATTACH_COMMAND_ENV_VAR: &str = "FLOCKR_REATTACH_COMMAND";
 pub(crate) const REMOTE_KEYBINDINGS_ENV_VAR: &str = "FLOCKR_REMOTE_KEYBINDINGS";

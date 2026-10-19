@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 //! Blocking client socket transport for the headless server.
 //!
 //! This module owns the thin-client handshake, read loop, and writer loop.

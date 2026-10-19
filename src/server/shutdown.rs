@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 //! Why the server is stopping, recorded where the request arrives and logged
 //! once when shutdown begins.
 

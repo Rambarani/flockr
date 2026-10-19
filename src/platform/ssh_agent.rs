@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 //! Session-local indirection for SSH agents whose sockets belong to an attachment.
 
 use std::fs;

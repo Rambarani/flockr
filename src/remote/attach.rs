@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 //! Remote thin-client launcher over SSH command stdio.
 
 use super::{args::*, process::wait_with_output_timeout, restart_policy::*, shell_quote};

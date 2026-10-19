@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 //! Restart and shutdown detection through loginwindow's notify(3) keys.
 //!
 //! During a restart or shutdown, loginwindow kills LaunchServices-registered

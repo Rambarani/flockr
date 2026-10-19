@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 const API_SCHEMA_JSON: &str = include_str!("../../docs/next/api/flockr-api.schema.json");
 
 use crate::api::schema::{EmptyParams, Method, Request};

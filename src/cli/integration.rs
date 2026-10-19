@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 use crate::api::schema::IntegrationTarget;
 
 pub(super) fn run_integration_command(args: &[String]) -> std::io::Result<i32> {

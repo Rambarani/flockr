@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 #[cfg(test)]
 use crossterm::event::KeyEvent;
 use crossterm::event::{KeyCode, KeyModifiers};

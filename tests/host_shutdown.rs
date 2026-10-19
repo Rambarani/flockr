@@ -1,4 +1,5 @@
 #![cfg(target_os = "linux")]
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 
 use std::io::{BufRead, Read, Write};
 use std::os::unix::net::UnixStream;

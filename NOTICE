@@ -11,6 +11,10 @@ Upstream copyright and license notices in source files, vendored code (vendor/)
 and the CHANGELOG history are retained as they were. Third-party components
 under vendor/ and crates/ghostty-vt keep their own licenses.
 
+Every file from herdr v0.9.5 that flockr modified carries a header notice stating
+that it was changed (Apache-2.0 section 4(b)). Files that cannot carry an inline
+notice are listed at the end of this file. Files added by flockr are flockr's own work.
+
 Summary of modifications made in flockr (see `git log` for the exact changes):
 
 1. Rename. The product, crate, binary, config and state directories
@@ -56,3 +60,71 @@ Summary of modifications made in flockr (see `git log` for the exact changes):
 Artwork. herdr's logo, social card and screenshot are not used. assets/logo.svg and
 assets/logo.png are flockr's own mark. The notification sounds in assets/sounds
 come from herdr under the same Apache-2.0 license.
+
+Modified files that cannot carry an inline notice:
+
+These files are JSON, lock files, binary files, test fixtures, or files whose exact
+bytes are embedded, hashed or installed into users' agent configurations or skill
+directories (a header would force reinstall churn or break digests). They were
+changed from herdr v0.9.5 (some renamed from herdr to flockr):
+
+    Cargo.lock
+    assets/logo.png
+    distribution/agent-detection/grok.toml
+    distribution/agent-detection/kilo.toml
+    distribution/agent-detection/muse.toml
+    distribution/agent-detection/opencode.toml
+    distribution/agent-detection/pi.toml
+    distribution/latest.json
+    distribution/preview.json
+    docs/next/api/flockr-api.schema.json
+    docs/next/website/src/data/config-reference.json
+    skills/flockr/SKILL.md
+    src/detect/manifests/grok.toml
+    src/detect/manifests/kilo.toml
+    src/detect/manifests/muse.toml
+    src/detect/manifests/opencode.toml
+    src/detect/manifests/pi.toml
+    tests/fixtures/endpoint-method-shapes-v1.json
+    tests/fixtures/endpoint-snapshot-v1.json
+    tests/fixtures/session/current-flockr-dev-session.json
+    tests/fixtures/session/current-flockr-session.json
+    tests/fixtures/session/legacy-pre-tabs-v2.json
+
+Integration assets installed into agent configurations (all modified or renamed
+from herdr; src/integration/assets/):
+
+    src/integration/assets/antigravity_cli/flockr-agent-state.ps1
+    src/integration/assets/antigravity_cli/flockr-agent-state.sh
+    src/integration/assets/claude/flockr-agent-state.ps1
+    src/integration/assets/claude/flockr-agent-state.sh
+    src/integration/assets/codex/flockr-agent-state.ps1
+    src/integration/assets/codex/flockr-agent-state.sh
+    src/integration/assets/copilot/flockr-agent-state.ps1
+    src/integration/assets/copilot/flockr-agent-state.sh
+    src/integration/assets/cursor/flockr-agent-state.ps1
+    src/integration/assets/cursor/flockr-agent-state.sh
+    src/integration/assets/devin/flockr-agent-state.ps1
+    src/integration/assets/devin/flockr-agent-state.sh
+    src/integration/assets/droid/flockr-agent-state.ps1
+    src/integration/assets/droid/flockr-agent-state.sh
+    src/integration/assets/grok/flockr-agent-state.ps1
+    src/integration/assets/grok/flockr-agent-state.sh
+    src/integration/assets/hermes/__init__.py
+    src/integration/assets/hermes/plugin.yaml
+    src/integration/assets/kilo/flockr-agent-state.js
+    src/integration/assets/kimi/flockr-agent-state.ps1
+    src/integration/assets/kimi/flockr-agent-state.sh
+    src/integration/assets/letta/flockr-agent-session.ps1
+    src/integration/assets/letta/flockr-agent-session.sh
+    src/integration/assets/mastracode/flockr-agent-state.ps1
+    src/integration/assets/mastracode/flockr-agent-state.sh
+    src/integration/assets/omp/flockr-agent-state.ts
+    src/integration/assets/opencode/flockr-agent-state.js
+    src/integration/assets/opencode/flockr-tui-session.js
+    src/integration/assets/opencode/tui.js
+    src/integration/assets/pi/flockr-agent-state.ts
+    src/integration/assets/qodercli/flockr-agent-state.ps1
+    src/integration/assets/qodercli/flockr-agent-state.sh
+    src/integration/assets/qwen/flockr-agent-session.ps1
+    src/integration/assets/qwen/flockr-agent-session.sh

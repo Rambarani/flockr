@@ -1,4 +1,5 @@
 #Requires -Version 7.0
+# Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 <# Local interactive qualification, deliberately excluded from normal CI.
    F12 aborts before the next injected gesture. Use an isolated unlocked desktop.
    SendInput has an unavoidable focus race: do not use this while doing other work.

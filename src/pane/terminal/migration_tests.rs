@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 //! Bounded semantic migration gates. No opaque IDs, timing, or render scheduling
 //! decisions enter this oracle. Keep the same runner for old/candidate captures.
 use super::*;

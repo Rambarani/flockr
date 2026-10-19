@@ -1,3 +1,4 @@
+# Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 """Portable case catalogue and strict evidence verdicts for the local Windows gauntlet.
 
 This is not a host simulator. A report cannot turn absent Windows evidence into a pass.

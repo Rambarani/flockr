@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 use std::path::{Path, PathBuf};
 
 const PLUGIN_CONFIG_PATH_COMPONENT_MAX_CHARS: usize = 120;

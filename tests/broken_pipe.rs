@@ -1,4 +1,5 @@
 #![cfg(unix)]
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 
 use std::os::fd::{FromRawFd, OwnedFd};
 use std::os::unix::process::ExitStatusExt;

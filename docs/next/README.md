@@ -1,3 +1,5 @@
+<!-- Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE. -->
+
 # flockr
 
 > flockr is inspired by, and forked from, [herdr](https://github.com/herdrdev/herdr) (Apache-2.0). I really like herdr, I wanted a few extra features, so I cloned it and added them. Thank you to the herdr authors.

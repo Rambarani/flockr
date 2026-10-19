@@ -1,4 +1,5 @@
 #Requires -Version 7.0
+# Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 param([Parameter(Mandatory)][string] $PlanPath)
 . "$PSScriptRoot/Common.ps1"
 $plan = Read-GauntletJson $PlanPath

@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 use super::super::{config_security_descriptor, config_security_sddl};
 use super::*;
 use std::process::Command;

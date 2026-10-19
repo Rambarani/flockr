@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 /// Build the key event the Ghostty app would build from an OS key event, so
 /// libghostty can encode it for the pane's current keyboard modes: physical
 /// key, modifiers, the layout text, the unshifted codepoint, and Shift marked

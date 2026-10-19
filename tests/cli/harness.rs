@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 pub(super) use std::fs;
 pub(super) use std::io::{BufRead, BufReader, Write};
 pub(super) use std::os::unix::net::{UnixListener, UnixStream};

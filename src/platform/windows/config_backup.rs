@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 //! Recovery-backed writes for existing Windows integration configs.
 
 use std::fs::{self, File, OpenOptions};

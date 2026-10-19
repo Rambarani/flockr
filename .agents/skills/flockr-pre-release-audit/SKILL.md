@@ -3,6 +3,8 @@ name: flockr-pre-release-audit
 description: Audit flockr release readiness by comparing commits since the base release against next-release changelog and docs. Use when asked to run or apply the repo's pre-release audit, validate docs/next before release, inspect issue refs that release CI will close, or finalize release docs for flockr.
 ---
 
+<!-- Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE. -->
+
 # Flockr Pre-release Audit
 
 Use this skill only inside the flockr repository.

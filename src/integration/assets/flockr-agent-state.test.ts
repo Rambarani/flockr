@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 import { afterEach, expect, test } from "bun:test";
 import { rm } from "node:fs/promises";
 import net, { createServer, type Server } from "node:net";

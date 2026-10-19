@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 /// Maximum characters in a rendered outer terminal window title.
 pub(crate) const MAX_WINDOW_TITLE_CHARS: usize = 200;
 

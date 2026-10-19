@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 use crate::api::schema::{EmptyParams, Method, Request, ServerLiveHandoffParams};
 
 pub(super) fn run_server_command(args: &[String]) -> std::io::Result<Option<i32>> {

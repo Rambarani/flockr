@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 use crate::api::schema::InstalledPluginInfo;
 
 pub(super) fn plugin_config_dir(plugin_id: &str) -> std::path::PathBuf {

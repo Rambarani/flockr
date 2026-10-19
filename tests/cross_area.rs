@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 //! Cross-area integration tests for end-to-end persistence flows.
 
 #![cfg(unix)]

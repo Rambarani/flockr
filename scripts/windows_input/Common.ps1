@@ -1,3 +1,4 @@
+# Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 # Shared test helpers. Dot-sourcing does not touch the desktop or console.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'

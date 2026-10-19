@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 //! Client-owned Kitty `t=t` files, prepared only at the final output boundary.
 //!
 //! A returned path is published: it must stay readable until the terminal unlinks

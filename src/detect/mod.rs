@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 //! Agent state detection via terminal tail pattern matching.
 //!
 //! Each pane's live bottom-of-buffer text is read periodically and matched

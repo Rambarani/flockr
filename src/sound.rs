@@ -1,3 +1,4 @@
+// Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 //! Sound notifications for agent state changes.
 //!
 //! Plays the embedded default mp3s, synthesized built-in tones, or user files

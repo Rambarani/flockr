@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 set -euo pipefail
 
 if [[ $# -ne 8 ]]; then

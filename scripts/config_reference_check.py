@@ -1,3 +1,4 @@
+# Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 """Check the website config reference against the Rust config model.
 
 Walks the serde structs in src/config/*.rs starting from the root `Config`

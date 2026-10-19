@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 from __future__ import annotations
 
 import argparse

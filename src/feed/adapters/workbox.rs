@@ -10,6 +10,9 @@
 //! `owner/repo#123`), Status, From, Key, Snoozed until, Today) and the snippet as
 //! `body`, the same facts workbox's own detail pane shows.
 //!
+//! Items on workbox's today list (`today: true`) also belong to a first
+//! "Today" tab, through `also_groups`, whatever their own category is.
+//!
 //! Items are grouped into categories (tabs in the Feed overlay) from their
 //! `source` and `reason`, following workbox's own `tabs::classify`: see
 //! `CATEGORIES` and `RULES`. The `tab` field is not used, because workbox
@@ -36,7 +39,11 @@ impl Default for AdaptOptions {
     }
 }
 
-/// The categories, in tab order: id, title, and the shorter title for narrow
+/// The id of the Today tab: it comes first, and an item on workbox's today
+/// list (`today: true`) lists it in `also_groups`, keeping its own category.
+const TODAY_GROUP: (&str, &str, &str) = ("today", "Today", "Today");
+
+/// The categories after Today, in tab order: id, title, and the shorter title for narrow
 /// places. Items that match no rule are left without a group and land in the
 /// feed's implicit "Other".
 const CATEGORIES: &[(&str, &str, &str)] = &[
@@ -258,6 +265,9 @@ pub(crate) fn adapt(
         if let Some(group) = category(&item.source, &item.reason) {
             entry.insert("group".into(), group.into());
         }
+        if item.today {
+            entry.insert("also_groups".into(), serde_json::json!([TODAY_GROUP.0]));
+        }
         entry.insert("fields".into(), serde_json::Value::Array(fields(&item)));
         if let Some(snippet) = item.snippet.as_deref().and_then(non_empty) {
             entry.insert("body".into(), snippet.into());
@@ -282,8 +292,8 @@ pub(crate) fn adapt(
         serde_json::json!({
             "version": 1,
             "title": options.title,
-            "groups": CATEGORIES
-                .iter()
+            "groups": std::iter::once(&TODAY_GROUP)
+                .chain(CATEGORIES.iter())
                 .map(|(id, title, short_title)| {
                     serde_json::json!({"id": id, "title": title, "short_title": short_title})
                 })
@@ -608,6 +618,7 @@ mod tests {
         assert_eq!(
             order,
             [
+                "today",
                 "new-house-prs",
                 "ticket-mentions",
                 "jira-assigned",
@@ -618,8 +629,9 @@ mod tests {
         );
         let titles: Vec<_> = parsed.groups.iter().map(|g| g.title.as_str()).collect();
         assert_eq!(
-            titles[..4],
+            titles[..5],
             [
+                "Today",
                 "New House PR Requests",
                 "JIRA Mentions",
                 "New Tickets Assigned",
@@ -643,8 +655,43 @@ mod tests {
         )
         .unwrap();
         let parsed = parse_feed(&feed.to_string()).unwrap();
-        assert_eq!(parsed.groups.len(), 5);
+        assert_eq!(parsed.groups.len(), 6, "Today plus the five categories");
         assert!(parsed.groups.iter().all(|g| g.id != "other"));
+    }
+
+    #[test]
+    fn today_is_the_first_tab_and_holds_every_today_item_besides_its_category() {
+        let (feed, _) = adapted(&AdaptOptions::default());
+        assert_eq!(
+            feed["groups"][0],
+            serde_json::json!({"id": "today", "title": "Today", "short_title": "Today"})
+        );
+        // SAMPLE: the Jira item is not on the list, the GitHub one is.
+        let first = &feed["items"][0];
+        let second = &feed["items"][1];
+        assert!(first.get("also_groups").is_none());
+        assert_eq!(second["also_groups"], serde_json::json!(["today"]));
+        assert_eq!(second["group"], "new-house-prs", "its own tab is kept");
+
+        let parsed = parse_feed(&feed.to_string()).expect("valid feed");
+        assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+        assert_eq!(parsed.groups[0].id, "today");
+        assert!(parsed.items[0].also_groups.is_empty());
+        assert_eq!(parsed.items[1].also_groups, ["today"]);
+        assert_eq!(parsed.items[1].group.as_deref(), Some("new-house-prs"));
+    }
+
+    #[test]
+    fn a_today_item_outside_every_category_is_on_today_and_in_other() {
+        let (feed, _) = adapt(
+            r#"[{"id":"a","title":"A","source":"slack","reason":"x","today":true}]"#,
+            &AdaptOptions::default(),
+        )
+        .unwrap();
+        let parsed = parse_feed(&feed.to_string()).unwrap();
+        assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+        assert_eq!(parsed.items[0].group.as_deref(), Some("other"));
+        assert_eq!(parsed.items[0].also_groups, ["today"]);
     }
 
     #[test]

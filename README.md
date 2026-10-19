@@ -466,6 +466,7 @@ The command prints one JSON object on stdout, at most 4 MiB, and **nothing else*
 | `groups` | Optional, up to 16 categories in tab order: `{"id", "title", "short_title"}`. |
 | `items[].id` | Required, unique. Duplicates keep the first. |
 | `items[].group` | Optional id of a declared group. Missing or undeclared goes to an implicit `other` group. |
+| `items[].also_groups` | Optional, up to 4 more declared group ids. The item shows under each of those tabs as well as its `group`; category and sidebar counts include it in each, and All counts it once. Unknown ids are ignored with a note. |
 | `items[].title` | Row text. Defaults to the id. |
 | `items[].subtitle`, `badge` | Secondary text; a short label such as a ticket key. |
 | `items[].state` | `unread`, `read` (default), `done`, `warn`, `error`. Drives the dot and the unread count. |
@@ -477,7 +478,7 @@ The command prints one JSON object on stdout, at most 4 MiB, and **nothing else*
 
 Limits: 500 items; 200 characters for `id` and `title`. Unknown fields are ignored. A bad item or action is dropped with a note (see `flockr feed show`) rather than failing the feed. `flockr job schema --feed` prints the exact JSON Schema.
 
-**Action keys:** a single visible character. Not allowed: named keys (`Enter`, `esc`, arrows, `tab`, `space`), or `j k q g G R S / x X w`. In a feed with groups, `[`, `]` and `0` to `9` are reserved too. Running an action starts its command with the job's environment plus `FLOCKR_FEED_ITEM_ID` and `FLOCKR_FEED_ACTION_KEY` (60 s max), then refreshes the feed. Commands stay on the server; clients send only job, item id and key.
+**Action keys:** a single visible character. Not allowed: named keys (`Enter`, `esc`, arrows, `tab`, `space`), or `j k q g G R S / x X w W`. In a feed with groups, `[`, `]` and `0` to `9` are reserved too. Running an action starts its command with the job's environment plus `FLOCKR_FEED_ITEM_ID` and `FLOCKR_FEED_ACTION_KEY` (60 s max), then refreshes the feed. Commands stay on the server; clients send only job, item id and key.
 
 ### Adapters
 
@@ -486,7 +487,7 @@ workbox list --json | flockr feed adapt workbox --title "Today (workbox)"
 workbox list --tab today --json | flockr feed adapt workbox     # only the today tab
 ```
 
-`flockr feed adapt workbox` reads the JSON array from `workbox list --json` on stdin and prints a feed. It sorts items into category tabs: New House PRs, JIRA Mentions, New Tickets, Old House PRs, My PRs, and Other. Each item gets actions `d` (done), `s` (seen), `t` (today / untoday) and `D` (delete: `workbox mark <id> delete`, which hides the item permanently; it asks `y/n` first). `--bin` changes the program the actions run. It needs no server.
+`flockr feed adapt workbox` reads the JSON array from `workbox list --json` on stdin and prints a feed. It sorts items into category tabs: Today (every item on the workbox today list, also shown under its own category), New House PRs, JIRA Mentions, New Tickets, Old House PRs, My PRs, and Other. Each item gets actions `d` (done), `s` (seen), `t` (today / untoday) and `D` (delete: `workbox mark <id> delete`, which hides the item permanently; it asks `y/n` first). `--bin` changes the program the actions run. It needs no server.
 
 ### Sidebar section
 
@@ -524,11 +525,12 @@ Master-detail view: list on the left, detail pane on the right (title, state, su
 | `x` | Select / unselect the current item (a `✓` column; the header shows `N selected`) |
 | `X` | Clear the selection |
 | `w` | **Work on it**: open a new tab and start an agent (default `claude`) with the selected items, or the current item if none are selected |
+| `W` | **Work on all**: the same, with every item of the list as shown (current category tab and filter), up to 50 |
 | `esc` or `q` | Leave zoom, then clear the selection, then the filter, then close |
 
 #### Work on items in a new agent tab (`x` / `w`)
 
-Select items with `x` (or click the `✓` column, or ctrl/cmd-click a row). Selections survive category tabs and filtering, and are cleared when you switch feeds. Press `w`: flockr renders a prompt from the items, writes it to `<state_dir>/jobs/<id>/work/<time>.md`, opens a focused tab, and starts the agent there. By default the agent starts **without** submitting anything: the prompt is typed into its input box as a draft, so you add your own instructions and press Enter yourself. Up to 50 items per request.
+Select items with `x` (or click the `✓` column, or ctrl/cmd-click a row). Selections survive category tabs and filtering, and are cleared when you switch feeds. Press `w`: flockr renders a prompt from the items, writes it to `<state_dir>/jobs/<id>/work/<time>.md`, opens a focused tab, and starts the agent there. By default the agent starts **without** submitting anything: the prompt is typed into its input box as a draft, so you add your own instructions and press Enter yourself. `W` does the same for every item of the current list (the category tab and the filter), for example the whole Today tab; more than 50 items are cut to the first 50 and the status line says so. Up to 50 items per request.
 
 Configure it per job with an optional `[feed.work]` table (all keys optional):
 
@@ -680,7 +682,7 @@ flockr job schedule workbox-sync "0 10 * * 1-5"
 **What you see:**
 
 - A **Today (workbox)** section under the agent list in the sidebar, with the unread count. Click a row to open the item. Right-click for done / seen / today.
-- `prefix+f` opens the Feed overlay: category tabs, detail pane, `d` `s` `t` `D` actions, `R` refresh, `S` sync now, `x` select and `w` to start Claude on the selected items.
+- `prefix+f` opens the Feed overlay: category tabs, detail pane, `d` `s` `t` `D` actions, `R` refresh, `S` sync now, `x` select, `w` to start Claude on the selected items and `W` on the whole tab (for example Today).
 - When a sync changes something, a toast asks "N items need you. Start Claude?". The question waits in the Decisions tab (`prefix+t`, then `tab`). `enter` opens a tab running `claude` with `prompt.md` filled in. Nothing starts until you press it.
 - If the feed command fails (for example offline), the last list stays and the sidebar header shows `!`.
 

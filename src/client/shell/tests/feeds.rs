@@ -46,6 +46,7 @@ fn item(id: &str, title: &str, state: FeedItemState) -> FeedItemInfo {
         body: None,
         fields: Vec::new(),
         group: None,
+        also_groups: Vec::new(),
         actions: vec![
             FeedActionInfo {
                 key: "d".into(),
@@ -2899,4 +2900,184 @@ fn the_sidebar_menu_asks_before_a_confirm_action_and_n_cancels() {
     let input = press(&mut state, 'y');
     assert_eq!(requests(&input)[0].method, delete_request("nh-1"));
     assert!(state.overlay.is_none());
+}
+
+// ----- a Today tab: items in more than one group, and W ---------------------
+
+/// `today_items` with a first "today" group: nh-1 and nh-3 are also on it, as
+/// `also_groups`, while their own group stays `reviews` or `mentions`.
+fn feed_with_today() -> (FeedSummary, Vec<FeedItemInfo>) {
+    let (mut feed, mut items) = grouped_feed();
+    for item in &mut items {
+        if item.id == "nh-1" || item.id == "nh-3" {
+            item.also_groups = vec!["today".into()];
+        }
+    }
+    feed.groups
+        .insert(0, group_info("today", "Today", None, 2, 1));
+    (feed, items)
+}
+
+#[test]
+fn the_today_tab_lists_items_whose_own_group_is_another_tab() {
+    let mut state = overlay_state(vec![feed_with_today()]);
+    let frame = compose_at(&mut state, 200, 50);
+    let bar = tab_labels(&state, &frame);
+    assert!(bar.contains("Today 2 ●1"), "{bar:?}");
+    assert!(
+        bar.contains("All 5 ●2"),
+        "All counts every item once: {bar:?}"
+    );
+    press(&mut state, '1');
+    assert_eq!(selected_group(&state).as_deref(), Some("today"));
+    assert_eq!(titles(&state), ["nh-1", "nh-3"]);
+    // The item is still in its own category as well.
+    press(&mut state, '2');
+    assert_eq!(selected_group(&state).as_deref(), Some("reviews"));
+    assert_eq!(titles(&state), ["nh-1", "nh-2"]);
+    press(&mut state, '0');
+    assert_eq!(titles(&state).len(), 5, "All shows each item once");
+}
+
+#[test]
+fn w_capital_works_on_every_item_of_the_tab_and_the_filter_narrows_it() {
+    let mut state = overlay_state(vec![feed_with_today()]);
+    compose_at(&mut state, 200, 50);
+    press(&mut state, '1');
+    let sent = requests(&press(&mut state, 'W'));
+    assert_eq!(sent[0].method, work_params(&["nh-1", "nh-3"]));
+    assert!(compose_at(&mut state, 200, 50).contains("starting an agent with 2 items"));
+
+    press(&mut state, '/');
+    for ch in "reply".chars() {
+        press(&mut state, ch);
+    }
+    state.handle_raw_events(vec![key(KeyCode::Enter)]);
+    let sent = requests(&press(&mut state, 'W'));
+    assert_eq!(sent[0].method, work_params(&["nh-3"]));
+
+    // `w` still means the selection or the current item.
+    let sent = requests(&press(&mut state, 'w'));
+    assert_eq!(sent[0].method, work_params(&["nh-3"]));
+}
+
+#[test]
+fn w_capital_in_the_all_tab_of_a_flat_feed_takes_the_whole_list() {
+    let mut state = overlay_state(vec![workbox_feed()]);
+    compose(&mut state);
+    let sent = requests(&press(&mut state, 'W'));
+    assert_eq!(
+        sent[0].method,
+        work_params(&["nh-1", "nh-2", "nh-3", "nh-4", "nh-5"])
+    );
+}
+
+#[test]
+fn w_capital_cuts_to_the_work_limit_and_says_so() {
+    let items: Vec<FeedItemInfo> = (0..60)
+        .map(|n| item(&format!("n-{n:02}"), "Item", FeedItemState::Read))
+        .collect();
+    let mut state = overlay_state(vec![(
+        summary("workbox-sync", "Today (workbox)", 60, 0, 1),
+        items,
+    )]);
+    compose(&mut state);
+    let sent = requests(&press(&mut state, 'W'));
+    let Method::FeedWork(params) = &sent[0].method else {
+        panic!("expected feed.work, got {:?}", sent[0].method);
+    };
+    assert_eq!(
+        params.item_ids.len(),
+        crate::jobs::feed_work::MAX_WORK_ITEMS
+    );
+    assert_eq!(params.item_ids[0], "n-00");
+    let status = status_line(&state).expect("status");
+    assert!(status.contains("first 50 of 60"), "{status}");
+}
+
+#[test]
+fn the_footer_offers_w_and_capital_w_with_the_list_size() {
+    let mut state = overlay_state(vec![feed_with_today()]);
+    let frame = compose_at(&mut state, 220, 50);
+    assert!(frame.contains("w work · W work all (5)"), "{frame}");
+    press(&mut state, '1');
+    let frame = compose_at(&mut state, 220, 50);
+    assert!(frame.contains("w work · W work all (2)"), "{frame}");
+}
+
+#[test]
+fn a_group_row_menu_offers_work_on_all_in_that_tab() {
+    let mut state = state_with_feeds(&Config::default(), vec![feed_with_today()]);
+    let row = state.hits.feed.groups[0].rect;
+    right_click(&mut state, row);
+    let labels: Vec<String> = match &state.overlay {
+        Some(ClientShellOverlay::ContextMenu(menu)) => menu
+            .items()
+            .iter()
+            .map(|item| item.label.to_string())
+            .collect(),
+        other => panic!("expected a context menu, got {other:?}"),
+    };
+    assert_eq!(labels[0], "Work on all in Today");
+    let mut outcome = ClientShellInput::default();
+    state.activate_context_menu_item(0, &mut outcome);
+    assert_eq!(requests(&outcome)[0].method, work_params(&["nh-1", "nh-3"]));
+}
+
+#[test]
+fn toggling_today_shows_up_in_the_today_tab_after_the_refresh() {
+    let mut state = overlay_state(vec![feed_with_today()]);
+    compose_at(&mut state, 200, 50);
+    press(&mut state, '1');
+    assert_eq!(titles(&state), ["nh-1", "nh-3"]);
+
+    // `t` on nh-2 (in Reviews) puts it on the list; the next poll brings the
+    // refreshed feed with a newer revision.
+    let (mut after, mut items) = feed_with_today();
+    items[1].also_groups = vec!["today".into()];
+    after.groups[0] = group_info("today", "Today", None, 3, 2);
+    after.revision = 4;
+    let later = Instant::now() + Duration::from_secs(10);
+    let list = requests(&tick(&mut state, later));
+    let (_, actions) = answer(
+        &mut state,
+        &list[0],
+        feed_list_result(vec![after.clone()], 9),
+    );
+    let get = actions
+        .iter()
+        .find_map(|action| match action {
+            ClientShellAction::Endpoint { request, .. } => Some((**request).clone()),
+            _ => None,
+        })
+        .expect("get request");
+    answer(&mut state, &get, detail_result(after, items));
+    assert_eq!(titles(&state), ["nh-1", "nh-2", "nh-3"]);
+    assert!(compose_at(&mut state, 200, 50).contains("Today 3 ●2"));
+
+    // Taking an item off the list drops it from the tab, and an empty
+    // declared tab stays (with 0).
+    let (mut empty, mut items) = feed_with_today();
+    for item in &mut items {
+        item.also_groups.clear();
+    }
+    empty.groups[0] = group_info("today", "Today", None, 0, 0);
+    empty.revision = 5;
+    let later = Instant::now() + Duration::from_secs(20);
+    let list = requests(&tick(&mut state, later));
+    let (_, actions) = answer(
+        &mut state,
+        &list[0],
+        feed_list_result(vec![empty.clone()], 10),
+    );
+    let get = actions
+        .iter()
+        .find_map(|action| match action {
+            ClientShellAction::Endpoint { request, .. } => Some((**request).clone()),
+            _ => None,
+        })
+        .expect("get request");
+    answer(&mut state, &get, detail_result(empty, items));
+    assert!(titles(&state).is_empty());
+    assert!(compose_at(&mut state, 200, 50).contains("Today 0"));
 }

@@ -218,7 +218,7 @@ impl ClientShellState {
         self.feeds
             .items_of(&feed.job_id)
             .iter()
-            .filter(|item| group.is_none_or(|group| item.group.as_deref() == Some(group)))
+            .filter(|item| group.is_none_or(|group| item.in_group(group)))
             .filter(|item| matches_filter(item, &overlay.filter))
             .collect()
     }
@@ -494,6 +494,31 @@ impl ClientShellState {
         if ids.is_empty() {
             ids.extend(self.selected_feed_item().map(|item| item.id));
         }
+        self.start_feed_work(job_id, ids, outcome);
+    }
+
+    /// `W`: start an agent tab on every item of the list as shown (the
+    /// current category and filter), up to the work limit.
+    fn work_on_all_feed_items(&mut self, outcome: &mut ClientShellInput) {
+        let Some(job_id) = self.current_feed().map(|feed| feed.job_id.clone()) else {
+            return;
+        };
+        let ids: Vec<String> = self
+            .visible_feed_items()
+            .into_iter()
+            .map(|item| item.id.clone())
+            .collect();
+        self.start_feed_work(job_id, ids, outcome);
+    }
+
+    /// Ask the server to start an agent on these items; more than the work
+    /// limit are cut to the first ones, and the status line says so.
+    pub(super) fn start_feed_work(
+        &mut self,
+        job_id: String,
+        mut ids: Vec<String>,
+        outcome: &mut ClientShellInput,
+    ) {
         let say = |state: &mut Self, text: String| {
             if let Some(overlay) = state.feed_overlay_mut() {
                 overlay.status = Some(text);
@@ -503,6 +528,8 @@ impl ClientShellState {
             say(self, "nothing to work on".to_owned());
             return;
         }
+        let total = ids.len();
+        ids.truncate(crate::jobs::feed_work::MAX_WORK_ITEMS);
         let count = ids.len();
         let method = Method::FeedWork(FeedWorkParams {
             job_id: job_id.clone(),
@@ -517,10 +544,15 @@ impl ClientShellState {
             );
             return;
         }
-        say(
-            self,
-            format!("starting an agent with {count} item{}…", plural(count)),
-        );
+        let text = if total > count {
+            format!(
+                "starting an agent with the first {count} of {total} items (limit {})…",
+                crate::jobs::feed_work::MAX_WORK_ITEMS
+            )
+        } else {
+            format!("starting an agent with {count} item{}…", plural(count))
+        };
+        say(self, text);
         self.request_feed_work(method, job_id, outcome);
     }
 
@@ -694,6 +726,7 @@ impl ClientShellState {
                     }
                 }
                 Some('w') => self.work_on_feed_items(outcome),
+                Some('W') => self.work_on_all_feed_items(outcome),
                 Some('R') => self.refresh_current_feed(outcome),
                 Some('S') => self.sync_current_feed(outcome),
                 Some('j') => self.move_feed_selection(1),
@@ -1449,6 +1482,23 @@ fn render_feed(
         );
     }
     let marked_count = state.marked_feed_count();
+    let work_all = format!("w work · W work all ({})", state.visible_feed_items().len());
+    let with_work_all = |lines: &[&str]| -> Vec<String> {
+        // Each hint is tried with `W work all (N)` first, then as it was, so
+        // a narrow terminal keeps the hints it always had.
+        lines
+            .iter()
+            .flat_map(|line| {
+                let wider = line.replace("w work", &work_all);
+                let plain = (*line).to_owned();
+                if wider == plain {
+                    vec![plain]
+                } else {
+                    vec![wider, plain]
+                }
+            })
+            .collect()
+    };
     let hint: Vec<String> = if overlay.filtering {
         vec![
             "type to filter   enter keep   esc clear".to_owned(),
@@ -1472,7 +1522,7 @@ fn render_feed(
             "esc clear".to_owned(),
         ]
     } else if category_bar {
-        [
+        with_work_all(&[
             "j/k move   [/] or 0-9 category   x select   w work   enter open   / filter   S sync   R refresh   tab feeds   esc close",
             "j/k move   [/] or 0-9 category   x select   w work   enter open   / filter   R refresh   esc close",
             "j/k move   [/] 0-9 category   x select   w work   enter open   esc close",
@@ -1482,11 +1532,9 @@ fn render_feed(
             "[/] category   enter open   esc close",
             "enter open   esc close",
             "esc close",
-        ]
-        .map(str::to_owned)
-        .to_vec()
+        ])
     } else {
-        [
+        with_work_all(&[
             "j/k move   ctrl-d/u scroll   enter open   x select   w work   / filter   S sync   R refresh   tab feeds   space zoom   esc close",
             "j/k move   ctrl-d/u scroll   x select   w work   enter open   / filter   R refresh   esc close",
             "j/k move   x select   w work   enter open   / filter   esc close",
@@ -1495,9 +1543,7 @@ fn render_feed(
             "enter open   / filter   R refresh   esc close",
             "enter open   R refresh   esc close",
             "esc close",
-        ]
-        .map(str::to_owned)
-        .to_vec()
+        ])
     };
     // Leave room for the "a-b / n" position at the right when it is drawn.
     let hint_room = usize::from(text_width).saturating_sub(

@@ -14,7 +14,9 @@
 //! (optionally with a `short_title` for narrow places) and tag items with a
 //! `group` id. The list order is the tab order; items whose group is missing
 //! or not declared are collected in an implicit `other` group. A feed without
-//! `groups` is one flat list, exactly as before.
+//! `groups` is one flat list, exactly as before. An item may also list up to
+//! four more declared group ids in `also_groups`, so it shows under each of
+//! those tabs as well as its primary `group` ("All" still counts it once).
 //!
 //! The parser is strict about the document shape and forgiving about
 //! details: unknown fields are ignored, an unknown state becomes `read`, long
@@ -45,6 +47,8 @@ pub(crate) const MAX_FIELD_VALUE_CHARS: usize = 500;
 /// Most groups a feed may declare (the implicit `other` group is extra).
 pub(crate) const MAX_GROUPS: usize = 16;
 pub(crate) const MAX_GROUP_ID_CHARS: usize = 40;
+/// Most extra groups (`also_groups`) an item may belong to.
+pub(crate) const MAX_ALSO_GROUPS: usize = 4;
 pub(crate) const MAX_GROUP_TITLE_CHARS: usize = 60;
 pub(crate) const MAX_GROUP_SHORT_TITLE_CHARS: usize = 20;
 /// The id of the implicit group for items without a known group.
@@ -81,10 +85,11 @@ pub(crate) const RESERVED_NAMES: &[&str] = &[
 ];
 ///
 /// `x` and `X` select items and clear the selection, `w` starts an agent on
-/// the selection (`[feed.work]`). A feed written before they were reserved
+/// the selection and `W` on every item of the current list (`[feed.work]`). A feed written before they were reserved
 /// that still uses one of them for an action keeps the item but loses that
 /// action, with a diagnostic.
-pub(crate) const RESERVED_CHARS: &[char] = &['j', 'k', 'q', 'g', 'G', 'R', 'S', '/', 'x', 'X', 'w'];
+pub(crate) const RESERVED_CHARS: &[char] =
+    &['j', 'k', 'q', 'g', 'G', 'R', 'S', '/', 'x', 'X', 'w', 'W'];
 /// Also reserved, but only in a feed that declares `groups`: the overlay
 /// switches category with these, so a flat feed keeps them for actions.
 pub(crate) const GROUPED_RESERVED_CHARS: &[char] =
@@ -139,6 +144,9 @@ pub(crate) struct ItemRecord {
     /// the parser resolves it to a declared group or `other`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) group: Option<String>,
+    /// More declared groups the item also belongs to; resolved with `group`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) also_groups: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) actions: Vec<ActionRecord>,
 }
@@ -546,6 +554,7 @@ fn parse_item(
     let body = parse_body(object, &context, diagnostics);
     let fields = parse_fields(object, &context, diagnostics);
     let group = optional_text(object, "group", MAX_GROUP_ID_CHARS, &context, diagnostics);
+    let also_groups = parse_also_groups(object, &context, diagnostics);
     Some(ItemRecord {
         id,
         title,
@@ -569,8 +578,50 @@ fn parse_item(
         body,
         fields,
         group,
+        also_groups,
         actions,
     })
+}
+
+/// The optional `also_groups` array of strings (ids are checked against the
+/// declared groups later, in `resolve_groups`).
+fn parse_also_groups(
+    object: &serde_json::Map<String, serde_json::Value>,
+    context: &str,
+    diagnostics: &mut Diagnostics,
+) -> Vec<String> {
+    let list = match object.get("also_groups") {
+        None | Some(serde_json::Value::Null) => return Vec::new(),
+        Some(serde_json::Value::Array(list)) => list,
+        Some(_) => {
+            diagnostics.push(format!("{context}: also_groups must be an array; ignored"));
+            return Vec::new();
+        }
+    };
+    let mut ids: Vec<String> = Vec::new();
+    for value in list {
+        if ids.len() >= MAX_ALSO_GROUPS {
+            diagnostics.push(format!(
+                "{context}: more than {MAX_ALSO_GROUPS} also_groups; the rest are dropped"
+            ));
+            break;
+        }
+        let Some(text) = value.as_str() else {
+            diagnostics.push(format!(
+                "{context}: also_groups must contain only strings; entry dropped"
+            ));
+            continue;
+        };
+        let cleaned = clean_text(text);
+        if cleaned.is_empty() {
+            continue;
+        }
+        let (id, _) = clip(&cleaned, MAX_GROUP_ID_CHARS);
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+    ids
 }
 
 /// Read the optional feed-level `groups` array: `{id, title, short_title?}`.
@@ -639,11 +690,25 @@ fn resolve_groups(
     if groups.is_empty() {
         for item in items.iter_mut() {
             item.group = None;
+            item.also_groups.clear();
         }
         return;
     }
     let mut needs_other = false;
     for item in items.iter_mut() {
+        let primary = item.group.clone();
+        let declared = |id: &str| groups.iter().any(|group| group.id == id);
+        let extra = std::mem::take(&mut item.also_groups);
+        for id in extra {
+            if !declared(&id) {
+                diagnostics.push(format!(
+                    "item {:?}: unknown also_groups entry {id:?}; ignored",
+                    item.id
+                ));
+            } else if primary.as_deref() != Some(id.as_str()) {
+                item.also_groups.push(id);
+            }
+        }
         match item.group.take() {
             Some(id) if groups.iter().any(|group| group.id == id) => item.group = Some(id),
             other => {
@@ -1040,7 +1105,7 @@ mod tests {
 
     #[test]
     fn action_keys_must_be_one_visible_unreserved_character() {
-        for key in ["d", "s", "t", "u", "1", "?", "D", "é", "W"] {
+        for key in ["d", "s", "t", "u", "1", "?", "D", "é"] {
             assert!(action_key_problem(key).is_none(), "{key}");
         }
         for key in [
@@ -1052,7 +1117,7 @@ mod tests {
                 "{key}"
             );
         }
-        for key in ["j", "k", "q", "g", "G", "R", "/", "x", "X", "w"] {
+        for key in ["j", "k", "q", "g", "G", "R", "/", "x", "X", "w", "W"] {
             assert!(
                 action_key_problem(key).is_some_and(|text| text.contains("reserved")),
                 "{key}"
@@ -1106,6 +1171,61 @@ mod tests {
                 "missing {expected:?} in\n{joined}"
             );
         }
+    }
+
+    #[test]
+    fn also_groups_put_an_item_in_several_declared_groups() {
+        let feed = parse(
+            r#"{"version":1,"groups":[{"id":"today"},{"id":"a"},{"id":"b"}],"items":[
+                {"id":"1","group":"a","also_groups":["today","a","nope","today"]},
+                {"id":"2","also_groups":["today"]},
+                {"id":"3","group":"b","also_groups":"today"},
+                {"id":"4","group":"b","also_groups":["today",7,"a","b","today","x1","x2"]}]}"#,
+        );
+        assert_eq!(
+            feed.items[0].also_groups,
+            ["today"],
+            "no repeats, none of its own"
+        );
+        assert_eq!(feed.items[1].group.as_deref(), Some("other"));
+        assert_eq!(feed.items[1].also_groups, ["today"]);
+        assert!(feed.items[2].also_groups.is_empty());
+        assert_eq!(feed.items[3].also_groups, ["today", "a"]);
+        let joined = feed.diagnostics.join("\n");
+        assert!(
+            joined.contains("unknown also_groups entry \"nope\""),
+            "{joined}"
+        );
+        assert!(joined.contains("also_groups must be an array"), "{joined}");
+        assert!(
+            joined.contains("also_groups must contain only strings"),
+            "{joined}"
+        );
+    }
+
+    #[test]
+    fn at_most_four_also_groups_are_read() {
+        let feed = parse(
+            r#"{"version":1,"groups":[{"id":"a"},{"id":"b"},{"id":"c"},{"id":"d"},{"id":"e"}],
+                "items":[{"id":"1","group":"a","also_groups":["b","c","d","e","a"]}]}"#,
+        );
+        assert_eq!(feed.items[0].also_groups, ["b", "c", "d", "e"]);
+        assert!(feed
+            .diagnostics
+            .iter()
+            .any(|line| line.contains("more than 4 also_groups")));
+    }
+
+    #[test]
+    fn a_flat_feed_ignores_also_groups() {
+        let feed = parse(r#"{"version":1,"items":[{"id":"1","also_groups":["a"]}]}"#);
+        assert!(feed.items[0].also_groups.is_empty());
+    }
+
+    #[test]
+    fn w_capital_is_reserved_like_w() {
+        assert!(action_key_problem("W").is_some_and(|text| text.contains("reserved")));
+        assert!(action_key_problem("w").is_some_and(|text| text.contains("reserved")));
     }
 
     #[test]

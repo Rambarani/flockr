@@ -25,9 +25,10 @@ instead, copy `job.toml` and `prompt.md` from this directory to
   count). Click a row to open the item, right-click for **done**, **seen**,
   **today** and **delete** (asks y/n first), click the header to collapse, click `+N more` for the overlay.
 - **Feed overlay** (`prefix+f`): the full list. `enter` opens the link, `d`, `s`,
-  `t` and `D` run the actions, `/` filters, `R` refreshes, `esc` closes. `x`
-  marks items (`X` clears), and `w` opens a tab and starts Claude with the marked
-  items (the current item when none is marked) as the prompt; see the
+  `t` and `D` run the actions, `[`/`]` or `1`-`9` pick a category tab (the first is **Today**: items you put there with `t`), `/` filters, `R` refreshes, `esc` closes. `x`
+  marks items (`X` clears), `w` opens a tab and starts Claude with the marked
+  items (the current item when none is marked) as the prompt, and `W` does it
+  with every item of the current tab (for example all of Today); see the
   commented `[feed.work]` block in `job.toml` for the working directory
   (`~/code/work/<repo>` for GitHub PRs) and prompt.
 - **CLI**: `flockr feed list`, `flockr feed show workbox-sync`,
@@ -67,8 +68,8 @@ overlay.
 
 ## Variants
 
-- Today tab only: use the commented `command` in `job.toml`
-  (`workbox list --tab today --json`).
+- Today only as the whole feed: use the commented `command` in `job.toml`
+  (`workbox list --tab today --json`). The normal feed already has a Today tab.
 - Different title: `flockr feed adapt workbox --title "..."`. A `title` in the
   `[feed]` table wins over it.
 - No questions, just the list: delete the `[handoff]` table.

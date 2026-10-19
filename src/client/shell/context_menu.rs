@@ -79,10 +79,17 @@ impl ClientContextMenuOverlay {
             }
             ClientContextMenuTarget::Feed {
                 item: feed_item,
+                group,
                 collapsed,
                 ..
             } => {
                 let mut items = Vec::new();
+                if let Some((_, title)) = group {
+                    items.push(item_for(
+                        format!("Work on all in {title}"),
+                        Action::FeedWorkAll,
+                    ));
+                }
                 if let Some(feed_item) = feed_item {
                     if feed_item.url.is_some() {
                         items.push(item("Open link", Action::FeedOpenUrl));
@@ -302,9 +309,12 @@ impl ClientShellState {
                 }
                 _ => {}
             },
-            ClientContextMenuTarget::Feed { job_id, item, .. } => {
-                self.activate_feed_context_action(job_id, item, action, outcome)
-            }
+            ClientContextMenuTarget::Feed {
+                job_id,
+                item,
+                group,
+                ..
+            } => self.activate_feed_context_action(job_id, item, group, action, outcome),
             ClientContextMenuTarget::Agent { pane_id, .. } => match action {
                 ClientContextMenuAction::RenameAgent => {
                     self.open_rename_agent_overlay(&pane_id);

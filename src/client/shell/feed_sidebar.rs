@@ -585,22 +585,41 @@ impl ClientShellState {
                         .map(|action| (action.key, action.title))
                         .collect(),
                 }),
+                group: None,
                 collapsed,
             }
         } else if let Some((job_id, collapsed)) = self.feed_header_at(point) {
             ClientContextMenuTarget::Feed {
                 job_id,
                 item: None,
+                group: None,
                 collapsed,
             }
-        } else if let Some(job_id) = self
-            .feed_more_at(point)
-            .or_else(|| self.feed_group_at(point).map(|(job_id, _)| job_id))
-        {
+        } else if let Some((job_id, group_id)) = self.feed_group_at(point) {
+            let collapsed = self.group_is_collapsed(&self.active_endpoint_id, &feed_key(&job_id));
+            let title = self
+                .feeds
+                .summary(&job_id)
+                .and_then(|feed| feed.groups.iter().find(|group| group.id == group_id))
+                .map(|group| {
+                    group
+                        .short_title
+                        .clone()
+                        .unwrap_or_else(|| group.title.clone())
+                })
+                .unwrap_or_else(|| group_id.clone());
+            ClientContextMenuTarget::Feed {
+                job_id,
+                item: None,
+                group: Some((group_id, title)),
+                collapsed,
+            }
+        } else if let Some(job_id) = self.feed_more_at(point) {
             let collapsed = self.group_is_collapsed(&self.active_endpoint_id, &feed_key(&job_id));
             ClientContextMenuTarget::Feed {
                 job_id,
                 item: None,
+                group: None,
                 collapsed,
             }
         } else {
@@ -620,10 +639,23 @@ impl ClientShellState {
         &mut self,
         job_id: String,
         item: Option<ClientFeedMenuItem>,
+        group: Option<(String, String)>,
         action: ClientContextMenuAction,
         outcome: &mut ClientShellInput,
     ) {
         match action {
+            ClientContextMenuAction::FeedWorkAll => {
+                if let Some((group_id, _)) = group {
+                    let ids: Vec<String> = self
+                        .feeds
+                        .items_of(&job_id)
+                        .iter()
+                        .filter(|item| item.in_group(&group_id))
+                        .map(|item| item.id.clone())
+                        .collect();
+                    self.start_feed_work(job_id, ids, outcome);
+                }
+            }
             ClientContextMenuAction::FeedOpenUrl => {
                 if let Some(url) = item.and_then(|item| item.url) {
                     outcome.actions.push(ClientShellAction::OpenSafeWebUrl(url));

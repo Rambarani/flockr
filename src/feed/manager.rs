@@ -59,9 +59,10 @@ impl StoredFeed {
             .iter()
             .map(|group| {
                 let members = || {
-                    self.items
-                        .iter()
-                        .filter(|item| item.group.as_deref() == Some(group.id.as_str()))
+                    self.items.iter().filter(|item| {
+                        item.group.as_deref() == Some(group.id.as_str())
+                            || item.also_groups.contains(&group.id)
+                    })
                 };
                 FeedGroupInfo {
                     id: group.id.clone(),
@@ -384,6 +385,7 @@ impl FeedManager {
                     })
                     .collect(),
                 group: item.group.clone(),
+                also_groups: item.also_groups.clone(),
                 actions: item
                     .actions
                     .iter()
@@ -508,6 +510,42 @@ mod tests {
             "items":[{"id":"1","state":"unread","group":"y"},{"id":"2","group":"x"},
                      {"id":"3","state":"unread"}]}"#;
         assert!(reloaded.finish(result(feed(regrouped), 2), &dir).changed);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn an_item_counts_in_every_group_it_belongs_to_but_once_overall() {
+        let dir = temp_dir("also-groups");
+        let mut manager = FeedManager::new();
+        manager.begin("sync", &dir, TaskKind::Refresh).unwrap();
+        let text = r#"{"version":1,"groups":[{"id":"today"},{"id":"x"},{"id":"y"}],
+            "items":[{"id":"1","state":"unread","group":"x","also_groups":["today"]},
+                     {"id":"2","group":"y","also_groups":["today"]},
+                     {"id":"3","state":"unread","group":"y"}]}"#;
+        let finished = manager.finish(result(feed(text), 1), &dir);
+        assert_eq!(
+            (finished.count, finished.unread),
+            (3, 2),
+            "All counts each once"
+        );
+        let summary = manager.summary("sync", &dir, None, "Sync");
+        let counts: Vec<_> = summary
+            .groups
+            .iter()
+            .map(|g| (g.id.as_str(), g.count, g.unread))
+            .collect();
+        assert_eq!(counts, [("today", 2, 1), ("x", 1, 1), ("y", 2, 1)]);
+        let items = manager.items("sync", &dir, None);
+        assert_eq!(items[0].also_groups, ["today"]);
+        assert!(items[0].in_group("today") && items[0].in_group("x") && !items[0].in_group("y"));
+        // Toggling an item on or off is a visible change.
+        let off = r#"{"version":1,"groups":[{"id":"today"},{"id":"x"},{"id":"y"}],
+            "items":[{"id":"1","state":"unread","group":"x"},
+                     {"id":"2","group":"y","also_groups":["today"]},
+                     {"id":"3","state":"unread","group":"y"}]}"#;
+        assert!(manager.finish(result(feed(off), 2), &dir).changed);
+        let summary = manager.summary("sync", &dir, None, "Sync");
+        assert_eq!(summary.groups[0].count, 1);
         std::fs::remove_dir_all(dir).unwrap();
     }
 

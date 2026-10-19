@@ -625,10 +625,7 @@ mod tests {
         let plan = run(&job, &[one, two]).unwrap();
         assert!(plan.warnings.is_empty(), "{:?}", plan.warnings);
         let cwd = plan.cwd.expect("cwd from the repo field");
-        assert!(
-            cwd.ends_with("code/work/platform-ui"),
-            "{cwd:?}"
-        );
+        assert!(cwd.ends_with("code/work/platform-ui"), "{cwd:?}");
         assert_eq!(plan.tab_title, "workbox · 2 items");
         assert!(plan
             .prompt

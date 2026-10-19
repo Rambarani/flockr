@@ -18,6 +18,9 @@ use crate::feed::format::{
 use crate::jobs::definition::{
     format_duration, DEFAULT_TIMEOUT, JOB_ID_MAX_CHARS, MAX_TIMEOUT, MIN_INTERVAL, MIN_TIMEOUT,
 };
+use crate::jobs::feed_work::{
+    MAX_ITEMS_TEXT_CHARS, MAX_ITEM_BODY_CHARS, MAX_WORK_ITEMS, WORK_TEMPLATE_VARIABLES,
+};
 use crate::jobs::handoff::{
     MAX_ASK_CHARS, MAX_CONTEXT_VALUE_CHARS, MAX_FEED_JSON_CHARS, MAX_PROMPT_CHARS,
     MAX_STDERR_CHARS, MAX_STDOUT_CHARS, MAX_TAB_TITLE_CHARS, TEMPLATE_VARIABLES,
@@ -70,8 +73,40 @@ fn feed_table() -> Value {
         "required": ["command"],
         "properties": {
             "command": argv("Required argv array whose stdout is the feed JSON and nothing else."),
-            "title": { "type": "string", "description": "Section title; wins over the feed's own title." }
+            "title": { "type": "string", "description": "Section title; wins over the feed's own title." },
+            "work": { "$ref": "#/$defs/feedWork" }
         }
+    })
+}
+
+fn feed_work_table() -> Value {
+    let variables = WORK_TEMPLATE_VARIABLES
+        .iter()
+        .map(|name| format!("{{{{{name}}}}}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    json!({
+        "type": "object",
+        "description": format!(
+            "What `w` does in the Feed overlay: start an agent in a new tab on the selected items (or the current item when none is selected). Every key is optional; without the table, `claude` starts in the job's cwd (else your home directory) with a built-in prompt. Template variables in tab_title, cwd, agent_command, prompt and the prompt file: {variables} and {{{{item.field.<label>}}}} (a field of the first item, label in lower case with other characters as _). {{{{item.*}}}} is the first selected item. Substitution is a single pass, so item text cannot inject further placeholders; an unknown or missing variable renders empty with a warning."
+        ),
+        "additionalProperties": false,
+        "properties": {
+            "agent_command": {
+                "type": "string",
+                "minLength": 1,
+                "default": "claude",
+                "description": "The agent CLI, run in a new tab. Add {prompt_file} to pass the rendered prompt file anywhere; otherwise the prompt becomes the first argument."
+            },
+            "cwd": { "type": "string", "description": "Directory of the new tab; ~ and templates work. Default: the job's cwd when it sets one, else your home directory. A directory that does not exist falls back to the default." },
+            "tab_title": text(MAX_TAB_TITLE_CHARS, "Title of the new tab (templated; cut to this length). Default: \"{{job.title}} · {{count}} items\"."),
+            "prompt_file": {
+                "type": "string",
+                "description": format!("Prompt template, relative to the job directory. The rendered prompt is capped at {MAX_PROMPT_CHARS} characters; {{{{items}}}} at {MAX_ITEMS_TEXT_CHARS} (each body at {MAX_ITEM_BODY_CHARS}), {{{{items_json}}}} at {MAX_FEED_JSON_CHARS}, at most {MAX_WORK_ITEMS} items are used.")
+            },
+            "prompt": { "type": "string", "description": "Inline prompt template; use this or prompt_file, not both. Default: a built-in prompt that lists the items and asks for a summary and a plan before any change." }
+        },
+        "not": { "required": ["prompt", "prompt_file"] }
     })
 }
 
@@ -190,6 +225,7 @@ pub(crate) fn job_schema() -> Value {
         },
         "$defs": {
             "feed": feed_table(),
+            "feedWork": feed_work_table(),
             "handoff": handoff_table(),
             "jobsConfig": jobs_config(),
             "systemJob": system_job_def()
@@ -404,6 +440,12 @@ mod tests {
                 "command = [\"x\"]\nevery = \"1h\"\n[feed]\nzzz = 1\n"
             ))
         );
+        assert_eq!(
+            property_names(&schema["$defs"]["feedWork"]),
+            sorted(accepted_keys(
+                "command = [\"x\"]\nevery = \"1h\"\n[feed]\ncommand = [\"y\"]\n[feed.work]\nzzz = 1\n"
+            ))
+        );
     }
 
     #[test]
@@ -430,6 +472,10 @@ mod tests {
         }
         assert!(ok("[handoff]\nwhen = \"exit:x\"\n").is_err());
         assert!(ok("[handoff]\nprompt = \"a\"\nprompt_file = \"b\"\n").is_err());
+        assert!(ok(
+            "[feed]\ncommand = [\"y\"]\n[feed.work]\nprompt = \"a\"\nprompt_file = \"b\"\n"
+        )
+        .is_err());
         assert!(
             ok("[feed]\ntitle = \"t\"\n").is_err(),
             "feed.command is required"
@@ -578,7 +624,7 @@ notify = "never"
         for name in RESERVED_NAMES {
             assert!(action_key_problem(name).is_some(), "{name}");
         }
-        for fine in ["d", "s", "t", "x", "1", "!"] {
+        for fine in ["d", "s", "t", "u", "1", "!"] {
             assert!(action_key_problem(fine).is_none(), "{fine}");
         }
         assert_eq!(key["maxLength"], 1);

@@ -31,6 +31,13 @@ const PROMPT_PREVIEW_BYTES: usize = 64 * 1024;
 /// new tab: the tab sets its own.
 const TAB_ENV_SKIP: &[&str] = &["PWD", "OLDPWD", "SHLVL", "_"];
 
+/// The API error codes `open_agent_tab` reports, so each caller keeps its own.
+#[derive(Clone, Copy)]
+pub(crate) struct AgentTabErrorCodes {
+    pub(crate) tab_failed: &'static str,
+    pub(crate) launch_failed: &'static str,
+}
+
 impl App {
     /// The job's feed as a handoff sees it, after the run's refresh.
     fn handoff_feed_snapshot(
@@ -363,7 +370,32 @@ impl App {
         };
         let command = handoff::launch_command(&record.agent_command, prompt_path.as_deref())
             .map_err(|message| ("decision_command_invalid", message))?;
-        let env = self.decision_tab_env(&record.job_id);
+        self.open_agent_tab(
+            &record.job_id,
+            &cwd,
+            command,
+            (!record.tab_title.is_empty()).then(|| record.tab_title.clone()),
+            AgentTabErrorCodes {
+                tab_failed: "decision_tab_failed",
+                launch_failed: "decision_launch_failed",
+            },
+        )
+    }
+
+    /// Open a focused tab in `cwd` with the job's environment rules, titled
+    /// `label`, and type `command` into it. The one code path under both a
+    /// decision's Start and `feed.work`, so the agent owns a real terminal
+    /// and the user can watch and steer it. `Err` is an API error code and
+    /// message.
+    pub(crate) fn open_agent_tab(
+        &mut self,
+        job_id: &str,
+        cwd: &Path,
+        command: String,
+        label: Option<String>,
+        codes: AgentTabErrorCodes,
+    ) -> Result<(String, String), (&'static str, String)> {
+        let env = self.decision_tab_env(job_id);
 
         let created = self.handle_tab_create(
             "decision:start:tab".into(),
@@ -371,7 +403,7 @@ impl App {
                 workspace_id: None,
                 cwd: Some(cwd.display().to_string()),
                 focus: true,
-                label: (!record.tab_title.is_empty()).then(|| record.tab_title.clone()),
+                label,
                 env,
             },
         );
@@ -384,10 +416,7 @@ impl App {
                 let message = serde_json::from_str::<ErrorResponse>(&created)
                     .map(|error| error.error.message)
                     .unwrap_or_else(|_| "the new tab did not report its pane".into());
-                return Err((
-                    "decision_tab_failed",
-                    format!("could not open a tab: {message}"),
-                ));
+                return Err((codes.tab_failed, format!("could not open a tab: {message}")));
             }
         };
         let sent = self.handle_pane_send_input(
@@ -400,7 +429,7 @@ impl App {
         );
         if serde_json::from_str::<ErrorResponse>(&sent).is_ok() {
             return Err((
-                "decision_launch_failed",
+                codes.launch_failed,
                 format!("opened tab {tab_id} but could not start the agent in it: {sent}"),
             ));
         }

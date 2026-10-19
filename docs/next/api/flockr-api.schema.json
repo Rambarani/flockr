@@ -2604,6 +2604,26 @@
           ],
           "type": "object"
         },
+        "FeedWorkParams": {
+          "description": "Start an agent tab working on feed items. Added after the first release of\nthe feed methods, so it is its own method and servers without it answer\n`unsupported_method`.",
+          "properties": {
+            "item_ids": {
+              "description": "The ids of the items to work on, in the order to list them. Ids the\nfeed no longer has are skipped and reported in the response.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "job_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "job_id",
+            "item_ids"
+          ],
+          "type": "object"
+        },
         "IntegrationInstallParams": {
           "properties": {
             "target": {
@@ -7119,6 +7139,22 @@
             },
             "params": {
               "$ref": "#/schemas/request/$defs/DecisionTarget"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "feed.work",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/FeedWorkParams"
             }
           },
           "required": [
@@ -12227,6 +12263,65 @@
                 "item_id",
                 "key",
                 "started"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "agent": {
+                  "description": "The first word of the agent command, such as `claude`.",
+                  "type": "string"
+                },
+                "count": {
+                  "description": "Items in the prompt.",
+                  "format": "uint32",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "job_id": {
+                  "type": "string"
+                },
+                "pane_id": {
+                  "type": "string"
+                },
+                "prompt_file": {
+                  "description": "Where the rendered prompt was written.",
+                  "type": "string"
+                },
+                "skipped": {
+                  "description": "Ids that were asked for but are no longer in the feed.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "tab_id": {
+                  "type": "string"
+                },
+                "tab_title": {
+                  "description": "The title the tab was given.",
+                  "type": "string"
+                },
+                "type": {
+                  "const": "feed_work_started",
+                  "type": "string"
+                },
+                "warnings": {
+                  "description": "Things the user may want to know: a missing template variable, a\nfallback directory.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "type",
+                "job_id",
+                "count",
+                "agent",
+                "tab_id",
+                "pane_id",
+                "prompt_file"
               ],
               "type": "object"
             },

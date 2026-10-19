@@ -23,6 +23,7 @@ const CLIENT_SHELL_METHODS: &[&str] = &[
     "feed.list",
     "feed.refresh",
     "feed.run_action",
+    "feed.work",
     "integration.install",
     "integration.list",
     "job.get",
@@ -362,6 +363,12 @@ mod tests {
         ] {
             assert_eq!(actual.remove(method).as_deref(), Some(digest), "{method}");
         }
+
+        // `feed.work` was added after the other feed methods: its own digest.
+        assert_eq!(
+            actual.remove("feed.work").as_deref(),
+            Some("776ef7512e4f70afb3ffc8b7a5c624df6b54a0d32fb374592f30049c10e478a7")
+        );
 
         // Decision methods and the schedule editor: frozen from their first release.
         for (method, digest) in [

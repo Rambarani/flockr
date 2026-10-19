@@ -305,6 +305,92 @@ fn a_cron_that_never_fires_and_a_long_timeout_are_flagged() {
 }
 
 #[test]
+fn feed_work_problems_are_found() {
+    let sandbox = Sandbox::new("feed-work");
+    let work = |extra: &str| {
+        format!("{SH_JOB}[feed]\ncommand = [\"sh\", \"run.sh\"]\n[feed.work]\n{extra}")
+    };
+
+    let unknown = sandbox.job(
+        "work-unknown-var",
+        &[
+            ("job.toml", &work("prompt = \"{{items}} {{nope}}\"\n")),
+            ("run.sh", ""),
+        ],
+    );
+    assert_error(
+        &sandbox.validate(&unknown, false),
+        "feed.work.prompt: unknown template variable {{nope}}",
+    );
+
+    let missing = sandbox.job(
+        "work-missing-prompt",
+        &[
+            ("job.toml", &work("prompt_file = \"gone.md\"\n")),
+            ("run.sh", ""),
+        ],
+    );
+    assert_error(
+        &sandbox.validate(&missing, false),
+        "feed.work.prompt_file: could not read",
+    );
+
+    let in_file = sandbox.job(
+        "work-var-in-file",
+        &[
+            ("job.toml", &work("prompt_file = \"w.md\"\n")),
+            ("w.md", "hello {{itemz.title}}"),
+            ("run.sh", ""),
+        ],
+    );
+    let report = sandbox.validate(&in_file, false);
+    assert_error(&report, "{{itemz.title}}");
+    assert!(has(&report.errors, "w.md"), "{:?}", report.errors);
+
+    let both = sandbox.job(
+        "work-both",
+        &[
+            (
+                "job.toml",
+                &work("prompt = \"a\"\nprompt_file = \"w.md\"\n"),
+            ),
+            ("run.sh", ""),
+        ],
+    );
+    assert!(!sandbox.validate(&both, false).ok);
+
+    let fine = sandbox.job(
+        "work-ok",
+        &[
+            (
+                "job.toml",
+                &work(
+                    "agent_command = \"claude --file {prompt_file}\"\ncwd = \"/nonexistent-dir/{{item.field.repo}}\"\ntab_title = \"{{job.title}} {{count}}\"\nprompt = \"{{items}} {{items_json}} {{item.url}} {{item.field.repo}}\"\n",
+                ),
+            ),
+            ("run.sh", ""),
+        ],
+    );
+    let report = sandbox.validate(&fine, false);
+    assert!(report.ok, "{:?}", report.errors);
+
+    let bad_cwd = sandbox.job(
+        "work-cwd",
+        &[
+            ("job.toml", &work("cwd = \"/nonexistent-dir\"\n")),
+            ("run.sh", ""),
+        ],
+    );
+    let report = sandbox.validate(&bad_cwd, false);
+    assert!(report.ok);
+    assert!(
+        has(&report.warnings, "feed.work.cwd"),
+        "{:?}",
+        report.warnings
+    );
+}
+
+#[test]
 fn handoff_problems_are_found() {
     let sandbox = Sandbox::new("handoff");
     let handoff = |extra: &str| format!("{SH_JOB}[handoff]\n{extra}");

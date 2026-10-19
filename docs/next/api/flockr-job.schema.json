@@ -15,11 +15,50 @@
         "title": {
           "description": "Section title; wins over the feed's own title.",
           "type": "string"
+        },
+        "work": {
+          "$ref": "#/$defs/feedWork"
         }
       },
       "required": [
         "command"
       ],
+      "type": "object"
+    },
+    "feedWork": {
+      "additionalProperties": false,
+      "description": "What `w` does in the Feed overlay: start an agent in a new tab on the selected items (or the current item when none is selected). Every key is optional; without the table, `claude` starts in the job's cwd (else your home directory) with a built-in prompt. Template variables in tab_title, cwd, agent_command, prompt and the prompt file: {{items}} {{items_json}} {{count}} {{date}} {{job.id}} {{job.title}} {{feed.title}} {{item.id}} {{item.title}} {{item.subtitle}} {{item.badge}} {{item.url}} {{item.state}} {{item.group}} {{item.updated_at}} {{item.body}} and {{item.field.<label>}} (a field of the first item, label in lower case with other characters as _). {{item.*}} is the first selected item. Substitution is a single pass, so item text cannot inject further placeholders; an unknown or missing variable renders empty with a warning.",
+      "not": {
+        "required": [
+          "prompt",
+          "prompt_file"
+        ]
+      },
+      "properties": {
+        "agent_command": {
+          "default": "claude",
+          "description": "The agent CLI, run in a new tab. Add {prompt_file} to pass the rendered prompt file anywhere; otherwise the prompt becomes the first argument.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "cwd": {
+          "description": "Directory of the new tab; ~ and templates work. Default: the job's cwd when it sets one, else your home directory. A directory that does not exist falls back to the default.",
+          "type": "string"
+        },
+        "prompt": {
+          "description": "Inline prompt template; use this or prompt_file, not both. Default: a built-in prompt that lists the items and asks for a summary and a plan before any change.",
+          "type": "string"
+        },
+        "prompt_file": {
+          "description": "Prompt template, relative to the job directory. The rendered prompt is capped at 200000 characters; {{items}} at 60000 (each body at 2000), {{items_json}} at 48000, at most 50 items are used.",
+          "type": "string"
+        },
+        "tab_title": {
+          "description": "Title of the new tab (templated; cut to this length). Default: \"{{job.title}} · {{count}} items\".",
+          "maxLength": 60,
+          "type": "string"
+        }
+      },
       "type": "object"
     },
     "handoff": {

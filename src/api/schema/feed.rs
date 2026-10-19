@@ -151,3 +151,14 @@ pub struct FeedRunActionParams {
     /// The action's key as listed on the item.
     pub key: String,
 }
+
+/// Start an agent tab working on feed items. Added after the first release of
+/// the feed methods, so it is its own method and servers without it answer
+/// `unsupported_method`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct FeedWorkParams {
+    pub job_id: String,
+    /// The ids of the items to work on, in the order to list them. Ids the
+    /// feed no longer has are skipped and reported in the response.
+    pub item_ids: Vec<String>,
+}

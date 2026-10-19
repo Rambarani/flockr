@@ -100,6 +100,21 @@ pub(crate) enum JobSource {
 pub(crate) struct FeedDef {
     pub(crate) command: Vec<String>,
     pub(crate) title: Option<String>,
+    /// The optional `[feed.work]` table: how `w` in the Feed overlay starts
+    /// an agent on the selected items. Rendered by `super::feed_work`.
+    pub(crate) work: Option<FeedWorkDef>,
+}
+
+/// The optional `[feed.work]` table. Every key is optional.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct FeedWorkDef {
+    pub(crate) agent_command: Option<String>,
+    pub(crate) cwd: Option<String>,
+    pub(crate) tab_title: Option<String>,
+    /// Prompt template file, relative to the job directory.
+    pub(crate) prompt_file: Option<String>,
+    /// Inline prompt template (alternative to `prompt_file`).
+    pub(crate) prompt: Option<String>,
 }
 
 /// The optional `[handoff]` table: after a run the job may ask the user to
@@ -216,6 +231,23 @@ struct RawFeed {
     command: Vec<String>,
     #[serde(default)]
     title: Option<String>,
+    #[serde(default)]
+    work: Option<RawFeedWork>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawFeedWork {
+    #[serde(default)]
+    agent_command: Option<String>,
+    #[serde(default)]
+    cwd: Option<String>,
+    #[serde(default)]
+    tab_title: Option<String>,
+    #[serde(default)]
+    prompt_file: Option<String>,
+    #[serde(default)]
+    prompt: Option<String>,
 }
 
 /// Valid job id: ASCII letters, digits, `.`, `_`, `-`; starts with a letter or
@@ -468,12 +500,37 @@ fn build_job(
             diagnostics.push("feed.command: required; give an argv array".into());
             return None;
         }
+        let work = feed.work.and_then(|work| {
+            if work.prompt.is_some() && work.prompt_file.is_some() {
+                diagnostics.push(
+                    "feed.work.prompt/prompt_file: set at most one, an inline `prompt` or a `prompt_file`"
+                        .into(),
+                );
+                return None;
+            }
+            if work
+                .agent_command
+                .as_deref()
+                .is_some_and(|command| command.trim().is_empty())
+            {
+                diagnostics.push("feed.work.agent_command: must not be empty".into());
+                return None;
+            }
+            Some(FeedWorkDef {
+                agent_command: work.agent_command,
+                cwd: work.cwd,
+                tab_title: work.tab_title,
+                prompt_file: work.prompt_file,
+                prompt: work.prompt,
+            })
+        });
         Some(FeedDef {
             command: feed.command,
             title: feed
                 .title
                 .map(|title| title.trim().to_owned())
                 .filter(|title| !title.is_empty()),
+            work,
         })
     });
 

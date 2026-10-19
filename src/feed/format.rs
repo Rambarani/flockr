@@ -78,7 +78,12 @@ pub(crate) const RESERVED_NAMES: &[&str] = &[
     "delete",
     "space",
 ];
-pub(crate) const RESERVED_CHARS: &[char] = &['j', 'k', 'q', 'g', 'G', 'R', 'S', '/'];
+///
+/// `x` and `X` select items and clear the selection, `w` starts an agent on
+/// the selection (`[feed.work]`). A feed written before they were reserved
+/// that still uses one of them for an action keeps the item but loses that
+/// action, with a diagnostic.
+pub(crate) const RESERVED_CHARS: &[char] = &['j', 'k', 'q', 'g', 'G', 'R', 'S', '/', 'x', 'X', 'w'];
 /// Also reserved, but only in a feed that declares `groups`: the overlay
 /// switches category with these, so a flat feed keeps them for actions.
 pub(crate) const GROUPED_RESERVED_CHARS: &[char] =
@@ -1023,7 +1028,7 @@ mod tests {
 
     #[test]
     fn action_keys_must_be_one_visible_unreserved_character() {
-        for key in ["d", "s", "t", "x", "1", "?", "D", "é"] {
+        for key in ["d", "s", "t", "u", "1", "?", "D", "é", "W"] {
             assert!(action_key_problem(key).is_none(), "{key}");
         }
         for key in [
@@ -1035,7 +1040,7 @@ mod tests {
                 "{key}"
             );
         }
-        for key in ["j", "k", "q", "g", "G", "R", "/"] {
+        for key in ["j", "k", "q", "g", "G", "R", "/", "x", "X", "w"] {
             assert!(
                 action_key_problem(key).is_some_and(|text| text.contains("reserved")),
                 "{key}"
@@ -1059,22 +1064,24 @@ mod tests {
               {"key":"u"},
               {"command":["x"]},
               "text",
-              {"key":"w","command":["x"]}]}]}"#,
+              {"key":"w","command":["x"]},
+              {"key":"y","command":["x"]}]}]}"#,
         );
         let keys: Vec<_> = feed.items[0]
             .actions
             .iter()
             .map(|a| a.key.as_str())
             .collect();
-        assert_eq!(keys, ["d", "w"]);
+        assert_eq!(keys, ["d", "y"]);
         assert_eq!(
-            feed.items[0].actions[1].title, "w",
+            feed.items[0].actions[1].title, "y",
             "title defaults to the key"
         );
         let joined = feed.diagnostics.join("\n");
         for expected in [
             "action key \"Enter\" is reserved",
             "action key 'j' is reserved",
+            "action key 'w' is reserved",
             "action key \"d\" is used twice",
             "action \"s\" has an empty command",
             "action \"t\" command must contain only strings",

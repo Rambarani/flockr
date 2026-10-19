@@ -715,6 +715,7 @@ pub(crate) fn api_method_name(method: &Method) -> &'static str {
         Method::FeedGet(_) => "feed.get",
         Method::FeedRefresh(_) => "feed.refresh",
         Method::FeedRunAction(_) => "feed.run_action",
+        Method::FeedWork(_) => "feed.work",
         Method::JobSetSchedule(_) => "job.set_schedule",
         Method::DecisionList(_) => "decision.list",
         Method::DecisionStart(_) => "decision.start",

@@ -15,6 +15,7 @@ use crate::feed::format::{parse_feed, MAX_FEED_BYTES};
 use crate::jobs::cron::SystemLocal;
 use crate::jobs::definition::{parse_job_toml, JobDef, Schedule};
 use crate::jobs::env::{flockr_job_vars, resolve_job_env, LoginEnvCache};
+use crate::jobs::feed_work::{ITEM_FIELD_PREFIX, WORK_TEMPLATE_VARIABLES};
 use crate::jobs::handoff::{placeholders, CONTEXT_VARIABLE_PREFIX, TEMPLATE_VARIABLES};
 
 /// Programs whose first non-flag argument is a script file.
@@ -311,6 +312,91 @@ fn check_handoff(job: &JobDef, path_var: Option<&str>, report: &mut JobReport) {
     }
 }
 
+fn check_work_template(field: &str, text: &str, report: &mut JobReport) {
+    for name in placeholders(text) {
+        let field_variable = name
+            .strip_prefix(ITEM_FIELD_PREFIX)
+            .is_some_and(|label| !label.is_empty());
+        if !field_variable && !WORK_TEMPLATE_VARIABLES.contains(&name.as_str()) {
+            report.errors.push(format!(
+                "{field}: unknown template variable {{{{{name}}}}}; use {} or {{{{item.field.<label>}}}}",
+                WORK_TEMPLATE_VARIABLES
+                    .iter()
+                    .map(|known| format!("{{{{{known}}}}}"))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ));
+        }
+    }
+}
+
+fn check_feed_work(job: &JobDef, path_var: Option<&str>, report: &mut JobReport) {
+    let Some(work) = job.feed.as_ref().and_then(|feed| feed.work.as_ref()) else {
+        return;
+    };
+    let fields = [
+        ("feed.work.tab_title", work.tab_title.as_deref()),
+        ("feed.work.cwd", work.cwd.as_deref()),
+        ("feed.work.agent_command", work.agent_command.as_deref()),
+        ("feed.work.prompt", work.prompt.as_deref()),
+    ];
+    for (field, text) in fields {
+        if let Some(text) = text {
+            check_work_template(field, text, report);
+        }
+    }
+    if let Some(file) = &work.prompt_file {
+        let path = crate::jobs::definition::resolve_path(&job.dir, file);
+        match std::fs::read_to_string(&path) {
+            Ok(content) => {
+                if content.trim().is_empty() {
+                    report.errors.push(format!(
+                        "feed.work.prompt_file: {} is empty",
+                        path.display()
+                    ));
+                }
+                check_work_template(&format!("feed.work.prompt_file ({file})"), &content, report);
+            }
+            Err(err) => report.errors.push(format!(
+                "feed.work.prompt_file: could not read {}: {err}",
+                path.display()
+            )),
+        }
+    }
+    if work
+        .prompt
+        .as_deref()
+        .is_some_and(|prompt| prompt.trim().is_empty())
+    {
+        report
+            .errors
+            .push("feed.work.prompt: is empty; leave it out to use the built-in prompt".into());
+    }
+    let agent = work
+        .agent_command
+        .as_deref()
+        .unwrap_or(crate::jobs::handoff::DEFAULT_AGENT_COMMAND);
+    if let Some(program) = agent.split_whitespace().next() {
+        if !program.contains("{{")
+            && !program.contains('=')
+            && find_program(program, &job.cwd, path_var).is_none()
+        {
+            report.warnings.push(format!(
+                "feed.work.agent_command: '{program}' was not found on the job's PATH; the new tab starts it with your shell's PATH, so this may be fine"
+            ));
+        }
+    }
+    if let Some(cwd) = work.cwd.as_deref().filter(|cwd| !cwd.contains("{{")) {
+        let path = crate::jobs::definition::resolve_path(&job.dir, cwd);
+        if !path.is_dir() {
+            report.warnings.push(format!(
+                "feed.work.cwd: {} does not exist; work tabs fall back to the job's cwd or your home directory",
+                path.display()
+            ));
+        }
+    }
+}
+
 fn describe_schedule(job: &JobDef, now_secs: i64, report: &mut JobReport) {
     report.schedule = Some(job.schedule.describe());
     let mut at = now_secs;
@@ -484,6 +570,7 @@ pub(crate) fn validate_job(target: &Target, ctx: &Context<'_>) -> JobReport {
         );
     }
     check_handoff(&job, path_var.as_deref(), &mut report);
+    check_feed_work(&job, path_var.as_deref(), &mut report);
     check_feed_output(&job, ctx, &mut report);
     finish(report)
 }

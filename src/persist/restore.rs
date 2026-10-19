@@ -1360,6 +1360,101 @@ mod tests {
         assert_eq!(startup.initial_history_ansi, Some("RESTORED_HISTORY\r\n"));
     }
 
+    /// A ported session carries `claude --resume <original> --fork-session` as
+    /// its reported resume. Once Claude reports the fork's own id, the next
+    /// restore must resume that id directly instead of forking the original.
+    #[test]
+    fn restore_after_fork_uses_reported_session_without_fork_flag() {
+        use crate::events::AppEvent;
+
+        let mut state = crate::app::AppState::test_new();
+        state.workspaces = vec![crate::workspace::Workspace::test_new("ported")];
+        state.ensure_test_terminals();
+        let pane_id = state.workspaces[0].tabs[0].root_pane;
+        let terminal_id = state.workspaces[0].tabs[0].panes[&pane_id]
+            .attached_terminal_id
+            .clone();
+        let fork_argv: Vec<String> = ["claude", "--resume", "orig", "--fork-session"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        state.handle_app_event(AppEvent::AgentProcessDetected {
+            pane_id,
+            agent: crate::detect::Agent::Claude,
+            observed_at: std::time::Instant::now(),
+        });
+        {
+            let terminal = state.terminals.get_mut(&terminal_id).unwrap();
+            terminal.set_persisted_agent_session(crate::agent_resume::PersistedAgentSession {
+                source: "flockr:claude".into(),
+                agent: "claude".into(),
+                session_ref: crate::agent_resume::AgentSessionRef::id("orig").unwrap(),
+            });
+            terminal.restore_reported_resume(crate::agent_resume::ReportedAgentResume {
+                source: "flockr:claude".into(),
+                agent: "claude".into(),
+                argv: fork_argv.clone(),
+            });
+        }
+        let report = |state: &mut crate::app::AppState, seq: u64, id: &str, source: &str| {
+            state.handle_app_event(AppEvent::AgentSessionReported {
+                pane_id,
+                source: "flockr:claude".into(),
+                agent_label: "claude".into(),
+                seq: Some(seq),
+                session_ref: crate::agent_resume::AgentSessionRef::id(id),
+                session_start_source: Some(source.into()),
+            });
+        };
+        let snapshot_pane = |state: &crate::app::AppState| {
+            let snapshot = super::super::snapshot::capture(
+                &state.workspaces,
+                &state.terminals,
+                &crate::terminal::TerminalRuntimeRegistry::new(),
+                state.active,
+                state.selected,
+            );
+            let pane = &snapshot.workspaces[0].tabs[0].panes[&pane_id.raw()];
+            (pane.agent_resume.clone(), pane.agent_session.clone())
+        };
+
+        // SessionStart of a forked launch still names the original session.
+        report(&mut state, 1, "orig", "resume");
+        let (resume, _) = snapshot_pane(&state);
+        assert_eq!(resume.unwrap().argv, fork_argv);
+
+        // The fork's id appears on the first prompt; repeating it is a no-op.
+        state.session_dirty = false;
+        report(&mut state, 2, "fork", "prompt");
+        assert!(state.session_dirty, "new session must be persisted");
+        state.session_dirty = false;
+        report(&mut state, 3, "fork", "prompt");
+        assert!(
+            !state.session_dirty,
+            "repeated session report must not save"
+        );
+
+        let (resume, session) = snapshot_pane(&state);
+        assert!(resume.is_none(), "stale fork argv must be dropped");
+        let session = session.expect("fork session persisted");
+        assert_eq!(session.value, "fork");
+
+        let mut resumed = HashSet::new();
+        let mut agent_restore = AgentRestoreState {
+            enabled: true,
+            resumed_sessions: &mut resumed,
+        };
+        let startup = pane_restore_startup(
+            Some(&session),
+            None,
+            std::path::Path::new("/project"),
+            None,
+            &mut agent_restore,
+        );
+        let plan = startup.restore_plan.expect("native plan");
+        assert_eq!(plan.argv, vec!["claude", "--resume", "fork"]);
+    }
+
     #[test]
     fn pane_restore_startup_keeps_history_without_native_agent_resume() {
         let session = super::super::snapshot::PaneAgentSessionSnapshot {

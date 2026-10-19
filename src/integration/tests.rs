@@ -967,7 +967,15 @@ fn install_claude_writes_hook_and_updates_settings() {
         .as_str()
         .unwrap()
         .contains(" session"));
-    assert!(settings["hooks"].get("UserPromptSubmit").is_none());
+    assert!(settings["hooks"]["UserPromptSubmit"][0]
+        .get("matcher")
+        .is_none());
+    assert!(
+        settings["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap()
+            .ends_with(" session")
+    );
     assert!(settings["hooks"].get("PreToolUse").is_none());
     assert!(settings["hooks"].get("PermissionRequest").is_none());
     assert!(settings["hooks"].get("PostToolUse").is_none());
@@ -1019,7 +1027,15 @@ fn install_claude_is_idempotent_for_hook_entries() {
         settings["hooks"]["SessionStart"].as_array().unwrap().len(),
         1
     );
-    assert!(settings["hooks"].get("UserPromptSubmit").is_none());
+    assert!(settings["hooks"]["UserPromptSubmit"][0]
+        .get("matcher")
+        .is_none());
+    assert!(
+        settings["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap()
+            .ends_with(" session")
+    );
     assert!(settings["hooks"].get("PreToolUse").is_none());
     assert!(settings["hooks"].get("PermissionRequest").is_none());
     assert!(settings["hooks"].get("PostToolUse").is_none());
@@ -1101,7 +1117,13 @@ fn install_claude_removes_deprecated_completion_hooks_and_preserves_user_hooks()
         settings["hooks"]["SessionEnd"][0]["hooks"][0]["command"],
         "echo keep-session-end"
     );
-    assert!(settings["hooks"].get("UserPromptSubmit").is_none());
+    assert_eq!(
+        settings["hooks"]["UserPromptSubmit"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
     assert!(settings["hooks"].get("PreToolUse").is_none());
     assert!(settings["hooks"].get("Stop").is_none());
 
@@ -1132,7 +1154,7 @@ fn claude_v9_integration_status_is_outdated_until_reinstalled() {
 
     assert_eq!(claude.path, hook_path);
     assert_eq!(claude.installed_version, Some(9));
-    assert_eq!(claude.expected_version, 11);
+    assert_eq!(claude.expected_version, CLAUDE_INTEGRATION_VERSION);
     assert_eq!(claude.state, IntegrationStatusKind::Outdated);
 
     install_claude().unwrap();
@@ -1141,7 +1163,7 @@ fn claude_v9_integration_status_is_outdated_until_reinstalled() {
         hook_path,
         CLAUDE_INTEGRATION_VERSION,
     );
-    assert_eq!(status.installed_version, Some(11));
+    assert_eq!(status.installed_version, Some(CLAUDE_INTEGRATION_VERSION));
     assert_eq!(status.state, IntegrationStatusKind::Current);
 
     std::env::remove_var("HOME");
@@ -1171,8 +1193,73 @@ fn claude_v2_integration_status_is_outdated() {
 
     assert_eq!(claude.path, hook_path);
     assert_eq!(claude.installed_version, Some(2));
-    assert_eq!(claude.expected_version, 11);
+    assert_eq!(claude.expected_version, CLAUDE_INTEGRATION_VERSION);
     assert_eq!(claude.state, IntegrationStatusKind::Outdated);
+
+    std::env::remove_var("HOME");
+    let _ = fs::remove_dir_all(base);
+}
+
+#[test]
+fn install_claude_upgrades_v11_settings_with_prompt_session_hook() {
+    let _lock = integration_env_lock();
+    let base = unique_base();
+    let home = base.join("home");
+    let claude_dir = home.join(".claude");
+    let hooks_dir = claude_dir.join("hooks");
+    fs::create_dir_all(&hooks_dir).unwrap();
+    let hook_path = hooks_dir.join(CLAUDE_HOOK_INSTALL_NAME);
+    fs::write(
+        &hook_path,
+        "#!/bin/sh\n# FLOCKR_INTEGRATION_ID=claude\n# FLOCKR_INTEGRATION_VERSION=11\n",
+    )
+    .unwrap();
+    let session_command = format!("bash '{}' session", hook_path.display());
+    fs::write(
+        claude_dir.join("settings.json"),
+        serde_json::to_string(&serde_json::json!({
+            "hooks": {
+                "SessionStart": [{
+                    "matcher": "^(startup|resume|clear|compact|fork)$",
+                    "hooks": [{"type": "command", "command": session_command, "timeout": 10}]
+                }],
+                "UserPromptSubmit": [{
+                    "hooks": [{"type": "command", "command": "echo keep-prompt", "timeout": 5}]
+                }]
+            }
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    std::env::set_var("HOME", &home);
+
+    let outdated = integration_status_at(
+        crate::api::schema::IntegrationTarget::Claude,
+        hook_path.clone(),
+        CLAUDE_INTEGRATION_VERSION,
+    );
+    assert_eq!(outdated.state, IntegrationStatusKind::Outdated);
+
+    install_claude().unwrap();
+    install_claude().unwrap();
+
+    let settings: Value =
+        serde_json::from_str(&fs::read_to_string(claude_dir.join("settings.json")).unwrap())
+            .unwrap();
+    assert_eq!(
+        settings["hooks"]["SessionStart"].as_array().unwrap().len(),
+        1
+    );
+    let prompt = settings["hooks"]["UserPromptSubmit"].as_array().unwrap();
+    assert_eq!(prompt.len(), 2);
+    assert_eq!(prompt[0]["hooks"][0]["command"], "echo keep-prompt");
+    assert_eq!(prompt[1]["hooks"][0]["command"], session_command);
+    let current = integration_status_at(
+        crate::api::schema::IntegrationTarget::Claude,
+        hook_path,
+        CLAUDE_INTEGRATION_VERSION,
+    );
+    assert_eq!(current.state, IntegrationStatusKind::Current);
 
     std::env::remove_var("HOME");
     let _ = fs::remove_dir_all(base);
@@ -1304,6 +1391,111 @@ fn claude_windows_hook_reports_utf8_session_path() {
     let _ = fs::remove_dir_all(base);
 }
 
+#[cfg(unix)]
+fn run_claude_hook_against_socket(payload: &str) -> Option<Value> {
+    use std::io::{BufRead, BufReader, Write};
+    use std::os::unix::net::UnixListener;
+    use std::process::{Command, Stdio};
+
+    let base = unique_base();
+    fs::create_dir_all(&base).unwrap();
+    let hook = base.join("flockr-agent-state.sh");
+    fs::write(&hook, CLAUDE_HOOK_ASSET).unwrap();
+    // Unix socket paths are length-limited, so keep this one short.
+    let socket = PathBuf::from(format!(
+        "/tmp/flk-hook-{}-{}.sock",
+        std::process::id(),
+        base.file_name().unwrap().to_string_lossy().len()
+            + std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .subsec_nanos() as usize
+    ));
+    let _ = fs::remove_file(&socket);
+    let listener = UnixListener::bind(&socket).unwrap();
+    listener.set_nonblocking(true).unwrap();
+
+    let mut command = Command::new("sh");
+    command
+        .arg(&hook)
+        .arg("session")
+        .env("FLOCKR_ENV", "1")
+        .env("FLOCKR_PANE_ID", "w1:p2")
+        .env("FLOCKR_SOCKET_PATH", &socket)
+        .env("TMPDIR", &base)
+        .env_remove("CURSOR_VERSION")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let mut child = command.spawn().unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(payload.as_bytes())
+        .unwrap();
+    assert!(child.wait().unwrap().success());
+
+    let request = match listener.accept() {
+        Ok((stream, _)) => {
+            stream.set_nonblocking(false).unwrap();
+            let mut line = String::new();
+            BufReader::new(stream).read_line(&mut line).unwrap();
+            Some(serde_json::from_str(&line).unwrap())
+        }
+        Err(err) => {
+            assert_eq!(err.kind(), std::io::ErrorKind::WouldBlock);
+            None
+        }
+    };
+    let _ = fs::remove_file(&socket);
+    let _ = fs::remove_dir_all(base);
+    request
+}
+
+#[cfg(unix)]
+#[test]
+fn claude_hook_reports_session_on_start_and_on_prompt() {
+    if std::process::Command::new("python3")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        return;
+    }
+
+    let start = run_claude_hook_against_socket(
+        r#"{"hook_event_name":"SessionStart","source":"resume","session_id":"orig","transcript_path":"/t/orig.jsonl"}"#,
+    )
+    .expect("SessionStart reports");
+    assert_eq!(start["method"], "pane.report_agent_session");
+    assert_eq!(start["params"]["agent_session_id"], "orig");
+    assert_eq!(start["params"]["session_start_source"], "resume");
+
+    // After `--resume orig --fork-session` the fork id shows up on later events.
+    let prompt = run_claude_hook_against_socket(
+        r#"{"hook_event_name":"UserPromptSubmit","session_id":"fork","transcript_path":"/t/fork.jsonl","prompt":"hi"}"#,
+    )
+    .expect("UserPromptSubmit reports");
+    assert_eq!(prompt["method"], "pane.report_agent_session");
+    assert_eq!(prompt["params"]["source"], "flockr:claude");
+    assert_eq!(prompt["params"]["agent"], "claude");
+    assert_eq!(prompt["params"]["agent_session_id"], "fork");
+    assert_eq!(prompt["params"]["agent_session_path"], "/t/fork.jsonl");
+    assert_eq!(prompt["params"]["session_start_source"], "prompt");
+
+    for ignored in [
+        r#"{"hook_event_name":"Stop","session_id":"fork"}"#,
+        r#"{"hook_event_name":"UserPromptSubmit","session_id":"sub","agent_id":"a1"}"#,
+        r#"{"hook_event_name":"UserPromptSubmit"}"#,
+    ] {
+        assert!(
+            run_claude_hook_against_socket(ignored).is_none(),
+            "{ignored}"
+        );
+    }
+}
+
 #[test]
 fn uninstall_claude_removes_flockr_hooks_and_preserves_others() {
     let _lock = integration_env_lock();
@@ -1324,6 +1516,7 @@ fn uninstall_claude_removes_flockr_hooks_and_preserves_others() {
                 "matcher": "*",
                 "hooks": [
                     {"type": "command", "command": format!("bash '{}' working", hook_path.display()), "timeout": 10},
+                    {"type": "command", "command": format!("bash '{}' session", hook_path.display()), "timeout": 10},
                     {"type": "command", "command": "echo keep", "timeout": 10}
                 ]
             }],

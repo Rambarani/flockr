@@ -7975,6 +7975,56 @@ fn api_resume_argv_is_ignored_when_its_session_report_is_refused() {
     );
 }
 
+#[test]
+fn api_prompt_session_report_replaces_stale_forked_resume() {
+    let (writer, _control_rx, _render_rx) = test_client_writer();
+    let (mut server, pane_id) = completion_guard_server(writer);
+    let public_pane_id = server.app.public_pane_id(0, pane_id).unwrap();
+    let terminal_id = server.app.state.workspaces[0].tabs[0].panes[&pane_id]
+        .attached_terminal_id
+        .clone();
+    server.handle_internal_event_with_forwarding(AppEvent::AgentProcessDetected {
+        pane_id,
+        agent: crate::detect::Agent::Claude,
+        observed_at: Instant::now(),
+    });
+    let report = |session: &str, start: &str, resume: Option<Vec<&str>>| {
+        api::schema::Method::PaneReportAgentSession(api::schema::PaneReportAgentSessionParams {
+            pane_id: public_pane_id.clone(),
+            source: "flockr:claude".into(),
+            agent: "claude".into(),
+            seq: Some(next_test_seq()),
+            agent_session_id: Some(session.into()),
+            agent_session_path: None,
+            session_start_source: Some(start.into()),
+            resume_argv: resume.map(|argv| argv.into_iter().map(String::from).collect()),
+        })
+    };
+    let fork = vec!["claude", "--resume", "orig", "--fork-session"];
+
+    completion_guard_api_report(&mut server, report("orig", "resume", Some(fork.clone())));
+    assert_eq!(
+        server.app.state.terminals[&terminal_id]
+            .reported_resume()
+            .unwrap()
+            .argv,
+        fork
+    );
+
+    completion_guard_api_report(&mut server, report("forked", "prompt", None));
+    completion_guard_api_report(&mut server, report("forked", "prompt", None));
+
+    let terminal = &server.app.state.terminals[&terminal_id];
+    assert!(terminal
+        .session_ref_is_current(&crate::agent_resume::AgentSessionRef::id("forked").unwrap()));
+    assert!(terminal.reported_resume().is_none());
+}
+
+fn next_test_seq() -> u64 {
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
 fn completion_guard_notifications(
     server: &mut HeadlessServer,
     receiver: &std::sync::mpsc::Receiver<Vec<u8>>,

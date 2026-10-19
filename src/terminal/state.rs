@@ -1392,7 +1392,7 @@ impl TerminalState {
             (
                 "flockr:claude",
                 "claude",
-                Some("clear" | "resume" | "compact")
+                Some("clear" | "resume" | "compact" | "prompt")
             ) | (
                 "flockr:codex",
                 "codex",
@@ -1649,6 +1649,26 @@ impl TerminalState {
             return None;
         }
 
+        // Hooks may repeat the same session on every prompt; that is a no-op.
+        if replaced_hook_session.is_none()
+            && !foreground_takeover_allowed
+            && self.managed_agent_launch_session.is_none()
+            && self
+                .persisted_agent_session
+                .as_ref()
+                .is_some_and(|current| {
+                    current.source == source
+                        && current.agent == agent_label
+                        && current.session_ref == session_ref
+                })
+        {
+            return Some(TerminalStateMutation {
+                effective_state_change: None,
+                session_ref_changed: false,
+                agent_released: false,
+            });
+        }
+
         let now = Instant::now();
         let previous_agent_label = self.effective_agent_label().map(str::to_string);
         let previous_known_agent = self.effective_known_agent();
@@ -1680,8 +1700,11 @@ impl TerminalState {
         if self.managed_agent_launch_session.as_ref() == Some(&persisted_session) {
             self.managed_agent_launch_session = None;
         }
-        self.persisted_agent_session = Some(persisted_session);
+        self.persisted_agent_session = Some(persisted_session.clone());
         let current_session = self.current_session_identity_for_persistence();
+        if previous_session != current_session {
+            self.forget_reported_resume_superseded_by(&persisted_session);
+        }
         if previous_session.is_some() && previous_session != current_session {
             // Rebinding can expose a cached Working screen; only a fresh report ends acquisition.
             self.agent_process_acquisition_pending = true;
@@ -2020,6 +2043,26 @@ impl TerminalState {
         if self.reported_resume != resume {
             self.reported_resume = resume;
             self.reported_resume_revision += 1;
+        }
+    }
+
+    /// A reported resume command names the session it was made for. Once the
+    /// agent reports a different session for the same official integration
+    /// (for example the fork created by `--resume X --fork-session`), replaying
+    /// that command would restart from the old session, so the native plan for
+    /// the new session takes over.
+    fn forget_reported_resume_superseded_by(
+        &mut self,
+        session: &crate::agent_resume::PersistedAgentSession,
+    ) {
+        let superseded = self.reported_resume.as_ref().is_some_and(|resume| {
+            resume.source == session.source
+                && resume.agent == session.agent
+                && crate::agent_resume::is_official_agent_source(&resume.source, &resume.agent)
+                && !resume.argv.contains(&session.session_ref.value)
+        });
+        if superseded {
+            self.set_reported_resume(None);
         }
     }
 

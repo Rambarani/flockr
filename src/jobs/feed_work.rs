@@ -141,7 +141,11 @@ fn item_text(number: usize, item: &FeedItemInfo) -> String {
             single_line(subtitle, MAX_ITEM_VALUE_CHARS)
         ));
     }
-    out.push_str(&format!("   State: {}\n", state_text(item)));
+    out.push_str(&format!(
+        "   Id: {}\n   State: {}\n",
+        single_line(&item.id, MAX_ITEM_VALUE_CHARS),
+        state_text(item)
+    ));
     for field in &item.fields {
         out.push_str(&format!(
             "   {}: {}\n",
@@ -546,5 +550,68 @@ mod tests {
         assert_eq!(field_slug("Snoozed until"), "snoozed_until");
         assert_eq!(field_slug("  A / B  "), "a_b");
         assert_eq!(field_slug("***"), "");
+    }
+
+    #[test]
+    fn the_workbox_example_work_block_is_valid_when_uncommented() {
+        let dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/jobs/workbox-sync");
+        let text = std::fs::read_to_string(dir.join("job.toml"))
+            .expect("examples/jobs/workbox-sync/job.toml is tracked");
+        // The shipped file has no active [feed.work]: the built-in prompt applies.
+        let shipped = parse_job_toml(&text, "workbox-sync", &dir).unwrap();
+        assert!(shipped.feed.as_ref().unwrap().work.is_none());
+        // Uncomment from `# [feed.work]` to the closing `# """`.
+        let mut lines = Vec::new();
+        let mut inside = false;
+        let mut quotes = 0;
+        for line in text.lines() {
+            if line == "# [feed.work]" {
+                inside = true;
+            }
+            if inside {
+                let plain = line
+                    .strip_prefix("# ")
+                    .or_else(|| line.strip_prefix('#'))
+                    .unwrap();
+                quotes += plain.matches("\"\"\"").count();
+                lines.push(plain.to_owned());
+                if quotes >= 2 {
+                    break;
+                }
+            }
+        }
+        assert!(lines.len() > 8, "found the example block: {lines:?}");
+        let (head, _) = text.split_once("# [feed.work]").unwrap();
+        let combined = format!("{head}{}\n", lines.join("\n"));
+        let job =
+            parse_job_toml(&combined, "workbox-sync", &dir).expect("uncommented block parses");
+        let work = job
+            .feed
+            .as_ref()
+            .unwrap()
+            .work
+            .as_ref()
+            .expect("work table");
+        assert_eq!(work.agent_command.as_deref(), Some("claude"));
+        let mut one = item("1", "Fix login");
+        one.fields = vec![FeedField {
+            label: "Repo".into(),
+            value: "platform-ui".into(),
+        }];
+        let two = item("2", "Review retry");
+        let plan = run(&job, &[one, two]).unwrap();
+        assert!(plan.warnings.is_empty(), "{:?}", plan.warnings);
+        let cwd = plan.cwd.expect("cwd from the repo field");
+        assert!(
+            cwd.ends_with("code/work/platform-ui"),
+            "{cwd:?}"
+        );
+        assert_eq!(plan.tab_title, "workbox · 2 items");
+        assert!(plan
+            .prompt
+            .starts_with("Today is 2026-10-19. I picked 2 items"));
+        assert!(plan.prompt.contains("Id: 1") && plan.prompt.contains("/review-pr"));
+        assert!(plan.prompt.contains("2. PR-2 — Review retry"));
     }
 }

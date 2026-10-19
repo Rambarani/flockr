@@ -111,7 +111,7 @@ Raw socket method names use dot notation:
 | Integrations | `integration.install`, `integration.uninstall` |
 | Jobs | `job.list`, `job.get`, `job.run`, `job.set_enabled`, `job.set_schedule`, `job.logs`, `job.env_refresh` |
 | Decisions | `decision.list`, `decision.start`, `decision.snooze`, `decision.dismiss` |
-| Feeds | `feed.list`, `feed.get`, `feed.refresh`, `feed.run_action` |
+| Feeds | `feed.list`, `feed.get`, `feed.refresh`, `feed.run_action`, `feed.work` |
 | Plugins | `plugin.link`, `plugin.list`, `plugin.unlink`, `plugin.enable`, `plugin.disable`, `plugin.action.list`, `plugin.action.invoke`, `plugin.log.list`, `plugin.pane.open`, `plugin.pane.focus`, `plugin.pane.close` |
 
 `agent.wait` is server-owned and event-driven. It pins the resolved pane occupant so a replacement cannot satisfy the wait. `agent.prompt` accepts an optional `wait` object with `until` and `timeout_ms`; this submits the prompt and starts the wait in one request, avoiding a race between separate calls. If the resolved agent is already `blocked`, `agent.prompt` returns `agent_blocked` without sending input or starting the wait.

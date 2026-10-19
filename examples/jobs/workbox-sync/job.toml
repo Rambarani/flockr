@@ -28,6 +28,41 @@ title = "Today (workbox)"
 # Only the items on the today tab:
 # command = ["sh", "-c", "workbox list --tab today --json | flockr feed adapt workbox --title 'Today (workbox)'"]
 
+# Work on items: in the Feed overlay (prefix+f) mark items with `x` (or
+# ctrl-click), then press `w` (the current item when none is marked). Flockr
+# opens a tab and starts the agent with the items as the prompt. Everything is
+# optional: without a [feed.work] table `claude` starts in your home directory
+# with a built-in prompt that lists the items and asks for a summary and a plan.
+# Remove the leading "# " from the lines below to customise it.
+#
+# - cwd: GitHub and Bitbucket items carry a `Repo` field, the repository name
+#   from `where` ("platform-ui" for acme/platform-ui#571). Jira
+#   items have none, and a directory that does not exist falls back to the
+#   job's cwd or your home directory. {{item.*}} is the FIRST marked item.
+# - prompt: inline here, or `prompt_file = "work.md"` next to this file.
+# - Variables: {{items}} {{items_json}} {{count}} {{date}} {{job.id}}
+#   {{job.title}} {{feed.title}} {{item.title}} {{item.url}} {{item.badge}}
+#   {{item.field.<label>}} ... (see the Jobs docs).
+#
+# [feed.work]
+# agent_command = "claude"
+# cwd = "~/code/work/{{item.field.repo}}"
+# tab_title = "workbox · {{count}} items"
+# prompt = """
+# Today is {{date}}. I picked {{count}} items from my workbox list to work on:
+#
+# {{items}}
+#
+# Read each link first, then say in one line what each item needs.
+# - GitHub and Bitbucket pull requests: review them (/review-pr for GitHub PRs).
+# - Jira mentions and tickets: work out what is being asked of me (/reply-ticket
+#   drafts the answer, /ticket-mentions goes through the mentions).
+# - Anything else: summarize it and suggest a next step.
+#
+# Propose a plan and ask before changing code, posting a comment or marking
+# anything done (`workbox mark <id> done` uses the Id shown for each item).
+# """
+
 # After a sync that changed something, ask whether to start Claude on the
 # items. Nothing starts until you answer: a toast and an entry in the Jobs
 # overlay's Decisions tab (prefix+t, then tab) offer Start, Snooze and

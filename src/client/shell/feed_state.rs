@@ -59,6 +59,10 @@ pub(super) enum FeedRequest {
         key: String,
         origin: FeedOrigin,
     },
+    /// `feed.work`: start an agent tab on selected items.
+    Work {
+        job_id: String,
+    },
 }
 
 /// A "sync now" this client asked for: the feed's job runs, then the server
@@ -551,6 +555,17 @@ impl ClientShellState {
         );
     }
 
+    /// Ask the server to start an agent tab on feed items (`w`). The caller
+    /// has checked that the server advertises `feed.work`.
+    pub(super) fn request_feed_work(
+        &mut self,
+        method: Method,
+        job_id: String,
+        outcome: &mut ClientShellInput,
+    ) {
+        self.push_feed_request(method, FeedRequest::Work { job_id }, outcome);
+    }
+
     /// The palette's "feed: <title>" and "refresh feed <job>" entries.
     pub(super) fn feed_palette_entries(&self) -> Vec<(String, String)> {
         if self.feeds.endpoint.as_ref() != Some(&self.active_endpoint_id) {
@@ -670,6 +685,46 @@ impl ClientShellState {
                 }
                 true
             }
+            (
+                FeedRequest::Work { job_id },
+                Ok(ResponseResult::FeedWorkStarted {
+                    count,
+                    agent,
+                    tab_title,
+                    tab_id,
+                    warnings,
+                    skipped,
+                    ..
+                }),
+            ) => {
+                let label = if tab_title.is_empty() {
+                    tab_id
+                } else {
+                    tab_title
+                };
+                let mut text = format!(
+                    "started {agent} with {count} item{} in tab {label}",
+                    if count == 1 { "" } else { "s" }
+                );
+                if !skipped.is_empty() {
+                    text.push_str(&format!(" ({} no longer in the feed)", skipped.len()));
+                }
+                if let Some(warning) = warnings.first() {
+                    text.push_str(&format!("; {warning}"));
+                }
+                // The new tab is focused on the server; get out of its way,
+                // as a decision's Start does, and say what happened.
+                if matches!(self.overlay, Some(ClientShellOverlay::Feed(_))) {
+                    self.overlay = None;
+                }
+                self.push_endpoint_notice(
+                    ClientEndpointNoticeKind::Rejected,
+                    format!("feed.work:{job_id}"),
+                    "Feed work started",
+                    text,
+                );
+                true
+            }
             (FeedRequest::List, Err(error)) => {
                 // A server that does not answer is retried at the next poll;
                 // one that rejects the call is treated as lacking the feature.
@@ -684,6 +739,20 @@ impl ClientShellState {
             (FeedRequest::Get { job_id }, Err(_)) => {
                 self.feeds.items_in_flight.remove(&job_id);
                 false
+            }
+            (FeedRequest::Work { .. }, Err(error)) => {
+                // Stay in the overlay with the selection, and say why.
+                let text = if matches!(
+                    error.code.as_deref(),
+                    Some("unsupported_method" | "not_implemented")
+                ) {
+                    "this server does not support starting work from a feed yet; update and restart it"
+                        .to_owned()
+                } else {
+                    error.message
+                };
+                self.show_feed_message(FeedOrigin::Overlay, "feed.work", "Feed work failed", text);
+                true
             }
             (
                 FeedRequest::Refresh { origin, .. } | FeedRequest::Action { origin, .. },

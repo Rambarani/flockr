@@ -7,9 +7,9 @@ use super::endpoints::state_with_remote;
 use super::*;
 use crate::api::schema::{
     FeedActionInfo, FeedActionResult, FeedField, FeedGetParams, FeedGroupInfo, FeedItemInfo,
-    FeedItemState, FeedListParams, FeedRunActionParams, FeedSummary, FeedTarget, JobInfo,
-    JobRunInfo, JobRunStatus, JobRunTrigger, JobScheduleKind, JobState, JobTarget, Method, Request,
-    ResponseResult,
+    FeedItemState, FeedListParams, FeedRunActionParams, FeedSummary, FeedTarget, FeedWorkParams,
+    JobInfo, JobRunInfo, JobRunStatus, JobRunTrigger, JobScheduleKind, JobState, JobTarget, Method,
+    Request, ResponseResult,
 };
 use crate::client::shell::feed_state::FeedItems;
 
@@ -1222,7 +1222,7 @@ fn action_keys_run_the_selected_items_actions_through_the_server() {
         })
     );
     // A key that is not one of the item's actions does nothing.
-    let input = press(&mut state, 'x');
+    let input = press(&mut state, 'z');
     assert!(requests(&input).is_empty() && !input.repaint);
 
     // The answer shows in the status line.
@@ -2421,4 +2421,351 @@ fn the_overlay_fetches_items_of_the_first_feed_even_when_only_its_groups_show_in
         })
         .collect();
     assert_eq!(fetched, ["workbox-sync"]);
+}
+
+// ----- selection and `w` (work) -----------------------------------------------
+
+fn marked(state: &ClientShellState) -> Vec<String> {
+    match &state.overlay {
+        Some(ClientShellOverlay::Feed(overlay)) => overlay.marked.iter().cloned().collect(),
+        other => panic!("expected the Feed overlay, got {other:?}"),
+    }
+}
+
+fn work_params(ids: &[&str]) -> Method {
+    Method::FeedWork(FeedWorkParams {
+        job_id: "workbox-sync".into(),
+        item_ids: ids.iter().map(|id| (*id).to_owned()).collect(),
+    })
+}
+
+fn started_result(count: u32) -> ResponseResult {
+    ResponseResult::FeedWorkStarted {
+        job_id: "workbox-sync".into(),
+        count,
+        agent: "claude".into(),
+        tab_id: "w1:t2".into(),
+        pane_id: "w1:t2:p1".into(),
+        tab_title: "workbox · 3 items".into(),
+        prompt_file: "/state/work/1.md".into(),
+        skipped: Vec::new(),
+        warnings: Vec::new(),
+    }
+}
+
+fn status_line(state: &ClientShellState) -> Option<String> {
+    match &state.overlay {
+        Some(ClientShellOverlay::Feed(overlay)) => overlay.status.clone(),
+        _ => None,
+    }
+}
+
+#[test]
+fn x_marks_the_current_item_with_a_checkmark_and_the_header_counts() {
+    let mut state = overlay_state(vec![workbox_feed()]);
+    let frame = compose(&mut state);
+    assert!(!frame.contains("selected"), "nothing marked yet");
+    press(&mut state, 'x');
+    assert_eq!(marked(&state), ["nh-1"]);
+    press(&mut state, 'j');
+    press(&mut state, 'j');
+    press(&mut state, 'x');
+    assert_eq!(marked(&state), ["nh-1", "nh-3"]);
+    let frame = compose(&mut state);
+    assert!(frame.contains("5 items · 2 unread · 2 selected"), "{frame}");
+    let rows: Vec<&str> = frame.lines().filter(|line| line.contains("NH-")).collect();
+    let checked: Vec<&&str> = rows.iter().filter(|line| line.contains('✓')).collect();
+    // nh-4 is `done` and has its own check dot; the marks are in column 0 of the row.
+    assert!(
+        rows.iter().any(|row| row.contains("✓ ● NH-1")),
+        "marked unread row: {rows:?}"
+    );
+    assert!(
+        rows.iter().any(|row| row.contains("✓ ○ NH-3")),
+        "marked read row: {rows:?}"
+    );
+    assert!(
+        rows.iter().all(|row| !row.contains("✓ ● NH-2")),
+        "{checked:?}"
+    );
+    // x again unmarks.
+    press(&mut state, 'x');
+    assert_eq!(marked(&state), ["nh-1"]);
+    assert!(compose(&mut state).contains("1 selected"));
+}
+
+#[test]
+fn capital_x_clears_the_selection() {
+    let mut state = overlay_state(vec![workbox_feed()]);
+    compose(&mut state);
+    press(&mut state, 'x');
+    press(&mut state, 'j');
+    press(&mut state, 'x');
+    assert_eq!(marked(&state).len(), 2);
+    let input = press_shifted(&mut state, 'X');
+    assert!(input.repaint);
+    assert!(marked(&state).is_empty());
+    assert!(!compose(&mut state).contains("selected"));
+    // Nothing to clear: no repaint.
+    let input = press_shifted(&mut state, 'X');
+    assert!(!input.repaint);
+}
+
+#[test]
+fn the_selection_survives_category_tabs_and_filtering() {
+    let mut state = overlay_state(vec![grouped_feed()]);
+    compose_at(&mut state, 200, 50);
+    press(&mut state, 'x'); // nh-1, in Reviews
+    press(&mut state, '2'); // Mentions
+    assert_eq!(titles(&state), ["nh-3"]);
+    press(&mut state, 'x');
+    assert_eq!(marked(&state), ["nh-1", "nh-3"]);
+    // The header counts items the current feed has, shown or not.
+    let frame = compose_at(&mut state, 200, 50);
+    assert!(frame.contains("2 selected"), "{frame}");
+    // A filter that hides nh-1 keeps it marked.
+    press(&mut state, '0');
+    press(&mut state, '/');
+    for ch in "reply".chars() {
+        press(&mut state, ch);
+    }
+    assert_eq!(titles(&state), ["nh-3"]);
+    assert_eq!(marked(&state), ["nh-1", "nh-3"]);
+    // While typing a filter, x is text.
+    press(&mut state, 'x');
+    assert_eq!(marked(&state), ["nh-1", "nh-3"]);
+    state.handle_raw_events(vec![key(KeyCode::Esc)]);
+    // And `w` sends both, in feed order.
+    compose_at(&mut state, 200, 50);
+    let input = press(&mut state, 'w');
+    let sent = requests(&input);
+    assert_eq!(sent[0].method, work_params(&["nh-1", "nh-3"]));
+}
+
+#[test]
+fn switching_feeds_clears_the_selection() {
+    let mut state = overlay_state(two_feeds());
+    compose(&mut state);
+    press(&mut state, 'x');
+    assert_eq!(marked(&state).len(), 1);
+    state.handle_raw_events(vec![key(KeyCode::Tab)]);
+    assert!(marked(&state).is_empty());
+}
+
+#[test]
+fn esc_clears_the_selection_before_the_filter_before_closing() {
+    let mut state = overlay_state(vec![workbox_feed()]);
+    compose(&mut state);
+    press(&mut state, 'x');
+    press(&mut state, '/');
+    for ch in "retry".chars() {
+        press(&mut state, ch);
+    }
+    state.handle_raw_events(vec![key(KeyCode::Enter)]);
+    let esc = |state: &mut ClientShellState| {
+        state.handle_raw_events(vec![key(KeyCode::Esc)]);
+    };
+    esc(&mut state);
+    assert!(marked(&state).is_empty(), "first esc clears the selection");
+    match &state.overlay {
+        Some(ClientShellOverlay::Feed(overlay)) => assert_eq!(overlay.filter, "retry"),
+        other => panic!("{other:?}"),
+    }
+    esc(&mut state);
+    match &state.overlay {
+        Some(ClientShellOverlay::Feed(overlay)) => assert!(overlay.filter.is_empty()),
+        other => panic!("{other:?}"),
+    }
+    esc(&mut state);
+    assert!(state.overlay.is_none(), "third esc closes");
+}
+
+#[test]
+fn w_works_on_the_current_item_when_nothing_is_selected() {
+    let mut state = overlay_state(vec![workbox_feed()]);
+    compose(&mut state);
+    press(&mut state, 'j');
+    let input = press(&mut state, 'w');
+    let sent = requests(&input);
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0].method, work_params(&["nh-2"]));
+    assert!(compose(&mut state).contains("starting an agent with 1 item…"));
+}
+
+#[test]
+fn w_sends_every_selected_id_in_feed_order() {
+    let mut state = overlay_state(vec![workbox_feed()]);
+    compose(&mut state);
+    // Select out of order: nh-4, nh-1, nh-2.
+    press(&mut state, 'G');
+    press(&mut state, 'k');
+    press(&mut state, 'x');
+    press(&mut state, 'g');
+    press(&mut state, 'x');
+    press(&mut state, 'j');
+    press(&mut state, 'x');
+    let input = press(&mut state, 'w');
+    let sent = requests(&input);
+    assert_eq!(sent[0].method, work_params(&["nh-1", "nh-2", "nh-4"]));
+    assert!(compose(&mut state).contains("starting an agent with 3 items…"));
+}
+
+#[test]
+fn a_started_work_request_closes_the_overlay_and_says_what_happened() {
+    let mut state = overlay_state(vec![workbox_feed()]);
+    compose(&mut state);
+    press(&mut state, 'x');
+    press(&mut state, 'j');
+    press(&mut state, 'x');
+    let input = press(&mut state, 'w');
+    let sent = requests(&input);
+    answer(&mut state, &sent[0], started_result(2));
+    // The new tab is focused on the server; the overlay gets out of its way.
+    assert!(state.overlay.is_none());
+    let notice = state.visible_endpoint_notice.as_ref().expect("notice");
+    assert_eq!(
+        notice.body,
+        "started claude with 2 items in tab workbox · 3 items"
+    );
+}
+
+#[test]
+fn a_failed_work_request_keeps_the_overlay_and_the_selection() {
+    let mut state = overlay_state(vec![workbox_feed()]);
+    compose(&mut state);
+    press(&mut state, 'x');
+    let input = press(&mut state, 'w');
+    let sent = requests(&input);
+    let boot = state.snapshot.as_deref().unwrap().boot_id.clone();
+    state.handle_endpoint_result(
+        &boot,
+        &sent[0].id,
+        Err(ClientShellEndpointError {
+            code: Some("feed_work_cwd_missing".into()),
+            message: "the working directory /nope does not exist".into(),
+        }),
+    );
+    assert_eq!(marked(&state), ["nh-1"]);
+    assert_eq!(
+        status_line(&state).as_deref(),
+        Some("the working directory /nope does not exist")
+    );
+}
+
+#[test]
+fn a_server_without_feed_work_disables_only_w() {
+    let mut state = overlay_state(vec![workbox_feed()]);
+    state.set_endpoint_methods(Some(vec![
+        "feed.list".into(),
+        "feed.get".into(),
+        "feed.run_action".into(),
+    ]));
+    compose(&mut state);
+    let input = press(&mut state, 'w');
+    assert!(requests(&input).is_empty());
+    assert!(status_line(&state)
+        .unwrap()
+        .contains("does not support starting work from a feed"));
+    assert!(!state.feeds.unsupported, "feeds keep working");
+    // Selecting and the other keys still work.
+    press(&mut state, 'x');
+    assert_eq!(marked(&state), ["nh-1"]);
+}
+
+#[test]
+fn w_with_an_empty_list_has_nothing_to_work_on() {
+    let mut feed = workbox_feed();
+    feed.1.clear();
+    feed.0.count = 0;
+    let mut state = overlay_state(vec![feed]);
+    compose(&mut state);
+    let input = press(&mut state, 'w');
+    assert!(requests(&input).is_empty());
+    assert_eq!(status_line(&state).as_deref(), Some("nothing to work on"));
+}
+
+#[test]
+fn a_click_on_the_checkmark_column_or_ctrl_click_marks_the_row() {
+    let mut state = overlay_state(vec![workbox_feed()]);
+    compose(&mut state);
+    let (row, _) = state.hits.feed_overlay.rows[2];
+    let at = |column: u16, modifiers: KeyModifiers| {
+        RawInputEvent::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column,
+            row: row.y,
+            modifiers,
+        })
+    };
+    // The checkmark column marks, and selects the row too.
+    state.handle_raw_events(vec![at(row.x, KeyModifiers::empty())]);
+    assert_eq!(marked(&state), ["nh-3"]);
+    assert_eq!(selected_item(&state), "nh-3");
+    // Clicking it again unmarks.
+    compose(&mut state);
+    state.handle_raw_events(vec![at(row.x + 1, KeyModifiers::empty())]);
+    assert!(marked(&state).is_empty());
+    // Ctrl-click anywhere on another row marks it without opening.
+    compose(&mut state);
+    let (other, _) = state.hits.feed_overlay.rows[0];
+    let input = state.handle_raw_events(vec![RawInputEvent::Mouse(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: other.x + 10,
+        row: other.y,
+        modifiers: KeyModifiers::CONTROL,
+    })]);
+    assert_eq!(marked(&state), ["nh-1"]);
+    assert!(
+        input.actions.is_empty(),
+        "ctrl-click does not open the link"
+    );
+    // A plain click elsewhere only selects.
+    compose(&mut state);
+    let (third, _) = state.hits.feed_overlay.rows[1];
+    state.handle_raw_events(vec![RawInputEvent::Mouse(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: third.x + 10,
+        row: third.y,
+        modifiers: KeyModifiers::empty(),
+    })]);
+    assert_eq!(marked(&state), ["nh-1"]);
+    assert_eq!(selected_item(&state), "nh-2");
+}
+
+#[test]
+fn the_footer_and_the_detail_row_hint_at_select_and_work() {
+    let mut state = overlay_state(vec![workbox_feed()]);
+    let frame = compose_at(&mut state, 200, 50);
+    assert!(frame.contains("x select   w work"), "{frame}");
+    press(&mut state, 'x');
+    let frame = compose_at(&mut state, 200, 50);
+    assert!(
+        frame.contains("X clear   w work 1") && frame.contains("esc clear selection"),
+        "{frame}"
+    );
+    // Grouped feeds keep the category hint and add the new one.
+    let mut state = overlay_state(vec![grouped_feed()]);
+    let frame = compose_at(&mut state, 200, 50);
+    assert!(
+        frame.contains("[/] or 0-9 category   x select   w work"),
+        "{frame}"
+    );
+}
+
+#[test]
+fn x_x_and_w_are_reserved_action_keys() {
+    for key in ["x", "X", "w"] {
+        assert!(
+            crate::feed::format::action_key_problem(key)
+                .is_some_and(|text| text.contains("reserved")),
+            "{key}"
+        );
+    }
+    // The keys workbox uses stay free.
+    for key in ["d", "s", "t"] {
+        assert!(
+            crate::feed::format::action_key_problem(key).is_none(),
+            "{key}"
+        );
+    }
 }

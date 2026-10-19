@@ -75,6 +75,7 @@ fn item_info(item: &ItemRecord) -> FeedItemInfo {
             .map(|action| FeedActionInfo {
                 key: action.key.clone(),
                 title: action.title.clone(),
+                confirm: action.confirm.clone(),
             })
             .collect(),
     }

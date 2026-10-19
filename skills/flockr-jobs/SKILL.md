@@ -166,7 +166,7 @@ tab_title = "workbox · {{date}}"
 prompt_file = "prompt.md"
 ```
 
-`prompt.md` is a template, for example: `Today is {{date}}. {{count}} items are unread: {{feed_json}}. Triage them; do not change anything until I say so.` The feed shows as `Today (workbox) N` in the sidebar, unread items first; `d`, `s` and `t` run `workbox mark`. While trying this out, point `command` and the feed at a stub script instead of the real `workbox` so nothing in your tracker changes.
+`prompt.md` is a template, for example: `Today is {{date}}. {{count}} items are unread: {{feed_json}}. Triage them; do not change anything until I say so.` The feed shows as `Today (workbox) N` in the sidebar, unread items first; `d`, `s`, `t` and `D` (delete, asks y/n first) run `workbox mark`. While trying this out, point `command` and the feed at a stub script instead of the real `workbox` so nothing in your tracker changes.
 
 ## Worked example 2: GitHub PR count
 

@@ -17,6 +17,11 @@
                 "minItems": 1,
                 "type": "array"
               },
+              "confirm": {
+                "description": "Optional question, for example \"Delete NH-1406 from workbox?\". The Feed overlay and the sidebar menu ask y or n before running the action. Other callers (`flockr feed action`, the API) run it without asking.",
+                "maxLength": 120,
+                "type": "string"
+              },
               "key": {
                 "description": "One visible character, unique per item. Reserved for the overlay: 'j' 'k' 'q' 'g' 'G' 'R' 'S' '/' 'x' 'X' 'w' and these key names: enter, return, esc, escape, up, down, left, right, tab, backtab, pageup, pagedown, home, end, backspace, delete, space. In a feed that declares groups these are reserved too: '[' ']' '0' '1' '2' '3' '4' '5' '6' '7' '8' '9'.",
                 "maxLength": 1,

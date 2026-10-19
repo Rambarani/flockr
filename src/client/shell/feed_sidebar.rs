@@ -503,7 +503,7 @@ impl ClientShellState {
             .map(|(_, job_id)| job_id.clone())
     }
 
-    fn feed_item(&self, job_id: &str, item_id: &str) -> Option<FeedItemInfo> {
+    pub(super) fn feed_item(&self, job_id: &str, item_id: &str) -> Option<FeedItemInfo> {
         self.feeds
             .items_of(job_id)
             .iter()

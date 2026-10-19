@@ -919,6 +919,19 @@ impl ClientShellState {
             return;
         }
 
+        if matches!(self.overlay, Some(ClientShellOverlay::ConfirmFeedAction(_))) {
+            match key.code {
+                KeyCode::Char('y' | 'Y') | KeyCode::Enter => {
+                    self.answer_feed_action_confirmation(true, outcome)
+                }
+                KeyCode::Char('n' | 'N') | KeyCode::Esc => {
+                    self.answer_feed_action_confirmation(false, outcome)
+                }
+                _ => {}
+            }
+            return;
+        }
+
         if matches!(self.overlay, Some(ClientShellOverlay::ConfirmClose(_))) {
             if key.code == KeyCode::Enter {
                 self.accept_close_confirmation(outcome);

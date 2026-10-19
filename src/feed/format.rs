@@ -52,6 +52,7 @@ pub(crate) const OTHER_GROUP_ID: &str = "other";
 pub(crate) const OTHER_GROUP_TITLE: &str = "Other";
 pub(crate) const MAX_ACTIONS: usize = 8;
 pub(crate) const MAX_ACTION_TITLE_CHARS: usize = 40;
+pub(crate) const MAX_ACTION_CONFIRM_CHARS: usize = 120;
 pub(crate) const MAX_ARGV: usize = 64;
 pub(crate) const MAX_ARG_CHARS: usize = 4096;
 /// Diagnostics beyond this many are summarised in one line.
@@ -93,6 +94,9 @@ pub(crate) const GROUPED_RESERVED_CHARS: &[char] =
 pub(crate) struct ActionRecord {
     pub(crate) key: String,
     pub(crate) title: String,
+    /// Asked (y/n) in the client before the action runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) confirm: Option<String>,
     pub(crate) command: Vec<String>,
 }
 
@@ -439,10 +443,18 @@ fn parse_action(
         diagnostics,
     )
     .unwrap_or_else(|| key.to_owned());
+    let confirm = optional_text(
+        object,
+        "confirm",
+        MAX_ACTION_CONFIRM_CHARS,
+        context,
+        diagnostics,
+    );
     seen_keys.push(key.to_owned());
     Some(ActionRecord {
         key: key.to_owned(),
         title,
+        confirm,
         command,
     })
 }
@@ -1094,6 +1106,41 @@ mod tests {
                 "missing {expected:?} in\n{joined}"
             );
         }
+    }
+
+    #[test]
+    fn an_action_confirm_question_is_optional_and_capped() {
+        let long = "q".repeat(MAX_ACTION_CONFIRM_CHARS + 5);
+        let feed = parse_feed(&format!(
+            r#"{{"version":1,"items":[{{"id":"a","title":"A","actions":[
+              {{"key":"a","command":["x"]}},
+              {{"key":"b","command":["x"],"confirm":"Delete A?"}},
+              {{"key":"c","command":["x"],"confirm":"   "}},
+              {{"key":"e","command":["x"],"confirm":7}},
+              {{"key":"f","command":["x"],"confirm":"{long}"}}]}}]}}"#
+        ))
+        .unwrap();
+        let confirms: Vec<_> = feed.items[0]
+            .actions
+            .iter()
+            .map(|action| action.confirm.clone())
+            .collect();
+        assert_eq!(confirms[0], None);
+        assert_eq!(confirms[1].as_deref(), Some("Delete A?"));
+        assert_eq!(confirms[2], None, "blank means no question");
+        assert_eq!(confirms[3], None);
+        assert_eq!(
+            confirms[4].as_ref().map(|text| text.chars().count()),
+            Some(MAX_ACTION_CONFIRM_CHARS)
+        );
+        assert!(feed
+            .diagnostics
+            .iter()
+            .any(|line| line.contains("confirm must be a string")));
+        assert!(feed
+            .diagnostics
+            .iter()
+            .any(|line| line.contains("confirm is longer than")));
     }
 
     #[test]

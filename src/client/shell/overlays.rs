@@ -65,6 +65,7 @@ pub(crate) fn render_client_overlay(
         }
         ClientShellOverlay::Rename(v) => render_rename_overlay(b, v, p),
         ClientShellOverlay::ConfirmClose(v) => render_confirm_close_overlay(b, v, p),
+        ClientShellOverlay::ConfirmFeedAction(v) => render_confirm_feed_action_overlay(b, v, p),
         ClientShellOverlay::Help(v) => render_help_overlay(b, v, k, p),
         ClientShellOverlay::Navigator(v) => {
             render_navigator_overlay(b, v, endpoints, active_endpoint_id, p)
@@ -1264,6 +1265,62 @@ fn render_help_overlay(
         ..OverlayRender::default()
     })
 }
+fn render_confirm_feed_action_overlay(
+    b: &mut Buffer,
+    c: &ClientConfirmFeedActionOverlay,
+    p: &Palette,
+) -> Option<OverlayRender> {
+    let q = popup(b.area, 64, 6)?;
+    let i = panel(b, q, p.red, p.panel_bg)?;
+    put_text(
+        b,
+        i.x,
+        i.y,
+        i.width,
+        &format!(" {}", c.question),
+        Style::default()
+            .fg(p.red)
+            .bg(p.panel_bg)
+            .add_modifier(Modifier::BOLD),
+    );
+    put_text(
+        b,
+        i.x,
+        i.y + 1,
+        i.width,
+        &format!(" feed action {}", c.key),
+        Style::default().fg(p.text).bg(p.panel_bg),
+    );
+    let rs = row(i, &[9, 9], 2, 3);
+    let [ok, cancel] = rs.as_slice() else {
+        return None;
+    };
+    button(
+        b,
+        *ok,
+        " y yes ",
+        Style::default()
+            .fg(contrast(p))
+            .bg(p.red)
+            .add_modifier(Modifier::BOLD),
+    );
+    button(
+        b,
+        *cancel,
+        " n no ",
+        Style::default()
+            .fg(p.text)
+            .bg(p.surface0)
+            .add_modifier(Modifier::BOLD),
+    );
+    Some(OverlayRender {
+        area: q,
+        primary: *ok,
+        cancel: *cancel,
+        ..OverlayRender::default()
+    })
+}
+
 fn render_confirm_close_overlay(
     b: &mut Buffer,
     c: &ClientConfirmCloseOverlay,

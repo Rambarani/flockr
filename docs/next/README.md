@@ -473,7 +473,7 @@ The command prints one JSON object on stdout, at most 4 MiB, and **nothing else*
 | `items[].updated_at` | RFC 3339 time, shown as an age. |
 | `items[].body` | Plain text for the detail pane (cut at 8 KiB). |
 | `items[].fields` | Up to 12 `{"label", "value"}` pairs shown as a table in the detail pane. |
-| `items[].actions` | Up to 8 actions: `{"key", "title", "command"}`. |
+| `items[].actions` | Up to 8 actions: `{"key", "title", "command"}` and an optional `"confirm"` question (up to 120 characters). With `confirm`, the Feed overlay and the sidebar menu ask `y` or `n` before running the action. `flockr feed action` and the API run it without asking. |
 
 Limits: 500 items; 200 characters for `id` and `title`. Unknown fields are ignored. A bad item or action is dropped with a note (see `flockr feed show`) rather than failing the feed. `flockr job schema --feed` prints the exact JSON Schema.
 
@@ -486,7 +486,7 @@ workbox list --json | flockr feed adapt workbox --title "Today (workbox)"
 workbox list --tab today --json | flockr feed adapt workbox     # only the today tab
 ```
 
-`flockr feed adapt workbox` reads the JSON array from `workbox list --json` on stdin and prints a feed. It sorts items into category tabs: New House PRs, JIRA Mentions, New Tickets, Old House PRs, My PRs, and Other. Each item gets actions `d` (done), `s` (seen) and `t` (today / untoday). `--bin` changes the program the actions run. It needs no server.
+`flockr feed adapt workbox` reads the JSON array from `workbox list --json` on stdin and prints a feed. It sorts items into category tabs: New House PRs, JIRA Mentions, New Tickets, Old House PRs, My PRs, and Other. Each item gets actions `d` (done), `s` (seen), `t` (today / untoday) and `D` (delete: `workbox mark <id> delete`, which hides the item permanently; it asks `y/n` first). `--bin` changes the program the actions run. It needs no server.
 
 ### Sidebar section
 
@@ -680,7 +680,7 @@ flockr job schedule workbox-sync "0 10 * * 1-5"
 **What you see:**
 
 - A **Today (workbox)** section under the agent list in the sidebar, with the unread count. Click a row to open the item. Right-click for done / seen / today.
-- `prefix+f` opens the Feed overlay: category tabs, detail pane, `d` `s` `t` actions, `R` refresh, `S` sync now, `x` select and `w` to start Claude on the selected items.
+- `prefix+f` opens the Feed overlay: category tabs, detail pane, `d` `s` `t` `D` actions, `R` refresh, `S` sync now, `x` select and `w` to start Claude on the selected items.
 - When a sync changes something, a toast asks "N items need you. Start Claude?". The question waits in the Decisions tab (`prefix+t`, then `tab`). `enter` opens a tab running `claude` with `prompt.md` filled in. Nothing starts until you press it.
 - If the feed command fails (for example offline), the last list stays and the sidebar header shows `!`.
 

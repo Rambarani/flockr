@@ -390,6 +390,7 @@ impl FeedManager {
                     .map(|action| FeedActionInfo {
                         key: action.key.clone(),
                         title: action.title.clone(),
+                        confirm: action.confirm.clone(),
                     })
                     .collect(),
             })
@@ -718,7 +719,8 @@ mod tests {
             items[0].actions,
             [FeedActionInfo {
                 key: "d".into(),
-                title: "done".into()
+                title: "done".into(),
+                confirm: None,
             }]
         );
         assert_eq!(manager.items("sync", &dir, Some(1)).len(), 1);

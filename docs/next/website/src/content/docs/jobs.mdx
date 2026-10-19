@@ -348,7 +348,7 @@ command = ["workbox", "sync"]
 every = "1h"
 
 [feed]
-command = ["sh", "-c", "workbox list --json | flockr feed adapt workbox --title 'Today (workbox)'"]
+command = ["sh", "-c", "workbox list --json --include-done | flockr feed adapt workbox --title 'Today (workbox)'"]
 title = "Today (workbox)"          # optional; wins over the title the command prints
 ```
 
@@ -420,6 +420,7 @@ An action is `{"key", "title", "command"}` with an optional `"confirm"`: a singl
 
 ```sh
 workbox list --json | flockr feed adapt workbox --title "Today (workbox)"
+workbox list --json --include-done | flockr feed adapt workbox     # plus a Done tab (last 7 days)
 workbox list --tab today --json | flockr feed adapt workbox     # only the today tab
 ```
 
@@ -433,11 +434,12 @@ Each workbox item is also put in a category, from its `source` and `reason` (the
 | `jira-assigned` | New Tickets Assigned (`New Tickets`) | Jira `assigned`. |
 | `old-house-prs` | Old House PR Requests (`Old House PRs`) | Bitbucket `review_requested`. |
 | `my-prs` | My PRs (activity) (`My PRs`) | `authored`, `changes_requested`, `commented` and `approved` on GitHub and Bitbucket: what others did on your own PRs. |
-| `other` (implicit) | Other | Everything else, for example a `status_changed` or `updated` item. |
+| `other` (implicit) | Other | Everything else, for example a `status_changed` or `updated` item. Declared, before Done, only when an item needs it. |
+| `done` | Done | Items workbox reports as `done: true`, which `workbox list --json --include-done` adds (items marked done in the last 7 days; `--done-days N` changes that). Always declared, last. A done item is only here: not in its category (so category counts exclude it) and not in Today. Its state is `done`, its actions are `u` undo done (`workbox mark <id> undone`) and `D` delete, and its detail has a `Done at` field. |
 
 Workbox puts GitHub `changes_requested`, `commented` and `approved` on its New House tab next to the review requests. They come from its scan of your own open PRs, so the adapter keeps them in their own tab instead of mixing them in with the requests. Jira has no `status_changed` item in workbox, so none is mapped.
 
-Each workbox item becomes a feed item: `id` is the workbox item id, `badge` its key, `state` is `unread` or `read`, `url` and `updated_at` pass through, and `subtitle` is `<source> · <reason>` followed by ` · <where>` when there is one (underscores in the reason become spaces). The detail pane gets `fields` for Source, Reason, Where, Status, From (workbox's actor), Key, Snoozed until and Today (yes or no), leaving out the ones the item does not have, and the snippet as `body`; `updated_at` is shown by the pane itself in local time. The actions are `d` done (`workbox mark <id> done`), `s` seen (`workbox mark <id> seen`) and `t` today, which becomes `untoday` for items already on the today list, and `D` delete (`workbox mark <id> delete`, which hides the item permanently; it carries a `confirm` question, so the overlay and the menu ask `y/n` first). `--title` sets the title (default `workbox`) and `--bin` the program the actions run (default `workbox`, resolved on the job's `PATH`). Items without an id are skipped with a warning on stderr; input that is not an array is an error and exits non-zero, so the feed is marked stale instead of emptied.
+Each workbox item becomes a feed item: `id` is the workbox item id, `badge` its key, `state` is `unread` or `read` (`done` for a done item), `url` and `updated_at` pass through, and `subtitle` is `<source> · <reason>` followed by ` · <where>` when there is one (underscores in the reason become spaces). The detail pane gets `fields` for Source, Reason, Where, Status, From (workbox's actor), Key, Snoozed until and Today (yes or no), leaving out the ones the item does not have, and the snippet as `body`; `updated_at` is shown by the pane itself in local time. The actions are `d` done (`workbox mark <id> done`), `s` seen (`workbox mark <id> seen`) and `t` today, which becomes `untoday` for items already on the today list, and `D` delete (`workbox mark <id> delete`, which hides the item permanently; it carries a `confirm` question, so the overlay and the menu ask `y/n` first). `--title` sets the title (default `workbox`) and `--bin` the program the actions run (default `workbox`, resolved on the job's `PATH`). Items without an id are skipped with a warning on stderr; input that is not an array is an error and exits non-zero, so the feed is marked stale instead of emptied.
 
 ### Groups (category tabs)
 

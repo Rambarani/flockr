@@ -433,7 +433,7 @@ Give a job a feed with a `[feed]` table:
 
 ```toml
 [feed]
-command = ["sh", "-c", "workbox list --json | flockr feed adapt workbox --title 'Today (workbox)'"]
+command = ["sh", "-c", "workbox list --json --include-done | flockr feed adapt workbox --title 'Today (workbox)'"]
 title = "Today (workbox)"          # optional; wins over the title the command prints
 ```
 
@@ -484,10 +484,11 @@ Limits: 500 items; 200 characters for `id` and `title`. Unknown fields are ignor
 
 ```sh
 workbox list --json | flockr feed adapt workbox --title "Today (workbox)"
+workbox list --json --include-done | flockr feed adapt workbox     # plus a Done tab (last 7 days)
 workbox list --tab today --json | flockr feed adapt workbox     # only the today tab
 ```
 
-`flockr feed adapt workbox` reads the JSON array from `workbox list --json` on stdin and prints a feed. It sorts items into category tabs: Today (every item on the workbox today list, also shown under its own category), New House PRs, JIRA Mentions, New Tickets, Old House PRs, My PRs, and Other. Each item gets actions `d` (done), `s` (seen), `t` (today / untoday) and `D` (delete: `workbox mark <id> delete`, which hides the item permanently; it asks `y/n` first). `--bin` changes the program the actions run. It needs no server.
+`flockr feed adapt workbox` reads the JSON array from `workbox list --json` on stdin and prints a feed. It sorts items into category tabs: Today (every item on the workbox today list, also shown under its own category), New House PRs, JIRA Mentions, New Tickets, Old House PRs, My PRs, and Other, then a last Done tab for items with `done: true` (what `workbox list --json --include-done` adds: items marked done in the last 7 days; `--done-days N` changes that). A done item is only in Done, not in its category or Today, so category counts exclude it; its actions are `u` (undo done: `workbox mark <id> undone`) and `D` (delete). Each item gets actions `d` (done), `s` (seen), `t` (today / untoday) and `D` (delete: `workbox mark <id> delete`, which hides the item permanently; it asks `y/n` first). `--bin` changes the program the actions run. It needs no server.
 
 ### Sidebar section
 

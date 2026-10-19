@@ -95,7 +95,7 @@ The feed command's stdout must be **only one JSON object**: no log lines, no ban
 - **Caps.** At most 500 items and 4 MiB of output. `id` and `title` 200 characters, `subtitle` 300, `badge` 40, `url` 2048, `updated_at` 40, feed `title` 120. Longer text is cut, control characters are removed, line breaks become spaces. A bad item or action is dropped with a diagnostic instead of failing the feed.
 - **Actions.** At most 8 per item. `key` is exactly one visible character, unique per item, and not one of `j k q g G R S / x X w W` (the overlay's own keys; `x`, `X`, `w` and `W` select and work) or a named key (`enter`, `esc`, arrows, `tab`, `space`, and the like). `command` is a non-empty argv array (at most 64 arguments of 4096 characters). It runs with the job's environment plus `FLOCKR_FEED_ITEM_ID` and `FLOCKR_FEED_ACTION_KEY`, for at most 60 seconds, then the feed refreshes.
 - A feed that fails to refresh keeps its last good items and is marked stale. `flockr feed show <id>` lists the diagnostics.
-- `flockr feed adapt workbox` turns `workbox list --json` into a feed; use it as the last stage of a pipeline in a `sh -c` feed command.
+- `flockr feed adapt workbox` turns `workbox list --json` into a feed; use it as the last stage of a pipeline in a `sh -c` feed command. Add `--include-done` to the workbox command to fill a last `Done` tab (items marked done in the last 7 days, `--done-days N`); done items get state `done` and actions `u` (undo done) and `D`, and are not counted in their category or Today.
 
 ## Work on feed items (`[feed.work]`)
 
@@ -154,7 +154,7 @@ enabled = false
 notify = "on_failure"
 
 [feed]
-command = ["sh", "-c", "workbox list --json | flockr feed adapt workbox --title 'Today (workbox)'"]
+command = ["sh", "-c", "workbox list --json --include-done | flockr feed adapt workbox --title 'Today (workbox)'"]
 title = "Today (workbox)"
 
 [handoff]

@@ -20,9 +20,11 @@ notify = "on_failure"
 # JSON array of `workbox list --json`, which `flockr feed adapt workbox`
 # turns into a feed: unread items get a dot, Enter or a click opens the link,
 # and each item has done (d), seen (s), today (t) and delete (D, asks y/n first)
-# actions that run `workbox mark`.
+# actions that run `workbox mark`. `--include-done` adds items marked done in
+# the last 7 days (`--done-days N`), shown in a last Done tab with an undo (u)
+# action.
 [feed]
-command = ["sh", "-c", "workbox list --json | flockr feed adapt workbox --title 'Today (workbox)'"]
+command = ["sh", "-c", "workbox list --json --include-done | flockr feed adapt workbox --title 'Today (workbox)'"]
 title = "Today (workbox)"
 
 # Only the items on the today tab:

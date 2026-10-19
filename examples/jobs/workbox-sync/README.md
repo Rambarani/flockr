@@ -25,7 +25,11 @@ instead, copy `job.toml` and `prompt.md` from this directory to
   count). Click a row to open the item, right-click for **done**, **seen** and
   **today**, click the header to collapse, click `+N more` for the overlay.
 - **Feed overlay** (`prefix+f`): the full list. `enter` opens the link, `d`, `s`
-  and `t` run the actions, `/` filters, `R` refreshes, `esc` closes.
+  and `t` run the actions, `/` filters, `R` refreshes, `esc` closes. `x`
+  marks items (`X` clears), and `w` opens a tab and starts Claude with the marked
+  items (the current item when none is marked) as the prompt; see the
+  commented `[feed.work]` block in `job.toml` for the working directory
+  (`~/code/work/<repo>` for GitHub PRs) and prompt.
 - **CLI**: `flockr feed list`, `flockr feed show workbox-sync`,
   `flockr feed refresh workbox-sync`, and
   `flockr feed action workbox-sync <item id> d`.

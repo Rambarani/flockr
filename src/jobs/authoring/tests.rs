@@ -305,6 +305,92 @@ fn a_cron_that_never_fires_and_a_long_timeout_are_flagged() {
 }
 
 #[test]
+fn feed_work_problems_are_found() {
+    let sandbox = Sandbox::new("feed-work");
+    let work = |extra: &str| {
+        format!("{SH_JOB}[feed]\ncommand = [\"sh\", \"run.sh\"]\n[feed.work]\n{extra}")
+    };
+
+    let unknown = sandbox.job(
+        "work-unknown-var",
+        &[
+            ("job.toml", &work("prompt = \"{{items}} {{nope}}\"\n")),
+            ("run.sh", ""),
+        ],
+    );
+    assert_error(
+        &sandbox.validate(&unknown, false),
+        "feed.work.prompt: unknown template variable {{nope}}",
+    );
+
+    let missing = sandbox.job(
+        "work-missing-prompt",
+        &[
+            ("job.toml", &work("prompt_file = \"gone.md\"\n")),
+            ("run.sh", ""),
+        ],
+    );
+    assert_error(
+        &sandbox.validate(&missing, false),
+        "feed.work.prompt_file: could not read",
+    );
+
+    let in_file = sandbox.job(
+        "work-var-in-file",
+        &[
+            ("job.toml", &work("prompt_file = \"w.md\"\n")),
+            ("w.md", "hello {{itemz.title}}"),
+            ("run.sh", ""),
+        ],
+    );
+    let report = sandbox.validate(&in_file, false);
+    assert_error(&report, "{{itemz.title}}");
+    assert!(has(&report.errors, "w.md"), "{:?}", report.errors);
+
+    let both = sandbox.job(
+        "work-both",
+        &[
+            (
+                "job.toml",
+                &work("prompt = \"a\"\nprompt_file = \"w.md\"\n"),
+            ),
+            ("run.sh", ""),
+        ],
+    );
+    assert!(!sandbox.validate(&both, false).ok);
+
+    let fine = sandbox.job(
+        "work-ok",
+        &[
+            (
+                "job.toml",
+                &work(
+                    "agent_command = \"claude --file {prompt_file}\"\ncwd = \"/nonexistent-dir/{{item.field.repo}}\"\ntab_title = \"{{job.title}} {{count}}\"\nprompt = \"{{items}} {{items_json}} {{item.url}} {{item.field.repo}}\"\n",
+                ),
+            ),
+            ("run.sh", ""),
+        ],
+    );
+    let report = sandbox.validate(&fine, false);
+    assert!(report.ok, "{:?}", report.errors);
+
+    let bad_cwd = sandbox.job(
+        "work-cwd",
+        &[
+            ("job.toml", &work("cwd = \"/nonexistent-dir\"\n")),
+            ("run.sh", ""),
+        ],
+    );
+    let report = sandbox.validate(&bad_cwd, false);
+    assert!(report.ok);
+    assert!(
+        has(&report.warnings, "feed.work.cwd"),
+        "{:?}",
+        report.warnings
+    );
+}
+
+#[test]
 fn handoff_problems_are_found() {
     let sandbox = Sandbox::new("handoff");
     let handoff = |extra: &str| format!("{SH_JOB}[handoff]\n{extra}");
@@ -585,6 +671,40 @@ fn a_dry_run_shows_the_output_the_feed_and_the_rendered_handoff() {
     assert!(text.contains("(1 unread, exit 0)"), "{text}");
     assert!(text.contains("agent      claude \"$(cat"), "{text}");
     assert!(matches!(result.feed, FeedOutcome::Parsed(_)));
+    // The `w` preview uses the built-in defaults without a [feed.work] table.
+    assert!(text.contains("work (w in the Feed overlay)"), "{text}");
+    assert!(text.contains("built-in defaults; no [feed.work]"), "{text}");
+    assert!(
+        text.contains("Here are 2 items from T I want to work on:"),
+        "{text}"
+    );
+    assert!(text.contains("tab title  dry · 2 items"), "{text}");
+}
+
+#[test]
+fn a_dry_run_previews_a_configured_feed_work_table() {
+    let sandbox = Sandbox::new("dry-work");
+    let job = dry_job(
+        &sandbox,
+        "dry-work",
+        "[feed]\ncommand = [\"sh\", \"-c\", \"echo '{\\\"version\\\":1,\\\"items\\\":[{\\\"id\\\":\\\"a\\\",\\\"title\\\":\\\"A\\\"}]}'\"]\n\
+         [feed.work]\nagent_command = \"claude --add-dir /tmp {prompt_file}\"\ncwd = \"/tmp\"\ntab_title = \"W {{item.id}}\"\nprompt = \"look at {{item.title}} ({{count}})\"\n",
+        "true\n",
+    );
+    let (result, text) = dry(&sandbox, &job, Options::default());
+    assert_eq!(dry_run::exit_code(&result), 0, "{text}");
+    assert!(
+        text.contains("marking the first 1 item (from [feed.work])"),
+        "{text}"
+    );
+    assert!(text.contains("tab title  W a"), "{text}");
+    assert!(text.contains("cwd        /tmp"), "{text}");
+    assert!(
+        text.contains("agent      claude --add-dir /tmp '<state dir>/work/<time>.md'")
+            || text.contains("agent      claude --add-dir /tmp <state dir>/work/<time>.md"),
+        "{text}"
+    );
+    assert!(text.contains("look at A (1)"), "{text}");
 }
 
 #[test]
@@ -782,7 +902,9 @@ fn the_skill_is_embedded_and_covers_the_contract() {
         "~/.zshrc",
         "secrets",
         "only one JSON object",
-        "j k q g G R /",
+        "j k q g G R S / x X w",
+        "[feed.work]",
+        "feed.work",
         "workbox-sync",
         "gh search prs",
         "rust-script",

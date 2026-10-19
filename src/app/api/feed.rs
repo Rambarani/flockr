@@ -4,14 +4,16 @@
 
 use crate::api::schema::{
     EventData, EventEnvelope, EventKind, FeedGetParams, FeedListParams, FeedRunActionParams,
-    FeedSummary, FeedTarget, ResponseResult,
+    FeedSummary, FeedTarget, FeedWorkParams, ResponseResult,
 };
 use crate::feed::manager::{ActionLookupError, BusyReason, TaskKind, TaskResult};
 use crate::feed::runner::{ActionPlan, TaskPlan};
 use crate::jobs::definition::JobDef;
 
+use super::decisions::AgentTabErrorCodes;
 use super::responses;
 use crate::app::App;
+use crate::jobs::{feed_work, handoff, now_unix_ms};
 
 /// Why a feed task did not start.
 #[derive(Debug)]
@@ -339,6 +341,150 @@ impl App {
             }
         }
     }
+}
+
+impl App {
+    /// `feed.work`: render a prompt for the chosen items and start an agent
+    /// in a new tab, through the same code as a decision's Start. Nothing is
+    /// recorded in the feed; a failure leaves everything as it was.
+    pub(super) fn handle_feed_work(&mut self, id: String, params: FeedWorkParams) -> String {
+        let job = match self.feed_job(&id, &params.job_id) {
+            Ok(job) => job,
+            Err(response) => return response,
+        };
+        if params.item_ids.is_empty() {
+            return responses::encode_error(
+                id,
+                "feed_work_no_items",
+                "feed.work needs at least one item id".to_owned(),
+            );
+        }
+        let state_dir = self.jobs.state_dir_for(&params.job_id);
+        let stored = self.feeds.items(&params.job_id, &state_dir, None);
+        let mut items = Vec::new();
+        let mut skipped = Vec::new();
+        for item_id in &params.item_ids {
+            if items
+                .iter()
+                .any(|item: &crate::api::schema::FeedItemInfo| item.id == *item_id)
+                || skipped.contains(item_id)
+            {
+                continue;
+            }
+            match stored.iter().find(|item| item.id == *item_id) {
+                Some(item) => items.push(item.clone()),
+                None => skipped.push(item_id.clone()),
+            }
+        }
+        if items.is_empty() {
+            return responses::encode_error(
+                id,
+                "feed_item_not_found",
+                format!(
+                    "feed {} has none of the requested items; the feed may have changed",
+                    params.job_id
+                ),
+            );
+        }
+        let feed_title = self
+            .feed_summary(&params.job_id)
+            .map(|summary| summary.title)
+            .unwrap_or_else(|| job.title.clone());
+        let now_ms = now_unix_ms();
+        let date = handoff::local_date(now_ms);
+        let mut plan = match feed_work::plan(&feed_work::WorkInput {
+            job: &job,
+            feed_title: &feed_title,
+            items: &items,
+            date: &date,
+        }) {
+            Ok(plan) => plan,
+            Err(message) => return responses::encode_error(id, "feed_work_invalid", message),
+        };
+        let default_cwd = feed_work::default_cwd(&job);
+        let cwd = match plan.cwd.take() {
+            Some(cwd) if cwd.is_dir() => cwd,
+            Some(cwd) => {
+                plan.warnings.push(format!(
+                    "the working directory {} does not exist; used {}",
+                    cwd.display(),
+                    default_cwd.display()
+                ));
+                default_cwd
+            }
+            None => default_cwd,
+        };
+        if !cwd.is_dir() {
+            return responses::encode_error(
+                id,
+                "feed_work_cwd_missing",
+                format!("the working directory {} does not exist", cwd.display()),
+            );
+        }
+        let prompt_path = match write_work_prompt(&state_dir, now_ms, &plan.prompt) {
+            Ok(path) => path,
+            Err(err) => {
+                return responses::encode_error(
+                    id,
+                    "feed_work_prompt_failed",
+                    format!("cannot write the prompt: {err}"),
+                )
+            }
+        };
+        let command = match handoff::launch_command(&plan.agent_command, Some(&prompt_path)) {
+            Ok(command) => command,
+            Err(message) => return responses::encode_error(id, "feed_work_invalid", message),
+        };
+        let agent = command
+            .split_whitespace()
+            .next()
+            .and_then(|program| program.rsplit('/').next())
+            .unwrap_or("agent")
+            .to_owned();
+        let label = (!plan.tab_title.is_empty()).then(|| plan.tab_title.clone());
+        match self.open_agent_tab(
+            &params.job_id,
+            &cwd,
+            command,
+            label,
+            AgentTabErrorCodes {
+                tab_failed: "feed_work_tab_failed",
+                launch_failed: "feed_work_launch_failed",
+            },
+        ) {
+            Ok((tab_id, pane_id)) => responses::encode_success(
+                id,
+                ResponseResult::FeedWorkStarted {
+                    job_id: params.job_id,
+                    count: u32::try_from(items.len().min(feed_work::MAX_WORK_ITEMS))
+                        .unwrap_or(u32::MAX),
+                    agent,
+                    tab_id,
+                    pane_id,
+                    tab_title: plan.tab_title,
+                    prompt_file: prompt_path.display().to_string(),
+                    skipped,
+                    warnings: plan.warnings,
+                },
+            ),
+            Err((code, message)) => responses::encode_error(id, code, message),
+        }
+    }
+}
+
+/// Write the rendered prompt to `<state dir>/work/<unix ms>.md`; a clash with
+/// an earlier file in the same millisecond takes the next free number.
+fn write_work_prompt(
+    state_dir: &std::path::Path,
+    now_ms: u64,
+    prompt: &str,
+) -> std::io::Result<std::path::PathBuf> {
+    let dir = state_dir.join("work");
+    let mut number = now_ms;
+    while dir.join(format!("{number}.md")).exists() {
+        number += 1;
+    }
+    handoff::write_numbered_prompt(&dir, number, prompt)
 }
 
 #[cfg(all(test, unix))]
@@ -858,5 +1004,240 @@ mod tests {
         fx.app.run_jobs_tick(Instant::now());
         assert!(!fx.app.feeds.is_busy("sync"));
         assert_eq!(fx.app.feeds.revision(), before);
+    }
+
+    // ---- feed.work -------------------------------------------------------
+
+    use super::super::test_support::{exiting_test_command, shutdown_test_runtimes};
+    use crate::api::schema::FeedWorkParams;
+
+    const WORK_FEED: &str = r#"{"version":1,"title":"Today","items":[
+        {"id":"a","title":"Fix login","badge":"NH-1","url":"https://example.test/a","body":"line one\nline two","state":"unread","fields":[{"label":"Repo","value":"app-one"}]},
+        {"id":"b","title":"Add tests","badge":"NH-2","url":"https://example.test/b","fields":[{"label":"Repo","value":"app-two"}]},
+        {"id":"c","title":"Third"}]}"#;
+
+    fn work_job(work_dir: &Path, work_table: &str) -> String {
+        format!(
+            "title = \"Sync\"\ncommand = [\"true\"]\nevery = \"1h\"\nenv = \"server\"\nnotify = \"never\"\ncwd = \"{}\"\n[feed]\ncommand = [\"sh\", \"-c\", {:?}]\n{work_table}",
+            work_dir.display(),
+            format!("printf '%s' '{WORK_FEED}'")
+        )
+    }
+
+    fn work_params(ids: &[&str]) -> Method {
+        Method::FeedWork(FeedWorkParams {
+            job_id: "sync".into(),
+            item_ids: ids.iter().map(|id| (*id).to_owned()).collect(),
+        })
+    }
+
+    impl Fixture {
+        /// A workspace with a live-shell tab, so a work tab can open.
+        fn with_workspace(&mut self) {
+            self.app.state.default_shell = exiting_test_command().into();
+            self.app.state.shell_mode = crate::config::ShellModeConfig::NonLogin;
+            self.app.state.workspaces = vec![crate::workspace::Workspace::test_new("spaces")];
+            self.app.state.active = Some(0);
+            self.app.state.selected = 0;
+            self.app.state.ensure_test_terminals();
+        }
+
+        fn loaded_work_feed(&mut self, work_dir: &Path, work_table: &str) {
+            self.write_job("sync", &work_job(work_dir, work_table));
+            self.ok(Method::FeedRefresh(target("sync")));
+            self.wait_for_feed("sync");
+        }
+
+        fn prompt_files(&self) -> Vec<PathBuf> {
+            let dir = self.root.join("state").join("sync").join("work");
+            let mut files: Vec<PathBuf> = std::fs::read_dir(dir)
+                .map(|entries| entries.flatten().map(|entry| entry.path()).collect())
+                .unwrap_or_default();
+            files.sort();
+            files
+        }
+    }
+
+    #[tokio::test]
+    async fn work_opens_a_focused_tab_with_the_default_prompt_for_the_chosen_items() {
+        let mut fx = Fixture::new("work-default");
+        fx.with_workspace();
+        let work = fx.root.join("code");
+        std::fs::create_dir_all(&work).unwrap();
+        fx.app.state.default_shell = "/bin/cat".into();
+        fx.loaded_work_feed(&work, "");
+        let before = fx.app.state.workspaces[0].tabs.len();
+
+        let ResponseResult::FeedWorkStarted {
+            job_id,
+            count,
+            agent,
+            tab_id,
+            pane_id,
+            tab_title,
+            prompt_file,
+            skipped,
+            warnings,
+        } = fx.ok(work_params(&["b", "gone", "a", "b"]))
+        else {
+            panic!("expected a started work request");
+        };
+        assert_eq!(job_id, "sync");
+        assert_eq!(count, 2, "duplicates and unknown ids are not counted");
+        assert_eq!(agent, "claude");
+        assert_eq!(skipped, ["gone"]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert!(!tab_id.is_empty() && !pane_id.is_empty());
+        assert_eq!(tab_title, "Sync · 2 items");
+
+        // A new tab, focused, in the job's cwd, with the title.
+        let workspace = &fx.app.state.workspaces[0];
+        assert_eq!(workspace.tabs.len(), before + 1);
+        assert_eq!(workspace.active_tab, workspace.tabs.len() - 1);
+        let tab = workspace.tabs.last().unwrap();
+        assert_eq!(tab.custom_name.as_deref(), Some("Sync · 2 items"));
+        let terminal_cwd = workspace
+            .terminal_id(tab.root_pane)
+            .and_then(|terminal_id| fx.app.state.terminals.get(terminal_id))
+            .map(|terminal| crate::worktree::canonical_or_original(&terminal.cwd));
+        assert_eq!(
+            terminal_cwd,
+            Some(crate::worktree::canonical_or_original(&work))
+        );
+
+        // The prompt is under <state>/work/<ms>.md in the order asked, once each.
+        let files = fx.prompt_files();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].display().to_string(), prompt_file);
+        let prompt = std::fs::read_to_string(&files[0]).unwrap();
+        assert!(
+            prompt.starts_with("Here are 2 items from Today I want to work on:"),
+            "{prompt}"
+        );
+        let b = prompt.find("1. NH-2 — Add tests").expect("b first");
+        let a = prompt.find("2. NH-1 — Fix login").expect("a second");
+        assert!(b < a);
+        assert!(prompt.contains("Link: https://example.test/a"));
+        assert!(prompt.contains("     line two"));
+        assert!(prompt.contains("Ask before changing code."));
+        assert!(!prompt.contains("Third"));
+        shutdown_test_runtimes(&mut fx.app);
+    }
+
+    #[tokio::test]
+    async fn work_uses_the_configured_templates_and_agent_command() {
+        let mut fx = Fixture::new("work-config");
+        fx.with_workspace();
+        let work = fx.root.join("code");
+        std::fs::create_dir_all(work.join("app-one")).unwrap();
+        fx.app.state.default_shell = "/bin/cat".into();
+        let code = work.display().to_string();
+        let elsewhere = fx.root.join("elsewhere");
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        fx.loaded_work_feed(
+            &elsewhere,
+            &format!(
+                "[feed.work]\nagent_command = \"cat {{prompt_file}}\"\ncwd = \"{code}/{{{{item.field.repo}}}}\"\ntab_title = \"{{{{count}}}} for {{{{item.badge}}}}\"\nprompt = \"{{{{count}}}} {{{{job.title}}}} {{{{item.title}}}}\\n{{{{items}}}}\"\n"
+            ),
+        );
+        let ResponseResult::FeedWorkStarted {
+            agent,
+            tab_title,
+            warnings,
+            count,
+            ..
+        } = fx.ok(work_params(&["a", "b"]))
+        else {
+            panic!("expected a started work request");
+        };
+        assert_eq!((agent.as_str(), count), ("cat", 2));
+        assert_eq!(tab_title, "2 for NH-1");
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let prompt = std::fs::read_to_string(&fx.prompt_files()[0]).unwrap();
+        assert!(prompt.starts_with("2 Sync Fix login\n1. NH-1"), "{prompt}");
+        // The tab opened in the first item's repository directory.
+        let workspace = &fx.app.state.workspaces[0];
+        let tab = workspace.tabs.last().unwrap();
+        let terminal_cwd = workspace
+            .terminal_id(tab.root_pane)
+            .and_then(|terminal_id| fx.app.state.terminals.get(terminal_id))
+            .map(|terminal| crate::worktree::canonical_or_original(&terminal.cwd));
+        assert_eq!(
+            terminal_cwd,
+            Some(crate::worktree::canonical_or_original(
+                &work.join("app-one")
+            ))
+        );
+        shutdown_test_runtimes(&mut fx.app);
+    }
+
+    #[tokio::test]
+    async fn work_falls_back_when_the_templated_directory_is_missing() {
+        let mut fx = Fixture::new("work-fallback");
+        fx.with_workspace();
+        let default = fx.root.join("default");
+        std::fs::create_dir_all(&default).unwrap();
+        fx.app.state.default_shell = "/bin/cat".into();
+        let table = format!(
+            "[feed.work]\ncwd = \"{}/nope/{{{{item.field.repo}}}}\"\n",
+            fx.root.display()
+        );
+        fx.loaded_work_feed(&default, &table);
+        let ResponseResult::FeedWorkStarted { warnings, .. } = fx.ok(work_params(&["a"])) else {
+            panic!("expected a started work request");
+        };
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(warnings[0].contains("does not exist"), "{warnings:?}");
+        let workspace = &fx.app.state.workspaces[0];
+        let tab = workspace.tabs.last().unwrap();
+        let terminal_cwd = workspace
+            .terminal_id(tab.root_pane)
+            .and_then(|terminal_id| fx.app.state.terminals.get(terminal_id))
+            .map(|terminal| crate::worktree::canonical_or_original(&terminal.cwd));
+        assert_eq!(
+            terminal_cwd,
+            Some(crate::worktree::canonical_or_original(&default))
+        );
+        shutdown_test_runtimes(&mut fx.app);
+    }
+
+    #[test]
+    fn work_rejects_bad_requests_without_opening_a_tab() {
+        let mut fx = Fixture::new("work-errors");
+        fx.with_workspace();
+        let work = fx.root.join("code");
+        std::fs::create_dir_all(&work).unwrap();
+        fx.write_job(
+            "plain",
+            "command = [\"true\"]\nevery = \"1h\"\nenv = \"server\"\n",
+        );
+        assert_eq!(
+            fx.err(Method::FeedWork(FeedWorkParams {
+                job_id: "nope".into(),
+                item_ids: vec!["a".into()],
+            })),
+            "job_not_found"
+        );
+        assert_eq!(
+            fx.err(Method::FeedWork(FeedWorkParams {
+                job_id: "plain".into(),
+                item_ids: vec!["a".into()],
+            })),
+            "feed_not_found"
+        );
+        fx.loaded_work_feed(&work, "");
+        let before = fx.app.state.workspaces[0].tabs.len();
+        assert_eq!(fx.err(work_params(&[])), "feed_work_no_items");
+        assert_eq!(fx.err(work_params(&["zzz"])), "feed_item_not_found");
+
+        // A prompt file that cannot be read stops before any tab opens.
+        fx.loaded_work_feed(&work, "[feed.work]\nprompt_file = \"missing.md\"\n");
+        assert_eq!(fx.err(work_params(&["a"])), "feed_work_invalid");
+        assert_eq!(
+            fx.app.state.workspaces[0].tabs.len(),
+            before,
+            "no tab opened"
+        );
+        assert!(fx.prompt_files().is_empty(), "nothing was written");
     }
 }

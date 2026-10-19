@@ -40,7 +40,7 @@ notify = "on_failure"              # never | on_failure | on_change | always
 | `env`, `env_file`, `[env]` | See [Environment](#environment). |
 | `cwd` | Working directory. Defaults to the job directory. `~` and relative paths (relative to the job directory) work. |
 | `notify` | See [Notifications](#notifications). Default `on_failure`. |
-| `feed` | Optional table that gives the job a [feed](#feeds): `command` (required argv) and `title`. |
+| `feed` | Optional table that gives the job a [feed](#feeds): `command` (required argv), `title`, and an optional `[feed.work]` table for [working on selected items](#work-on-items-feedwork). |
 | `handoff` | Optional table: after a run, ask whether to start an agent tab. See [Handoff](#handoff-ask-then-start-an-agent). |
 
 Unknown keys are errors, so a typo such as `evry` is reported instead of ignored. Problems are listed together, with the file and the key, in `flockr job list` and in the Jobs overlay:
@@ -84,6 +84,7 @@ flockr job enable nightly
 - Everything the server's own parser reports (unknown keys, bad schedules, bad `handoff.when`).
 - The command resolves on the job's `PATH`, using the job's environment mode: `login-shell` captures your login shell here, the way the server does; if that fails the report says it fell back to the server environment. Scripts such as `run.sh` and the `prompt_file` exist, `cwd` and `env_file` exist, and a cron expression that never fires is an error.
 - Handoff templates use only [known variables](#templates) (`{{context.*}}` draws a warning, since it only has a value with a dynamic handoff), `{prompt_file}` has a prompt, and `{{count}}` or `{{feed_json}}` without a `[feed]` draw a warning.
+- `[feed.work]` templates use only [its variables](#work-on-items-feedwork) (`{{items}}`, `{{item.field.<label>}}` and the others), the prompt file exists and is not empty, and a `cwd` without placeholders that does not exist draws a warning (work tabs fall back to the job's `cwd` or your home directory).
 - The next three run times in local time, and a warning when `timeout` is not shorter than `every`.
 - With `--run-feed`, the feed command runs and its output is checked: stdout must be one JSON object, and the parser's diagnostics (cut text, dropped actions, reserved keys) are listed as warnings. Without it the feed command is not executed.
 
@@ -95,6 +96,7 @@ A dry run executes the job once in the foreground, with the job's real environme
 
 - The exit code, duration, stdout and stderr, and the feed command's parsed summary (items, unread count, diagnostics), when the job succeeded.
 - The evaluated [handoff](#handoff-ask-then-start-an-agent): the question, tab title, directory, the agent command that would be typed, and the rendered prompt, with warnings for variables that had no value. A first run counts as a change for `when = "on_change"`.
+- For a job with a `[feed]`, the `w` preview: the tab title, directory, agent command and prompt that [working on items](#work-on-items-feedwork) would start for the first two feed items (the built-in defaults when there is no `[feed.work]`).
 - Nothing is recorded: no run in the history, no feed stored, no toast, no decision. `FLOCKR_JOB_STATE_DIR` points at a scratch directory that is deleted afterwards.
 - `--no-exec` skips the command and the feed and renders the handoff for a successful run with empty stdout.
 - The exit code is non-zero when the command fails, the feed is unusable or the handoff cannot be built.
@@ -391,7 +393,7 @@ Unknown fields are ignored, so newer producers keep working. Limits: 500 items (
 
 An action is `{"key", "title", "command"}`: a single visible character that triggers it in the overlay, a label, and an argv array.
 
-- `key` cannot be `Enter`, `esc`, the arrow keys, `tab`, `space` or any other named key, nor one of `j`, `k`, `q`, `g`, `G`, `R`, `S` and `/`, which the overlay uses. In a feed that declares `groups`, `[`, `]` and the digits `0` to `9` are reserved too (they switch category); a feed without groups can still use them. Keys must be unique within an item. An invalid action is dropped with a note.
+- `key` cannot be `Enter`, `esc`, the arrow keys, `tab`, `space` or any other named key, nor one of `j`, `k`, `q`, `g`, `G`, `R`, `S`, `/`, `x`, `X` and `w`, which the overlay uses (`x`, `X` and `w` select items and start work on them; a feed that used one of them for an action loses that action, with a note, and the rest of the item stays). In a feed that declares `groups`, `[`, `]` and the digits `0` to `9` are reserved too (they switch category); a feed without groups can still use them. Keys must be unique within an item. An invalid action is dropped with a note.
 - Running an action starts its command with the job's environment, plus `FLOCKR_FEED_ITEM_ID` and `FLOCKR_FEED_ACTION_KEY`. It gets at most 60 seconds (or the job's timeout when that is shorter). Then the feed command runs again, so the list shows the result. The refresh also runs when the action fails.
 - Commands stay on the server: clients send only the job, the item id and the key, and the server looks the command up in the stored feed. A feed that changed since the client looked answers `feed_item_not_found` instead of running something else.
 - The outcome (`ok`, or why it failed) is recorded as `last_action` and shown in the overlay's status line, or as a notice when you started the action from the sidebar.
@@ -487,13 +489,65 @@ A feed with [groups](#groups-category-tabs) gets a **category tab bar** under th
 | `ctrl+d`, `ctrl+u` | Scroll the detail pane (the wheel over the pane does too) |
 | `space` | Zoom the detail pane over the whole body and back (`esc` also leaves the zoom) |
 | `enter` | Open the item's link |
+| `x` | Select or unselect the current item. Selections survive category tabs and the filter, and the header counts them (`3 selected`). A click on the checkmark column, or a ctrl-click on a row, does the same |
+| `X` | Clear the selection |
+| `w` | [Work on the selected items](#work-on-items-feedwork) (the current item when none is selected): open a tab and start an agent with the items as the prompt |
 | `/` | Filter by title, subtitle, badge or id within the selected category (`enter` keeps it, `esc` clears it) |
 | item action keys | Run that action on the selected item (the selected item's actions are listed at the bottom of the pane) |
 | `R` | Refresh the feed (run the feed command again) |
 | `S` | Sync now: run the feed's job, then the feed refreshes when the run succeeds. The header shows `syncing…`, and the status line the result |
-| `esc` or `q` | Clear the filter, then close |
+| `esc` or `q` | `esc` leaves the zoom, then clears the selection, then clears the filter, then closes. `q` closes |
 
 The overlay polls every 2 seconds while it is open. Clicking a row selects it, and clicking the selected row opens its link.
+
+### Work on items (`[feed.work]`)
+
+Select items with `x` (or ctrl-click), press `w`, and Flockr opens a new tab and starts an agent with those items as its prompt. With nothing selected, `w` uses the current item. The overlay closes so the new tab, which is focused, is in view, and a notice says `started claude with 3 items in tab …`. The server does the work through the `feed.work` API method, with the same code as a decision's Start: the tab is typed into like any shell, so the agent owns a real terminal, and it starts with the job's environment rules (your login shell's variables by default). Nothing is stored in the feed.
+
+Everything is optional. Without a `[feed.work]` table, `claude` starts in the job's `cwd` when the job file sets one, else your home directory, with the built-in prompt:
+
+```text
+Here are 3 items from Today (workbox) I want to work on:
+
+1. NH-1 — Fix login
+   Link: https://…
+   …
+
+Read each link/ticket, summarize what each needs, and propose a plan. Ask before changing code.
+```
+
+(For a single item it reads `Here is 1 item from … I want to work on:` and `Read the link/ticket, summarize what it needs, …`.)
+
+```toml
+[feed.work]
+agent_command = "claude"                              # default; {prompt_file} puts the prompt file anywhere in the command
+cwd = "~/code/{{item.field.repo}}"           # default: the job's cwd, else $HOME
+tab_title = "{{job.title}} · {{count}} items"         # default
+# prompt = "Review these:\n{{items}}"                 # inline template ...
+prompt_file = "work.md"                               # ... or a file next to job.toml (not both)
+```
+
+| Key | Meaning |
+| --- | --- |
+| `agent_command` | The agent CLI. `{prompt_file}` expands to the quoted prompt path; without it the prompt becomes the first argument, as `claude "$(cat <file>)"`. Values from templates are shell-quoted. Default `claude`. |
+| `cwd` | Directory of the new tab; `~` and templates work. A directory that does not exist falls back to the default, and the notice says so. |
+| `tab_title` | Title of the new tab, one line, at most 60 characters. |
+| `prompt`, `prompt_file` | The prompt template, inline or a file relative to the job directory. Not both. |
+
+Templates use the same `{{name}}` syntax as the [handoff](#templates). Missing names render empty and are reported in the notice; substitution is one pass, so item text cannot inject placeholders.
+
+| Name | Value |
+| --- | --- |
+| `{{items}}` | The selected items as a readable list: number, badge and title, link, subtitle, state, every field, and the body indented (each body cut to 2,000 characters; the list to 60,000, dropping items from the end with a note). |
+| `{{items_json}}` | The selection as `{"title", "total", "items": [...]}` without action commands, cut to 48,000 characters. |
+| `{{count}}` | How many items. At most 50 items are used per request. |
+| `{{date}}`, `{{job.id}}`, `{{job.title}}`, `{{feed.title}}` | Today's date, the job, and the feed's title. |
+| `{{item.id}}`, `{{item.title}}`, `{{item.subtitle}}`, `{{item.badge}}`, `{{item.url}}`, `{{item.state}}`, `{{item.group}}`, `{{item.updated_at}}`, `{{item.body}}` | The **first** selected item (the first of the selection in feed order). |
+| `{{item.field.<label>}}` | A field of the first item, by its label in lower case with other characters turned into `_`: `Repo` is `{{item.field.repo}}`, `Snoozed until` is `{{item.field.snoozed_until}}`. |
+
+The rendered prompt is written to `<state dir>/jobs/<id>/work/<unix ms>.md` (the 50 newest are kept) and is the file `{prompt_file}` points at. Because `cwd` and `{{item.*}}` follow the first item, a selection that spans repositories opens in the first item's directory. Run `flockr job validate <id>` to check the templates. `w` needs a server that advertises `feed.work`; an older server only loses this key.
+
+For workbox, the adapter adds a `Repo` field to GitHub and Bitbucket items whose `where` looks like `owner/repo#123`, holding the repository name (`repo`). Jira items have no repository, so they use the default directory. See `examples/jobs/workbox-sync/job.toml` for a commented example that opens in `~/code/work/<repo>`.
 
 ## Command line
 

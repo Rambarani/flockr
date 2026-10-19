@@ -5,7 +5,14 @@
 //! item's action keys run its actions, `/` filters, `R` refreshes the feed,
 //! `S` runs the feed's job now, Ctrl-D and Ctrl-U (or the wheel over the
 //! pane) scroll the detail, Space zooms the detail, Tab or the arrow keys
-//! switch feeds, and Esc closes.
+//! switch feeds, and Esc closes (it first leaves the zoom, then clears the
+//! selection, then the filter).
+//!
+//! `x` marks or unmarks the current item and `X` clears the marks; the marks
+//! survive category switches and filtering, and the header counts them. `w`
+//! starts an agent tab on the marked items (the current item when none is
+//! marked) with `feed.work`; see `[feed.work]` in the Jobs docs. A click on
+//! the checkmark column, or a ctrl-click anywhere on a row, toggles its mark.
 //!
 //! A feed that declares groups gets a category tab bar under its info line:
 //! `All` and one tab per group, with counts. `[` and `]` step through the
@@ -18,6 +25,8 @@
 //! `feed_state`); while the overlay is open it is polled every two seconds
 //! with the revisions the client already holds.
 
+use std::collections::BTreeSet;
+
 use crossterm::event::MouseEvent;
 use ratatui::style::{Modifier, Style};
 
@@ -27,7 +36,9 @@ use super::popup_frame::{
 };
 use super::render::{display_width, put_text};
 use super::*;
-use crate::api::schema::{FeedGroupInfo, FeedItemInfo, FeedItemState, FeedSummary};
+use crate::api::schema::{
+    FeedGroupInfo, FeedItemInfo, FeedItemState, FeedSummary, FeedWorkParams, Method,
+};
 use crate::jobs::display;
 
 const MIN_PANEL_WIDTH: u16 = 30;
@@ -37,6 +48,9 @@ const HEADER_ROWS: u16 = 3;
 /// Rows below the body: status, hint.
 const FOOTER_ROWS: u16 = 2;
 const MAX_BADGE_WIDTH: usize = 14;
+/// Columns before the state dot: the selection checkmark and a space. A click
+/// in them toggles the row's mark.
+const MARK_COLUMN_WIDTH: u16 = 2;
 const AGE_WIDTH: usize = 8;
 /// Key prefix in the shared collapsed-group sets for the remembered category.
 pub(super) const GROUP_PREF_PREFIX: &str = "feedgroup:";
@@ -60,6 +74,9 @@ pub(super) struct ClientFeedOverlay {
     pub(super) detail_scroll: usize,
     /// The detail pane takes the whole body (toggled with space).
     pub(super) zoom: bool,
+    /// Items marked for `w`, by id, in the current feed. They stay marked
+    /// across categories and filters; switching feeds clears them.
+    pub(super) marked: BTreeSet<String>,
 }
 
 #[derive(Default)]
@@ -105,6 +122,14 @@ fn matches_filter(item: &FeedItemInfo, filter: &str) -> bool {
     .any(|text| text.to_lowercase().contains(&needle))
 }
 
+fn plural(count: usize) -> &'static str {
+    if count == 1 {
+        ""
+    } else {
+        "s"
+    }
+}
+
 fn age_text(item: &FeedItemInfo, now_ms: u64) -> Option<String> {
     let secs = item
         .updated_at
@@ -144,6 +169,7 @@ impl ClientShellState {
             status: None,
             detail_scroll: 0,
             zoom: false,
+            marked: BTreeSet::new(),
         }));
         // Fetch right away, then at the overlay's own pace.
         self.feeds.poll_soon(std::time::Instant::now());
@@ -371,6 +397,7 @@ impl ClientShellState {
             overlay.filter.clear();
             overlay.filtering = false;
             overlay.status = None;
+            overlay.marked.clear();
         }
         self.request_missing_feed_items(outcome);
     }
@@ -407,6 +434,94 @@ impl ClientShellState {
             outcome,
         );
         true
+    }
+
+    /// The marked items that the current feed still has, in feed order.
+    fn marked_feed_items(&self) -> Vec<FeedItemInfo> {
+        let (Some(overlay), Some(feed)) = (self.feed_overlay(), self.current_feed()) else {
+            return Vec::new();
+        };
+        self.feeds
+            .items_of(&feed.job_id)
+            .iter()
+            .filter(|item| overlay.marked.contains(&item.id))
+            .cloned()
+            .collect()
+    }
+
+    /// How many marked items the current feed still has.
+    fn marked_feed_count(&self) -> usize {
+        self.marked_feed_items().len()
+    }
+
+    fn toggle_feed_mark(&mut self, id: String) {
+        if let Some(overlay) = self.feed_overlay_mut() {
+            if !overlay.marked.remove(&id) {
+                overlay.marked.insert(id);
+            }
+        }
+    }
+
+    /// `x`: mark or unmark the current item.
+    fn toggle_selected_feed_mark(&mut self) {
+        if let Some(item) = self.selected_feed_item() {
+            self.toggle_feed_mark(item.id);
+        }
+    }
+
+    /// `X` (and the first Esc): drop every mark. Returns whether there was one.
+    fn clear_feed_marks(&mut self) -> bool {
+        match self.feed_overlay_mut() {
+            Some(overlay) if !overlay.marked.is_empty() => {
+                overlay.marked.clear();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// `w`: start an agent tab on the marked items, or on the current item
+    /// when none is marked. The server renders the prompt and opens the tab.
+    fn work_on_feed_items(&mut self, outcome: &mut ClientShellInput) {
+        let Some(job_id) = self.current_feed().map(|feed| feed.job_id.clone()) else {
+            return;
+        };
+        let mut ids: Vec<String> = self
+            .marked_feed_items()
+            .into_iter()
+            .map(|item| item.id)
+            .collect();
+        if ids.is_empty() {
+            ids.extend(self.selected_feed_item().map(|item| item.id));
+        }
+        let say = |state: &mut Self, text: String| {
+            if let Some(overlay) = state.feed_overlay_mut() {
+                overlay.status = Some(text);
+            }
+        };
+        if ids.is_empty() {
+            say(self, "nothing to work on".to_owned());
+            return;
+        }
+        let count = ids.len();
+        let method = Method::FeedWork(FeedWorkParams {
+            job_id: job_id.clone(),
+            item_ids: ids,
+        });
+        // A server without the method only loses this action, not the feed.
+        if !self.supports_endpoint_method(&method) {
+            say(
+                self,
+                "this server does not support starting work from a feed yet; update and restart it"
+                    .to_owned(),
+            );
+            return;
+        }
+        say(
+            self,
+            format!("starting an agent with {count} item{}…", plural(count)),
+        );
+        self.request_feed_work(method, job_id, outcome);
     }
 
     /// `S`: run the feed's job now; the server refreshes the feed when the
@@ -535,6 +650,8 @@ impl ClientShellState {
                     if let Some(overlay) = self.feed_overlay_mut() {
                         overlay.zoom = false;
                     }
+                } else if self.clear_feed_marks() {
+                    // The first Esc drops the selection, the next the filter.
                 } else if has_filter {
                     if let Some(overlay) = self.feed_overlay_mut() {
                         overlay.filter.clear();
@@ -570,6 +687,13 @@ impl ClientShellState {
                         overlay.filtering = true;
                     }
                 }
+                Some('x') => self.toggle_selected_feed_mark(),
+                Some('X') => {
+                    if !self.clear_feed_marks() {
+                        outcome.repaint = false;
+                    }
+                }
+                Some('w') => self.work_on_feed_items(outcome),
                 Some('R') => self.refresh_current_feed(outcome),
                 Some('S') => self.sync_current_feed(outcome),
                 Some('j') => self.move_feed_selection(1),
@@ -594,7 +718,7 @@ impl ClientShellState {
         mouse: MouseEvent,
         outcome: &mut ClientShellInput,
     ) -> bool {
-        use crossterm::event::{MouseButton, MouseEventKind};
+        use crossterm::event::{KeyModifiers, MouseButton, MouseEventKind};
 
         if self.feed_overlay().is_none() {
             return false;
@@ -622,25 +746,34 @@ impl ClientShellState {
                     .map(|(_, group)| group.clone())
                 {
                     self.select_feed_group(group, outcome);
-                } else if let Some(index) = self
+                } else if let Some((row, index)) = self
                     .hits
                     .feed_overlay
                     .rows
                     .iter()
                     .find(|(rect, _)| contains(*rect, point))
-                    .map(|(_, index)| *index)
+                    .map(|(rect, index)| (*rect, *index))
                 {
                     let items = self.visible_feed_items();
                     let clicked = items.get(index).map(|item| item.id.clone());
-                    let already = clicked.is_some()
+                    // The checkmark column, or ctrl/cmd held, marks the row
+                    // instead of selecting or opening it.
+                    let marking = point.0 < row.x + MARK_COLUMN_WIDTH
+                        || mouse
+                            .modifiers
+                            .intersects(KeyModifiers::CONTROL | KeyModifiers::SUPER);
+                    let already = !marking
+                        && clicked.is_some()
                         && clicked
                             == items
                                 .get(self.selected_feed_index(&items))
                                 .map(|item| item.id.clone());
                     if let Some(id) = clicked {
-                        self.set_feed_selection(id);
-                        // A second click on the selected row opens it.
-                        if already {
+                        self.set_feed_selection(id.clone());
+                        if marking {
+                            self.toggle_feed_mark(id);
+                        } else if already {
+                            // A second click on the selected row opens it.
                             self.open_selected_feed_item(outcome);
                         }
                     }
@@ -972,6 +1105,10 @@ fn render_feed(
             format!("{} items", feed.count),
             format!("{} unread", feed.unread),
         ];
+        let marked = state.marked_feed_count();
+        if marked > 0 {
+            parts.push(format!("{marked} selected"));
+        }
         let mut style = dim_style(palette);
         if state.feeds.is_syncing(&feed.job_id) {
             parts.push("syncing…".to_owned());
@@ -1147,6 +1284,20 @@ fn render_feed(
                 put_text(buffer, *cursor_x, y, room, text, style);
                 *cursor_x = cursor_x.saturating_add(display_width(text).min(room));
             };
+            let checked = overlay.marked.contains(&item.id);
+            put(
+                if checked { "✓" } else { " " },
+                if is_selected {
+                    selected_style(palette).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                        .fg(palette.green)
+                        .bg(palette.panel_bg)
+                        .add_modifier(Modifier::BOLD)
+                },
+                &mut cursor_x,
+            );
+            put(" ", plain, &mut cursor_x);
             put(
                 marker,
                 if is_selected {
@@ -1260,6 +1411,10 @@ fn render_feed(
                 put(&action.key, key_style(palette));
                 put(&format!(" {}   ", action.title), dim_style(palette));
             }
+            put("x", key_style(palette));
+            put(" select   ", dim_style(palette));
+            put("w", key_style(palette));
+            put(" work", dim_style(palette));
             if detail_max_scroll > 0 {
                 let more = format!("{}/{}", scroll + 1, detail_max_scroll + 1);
                 let width = display_width(&more);
@@ -1293,35 +1448,56 @@ fn render_feed(
                 .add_modifier(Modifier::BOLD),
         );
     }
-    let hint: &[&str] = if overlay.filtering {
-        &[
-            "type to filter   enter keep   esc clear",
-            "enter keep   esc clear",
+    let marked_count = state.marked_feed_count();
+    let hint: Vec<String> = if overlay.filtering {
+        vec![
+            "type to filter   enter keep   esc clear".to_owned(),
+            "enter keep   esc clear".to_owned(),
         ]
     } else if overlay.zoom {
-        &[
-            "↑/↓ j/k item   ctrl-d/u scroll   enter open   S sync   R refresh   space list   esc back",
-            "j/k item   ctrl-d/u scroll   space list   esc back",
-            "space list   esc back",
+        vec![
+            "↑/↓ j/k item   ctrl-d/u scroll   enter open   x select   w work   S sync   R refresh   space list   esc back".to_owned(),
+            "j/k item   ctrl-d/u scroll   x select   w work   space list   esc back".to_owned(),
+            "j/k item   x select   w work   space list   esc back".to_owned(),
+            "space list   esc back".to_owned(),
+        ]
+    } else if marked_count > 0 {
+        let work = format!("w work {marked_count}");
+        vec![
+            format!("j/k move   x select   X clear   {work}   enter open   / filter   R refresh   esc clear selection"),
+            format!("j/k move   x select   X clear   {work}   enter open   esc clear selection"),
+            format!("x select   X clear   {work}   esc clear selection"),
+            format!("x select   {work}   esc clear"),
+            work,
+            "esc clear".to_owned(),
         ]
     } else if category_bar {
-        &[
-            "j/k move   [/] or 0-9 category   enter open   / filter   S sync   R refresh   tab feeds   esc close",
-            "j/k move   [/] 0-9 category   enter open   / filter   R refresh   esc close",
+        [
+            "j/k move   [/] or 0-9 category   x select   w work   enter open   / filter   S sync   R refresh   tab feeds   esc close",
+            "j/k move   [/] or 0-9 category   x select   w work   enter open   / filter   R refresh   esc close",
+            "j/k move   [/] 0-9 category   x select   w work   enter open   esc close",
+            "[/] category   x select   w work   enter open   esc close",
+            "x select   w work   enter open   esc close",
             "[/] category   enter open   / filter   R refresh   esc close",
             "[/] category   enter open   esc close",
             "enter open   esc close",
             "esc close",
         ]
+        .map(str::to_owned)
+        .to_vec()
     } else {
-        &[
-            "j/k move   ctrl-d/u scroll   enter open   / filter   S sync   R refresh   tab feeds   space zoom   esc close",
-            "j/k move   ctrl-d/u scroll   enter open   / filter   S sync   R refresh   esc close",
+        [
+            "j/k move   ctrl-d/u scroll   enter open   x select   w work   / filter   S sync   R refresh   tab feeds   space zoom   esc close",
+            "j/k move   ctrl-d/u scroll   x select   w work   enter open   / filter   R refresh   esc close",
+            "j/k move   x select   w work   enter open   / filter   esc close",
+            "x select   w work   enter open   esc close",
             "↑/↓ j/k move   enter open   / filter   R refresh   tab feeds   esc close",
             "enter open   / filter   R refresh   esc close",
             "enter open   R refresh   esc close",
             "esc close",
         ]
+        .map(str::to_owned)
+        .to_vec()
     };
     // Leave room for the "a-b / n" position at the right when it is drawn.
     let hint_room = usize::from(text_width).saturating_sub(
@@ -1334,8 +1510,7 @@ fn render_feed(
     let hint = hint
         .iter()
         .find(|hint| hint.chars().count() <= hint_room)
-        .copied()
-        .unwrap_or("");
+        .map_or("", String::as_str);
     put_text(buffer, x, hint_y, text_width, hint, dim_style(palette));
     Some(FeedRender {
         area,

@@ -6,7 +6,8 @@
 //! `<source> · <reason>[ · <where>]`. The actions mark the item done (`d`),
 //! seen (`s`), or toggle it on the today list (`t`) by running
 //! `workbox mark <id> <action>`. The detail view gets `fields` (Source,
-//! Reason, Where, Status, From, Key, Snoozed until, Today) and the snippet as
+//! Reason, Where, Repo (the repository name of a GitHub or Bitbucket item's
+//! `owner/repo#123`), Status, From, Key, Snoozed until, Today) and the snippet as
 //! `body`, the same facts workbox's own detail pane shows.
 //!
 //! Items are grouped into categories (tabs in the Feed overlay) from their
@@ -140,6 +141,7 @@ fn fields(item: &WorkboxItem) -> Vec<serde_json::Value> {
         ("Source", non_empty(&item.source).map(str::to_owned)),
         ("Reason", non_empty(&reason).map(str::to_owned)),
         ("Where", non_empty(&item.where_).map(str::to_owned)),
+        ("Repo", repo_name(item).map(str::to_owned)),
         ("Status", optional(&item.status)),
         ("From", optional(&item.actor)),
         ("Key", non_empty(&item.key).map(str::to_owned)),
@@ -154,6 +156,26 @@ fn fields(item: &WorkboxItem) -> Vec<serde_json::Value> {
             value.map(|value| serde_json::json!({"label": label, "value": value}))
         })
         .collect()
+}
+
+/// The repository name (`repo` of `owner/repo#123`) of a GitHub or Bitbucket
+/// item, from its `where`, so a job can map it to a local checkout with
+/// `{{item.field.repo}}`. Jira items have a project key, not a repository, and
+/// a `where` that is not `owner/repo#<key>` gives nothing.
+fn repo_name(item: &WorkboxItem) -> Option<&str> {
+    let source = item.source.trim();
+    if !(source.eq_ignore_ascii_case("github") || source.eq_ignore_ascii_case("bitbucket")) {
+        return None;
+    }
+    let (repository, _key) = item.where_.trim().rsplit_once('#')?;
+    let (owner, repo) = repository.split_once('/')?;
+    let valid = |part: &str| {
+        !part.is_empty()
+            && part
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
+    };
+    (valid(owner) && valid(repo) && repo != "." && repo != "..").then_some(repo)
 }
 
 fn non_empty(text: &str) -> Option<&str> {
@@ -579,5 +601,33 @@ mod tests {
         let parsed = parse_feed(&feed.to_string()).unwrap();
         assert_eq!(parsed.groups.len(), 5);
         assert!(parsed.groups.iter().all(|g| g.id != "other"));
+    }
+
+    #[test]
+    fn github_and_bitbucket_items_get_a_repo_field_from_where() {
+        let input = r##"[
+          {"id":"a","source":"github","key":"#915","title":"t","where":"acme/web-app#915","reason":"review_requested"},
+          {"id":"b","source":"github","key":"#571","title":"t","where":"acme/platform-ui#571","reason":"mention"},
+          {"id":"c","source":"bitbucket","key":"#7","title":"t","where":"ws/old.repo_x#7","reason":"review_requested"},
+          {"id":"d","source":"jira","key":"NH-1","title":"t","where":"NH-1","reason":"mention"},
+          {"id":"e","source":"github","key":"x","title":"t","where":"no-hash/repo","reason":"mention"},
+          {"id":"f","source":"github","key":"#1","title":"t","where":"a/../b#1","reason":"mention"},
+          {"id":"g","source":"github","key":"#1","title":"t","where":"","reason":"mention"}
+        ]"##;
+        let feed = adapt(input, &AdaptOptions::default()).unwrap().0;
+        let repo = |index: usize| {
+            feed["items"][index]["fields"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|field| field["label"] == "Repo")
+                .map(|field| field["value"].as_str().unwrap().to_owned())
+        };
+        assert_eq!(repo(0).as_deref(), Some("web-app"));
+        assert_eq!(repo(1).as_deref(), Some("platform-ui"));
+        assert_eq!(repo(2).as_deref(), Some("old.repo_x"));
+        for none in 3..7 {
+            assert_eq!(repo(none), None, "item {none} has no repository");
+        }
     }
 }

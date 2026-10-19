@@ -164,7 +164,7 @@ pub(crate) fn when_matches(
     }
 }
 
-fn cap_head(text: &str, max_chars: usize) -> String {
+pub(super) fn cap_head(text: &str, max_chars: usize) -> String {
     if text.chars().count() <= max_chars {
         return text.to_owned();
     }
@@ -199,7 +199,7 @@ pub(crate) fn single_line(text: &str, max_chars: usize) -> String {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RenderMode {
+pub(super) enum RenderMode {
     /// Values go in as they are.
     Text,
     /// Values with shell-significant characters are single-quoted, for text
@@ -207,8 +207,11 @@ enum RenderMode {
     Shell,
 }
 
-struct Vars {
+pub(super) struct Vars {
     scalars: BTreeMap<&'static str, String>,
+    /// Variables whose names are only known at run time, such as
+    /// `item.field.<label>` of a feed work prompt.
+    pub(super) dynamic: BTreeMap<String, String>,
     context: Option<Value>,
 }
 
@@ -221,7 +224,22 @@ impl Vars {
             }
             return Some(cap_head(&value_text(current), MAX_CONTEXT_VALUE_CHARS));
         }
-        self.scalars.get(name).cloned()
+        self.scalars
+            .get(name)
+            .or_else(|| self.dynamic.get(name))
+            .cloned()
+    }
+
+    /// Variables for a template that has no handoff context.
+    pub(super) fn new(
+        scalars: BTreeMap<&'static str, String>,
+        dynamic: BTreeMap<String, String>,
+    ) -> Self {
+        Self {
+            scalars,
+            dynamic,
+            context: None,
+        }
     }
 }
 
@@ -257,9 +275,9 @@ fn shell_quote(value: &str) -> String {
     }
 }
 
-struct Rendered {
-    text: String,
-    missing: Vec<String>,
+pub(super) struct Rendered {
+    pub(super) text: String,
+    pub(super) missing: Vec<String>,
 }
 
 pub(crate) fn valid_placeholder_name(name: &str) -> bool {
@@ -288,7 +306,7 @@ pub(crate) fn placeholders(template: &str) -> Vec<String> {
     found
 }
 
-fn render(template: &str, vars: &Vars, mode: RenderMode) -> Rendered {
+pub(super) fn render(template: &str, vars: &Vars, mode: RenderMode) -> Rendered {
     let mut out = String::with_capacity(template.len());
     let mut missing = Vec::new();
     let mut rest = template;
@@ -494,6 +512,7 @@ pub(crate) fn evaluate(input: &EvalInput<'_>) -> Result<EvalResult, String> {
     scalars.insert("run.id", input.record.info.run_id.to_string());
     let vars = Vars {
         scalars,
+        dynamic: BTreeMap::new(),
         context: merged.context.clone(),
     };
 
@@ -628,6 +647,18 @@ pub(crate) fn write_prompt(
     let Some(dir) = path.parent() else {
         return Err(std::io::Error::other("prompt path has no parent"));
     };
+    write_numbered_prompt(dir, run_id, prompt)
+}
+
+/// Write `<dir>/<number>.md` and drop the oldest numbered files beyond the
+/// limit. Shared by handoff prompts (numbered by run) and feed work prompts
+/// (numbered by time).
+pub(crate) fn write_numbered_prompt(
+    dir: &Path,
+    number: u64,
+    prompt: &str,
+) -> std::io::Result<PathBuf> {
+    let path = dir.join(format!("{number}.md"));
     std::fs::create_dir_all(dir)?;
     std::fs::write(&path, prompt)?;
     prune_prompts(dir, PROMPT_FILES_KEPT);
@@ -978,6 +1009,7 @@ mod tests {
     fn substitution_is_one_pass_and_odd_braces_stay_literal() {
         let vars = Vars {
             scalars: BTreeMap::from([("stdout", "{{job.id}}".to_owned())]),
+            dynamic: BTreeMap::new(),
             context: None,
         };
         let out = render(

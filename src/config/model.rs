@@ -475,7 +475,7 @@ pub struct KeysConfig {
     pub agent_dashboard: BindingConfig,
     /// Open the Jobs overlay: scheduled jobs with their state, next run and last result. Default: "prefix+t".
     pub jobs: BindingConfig,
-    /// Open the Feed overlay: the items of a job feed, with their actions. Enter opens a link, R refreshes, / filters. Default: "prefix+f".
+    /// Open the Feed overlay: the items of a job feed, with their actions. Enter opens a link, x selects, w starts an agent on the selection, R refreshes, / filters. Default: "prefix+f".
     pub feed: BindingConfig,
     /// Preview the agent in the focused pane in a popup with its recent screen lines, state and time in state. Default: "prefix+i".
     pub preview_agent: BindingConfig,

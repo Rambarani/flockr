@@ -1290,6 +1290,7 @@ impl App {
             Method::FeedList(params) => return self.handle_feed_list(request.id, params),
             Method::FeedGet(params) => return self.handle_feed_get(request.id, params),
             Method::FeedRefresh(params) => return self.handle_feed_refresh(request.id, params),
+            Method::FeedWork(params) => return self.handle_feed_work(request.id, params),
             Method::FeedRunAction(params) => {
                 return self.handle_feed_run_action(request.id, params);
             }

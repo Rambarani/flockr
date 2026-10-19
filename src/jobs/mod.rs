@@ -14,6 +14,7 @@ pub(crate) mod decisions;
 pub(crate) mod definition;
 pub(crate) mod display;
 pub(crate) mod env;
+pub(crate) mod feed_work;
 pub(crate) mod handoff;
 pub(crate) mod manager;
 pub(crate) mod runner;

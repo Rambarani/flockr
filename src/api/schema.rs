@@ -285,6 +285,8 @@ pub enum Method {
     DecisionSnooze(DecisionSnoozeParams),
     #[serde(rename = "decision.dismiss")]
     DecisionDismiss(DecisionTarget),
+    #[serde(rename = "feed.work")]
+    FeedWork(FeedWorkParams),
 }
 
 #[cfg(test)]

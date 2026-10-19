@@ -343,6 +343,27 @@ pub enum ResponseResult {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
     },
+    FeedWorkStarted {
+        job_id: String,
+        /// Items in the prompt.
+        count: u32,
+        /// The first word of the agent command, such as `claude`.
+        agent: String,
+        tab_id: String,
+        pane_id: String,
+        /// The title the tab was given.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        tab_title: String,
+        /// Where the rendered prompt was written.
+        prompt_file: String,
+        /// Ids that were asked for but are no longer in the feed.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        skipped: Vec<String>,
+        /// Things the user may want to know: a missing template variable, a
+        /// fallback directory.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        warnings: Vec<String>,
+    },
     JobScheduleUpdated {
         job: JobInfo,
         /// Where the new schedule was written.

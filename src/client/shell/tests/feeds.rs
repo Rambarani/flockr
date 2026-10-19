@@ -2448,6 +2448,7 @@ fn started_result(count: u32) -> ResponseResult {
         pane_id: "w1:t2:p1".into(),
         tab_title: "workbox · 3 items".into(),
         prompt_file: "/state/work/1.md".into(),
+        draft: false,
         skipped: Vec::new(),
         warnings: Vec::new(),
     }
@@ -2626,6 +2627,27 @@ fn a_started_work_request_closes_the_overlay_and_says_what_happened() {
     assert_eq!(
         notice.body,
         "started claude with 2 items in tab workbox · 3 items"
+    );
+}
+
+#[test]
+fn a_work_request_left_as_a_draft_tells_the_user_to_add_a_note_and_press_enter() {
+    let mut state = overlay_state(vec![workbox_feed()]);
+    compose(&mut state);
+    press(&mut state, 'x');
+    press(&mut state, 'j');
+    press(&mut state, 'x');
+    let input = press(&mut state, 'w');
+    let sent = requests(&input);
+    let mut result = started_result(2);
+    if let ResponseResult::FeedWorkStarted { draft, .. } = &mut result {
+        *draft = true;
+    }
+    answer(&mut state, &sent[0], result);
+    let notice = state.visible_endpoint_notice.as_ref().expect("notice");
+    assert_eq!(
+        notice.body,
+        "opened claude with 2 items as a draft — add your note and press Enter"
     );
 }
 

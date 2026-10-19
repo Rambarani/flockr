@@ -356,6 +356,10 @@ pub enum ResponseResult {
         tab_title: String,
         /// Where the rendered prompt was written.
         prompt_file: String,
+        /// True when the agent was started without the prompt and the prompt
+        /// is typed into its input box as a draft, not submitted.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        draft: bool,
         /// Ids that were asked for but are no longer in the feed.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         skipped: Vec<String>,

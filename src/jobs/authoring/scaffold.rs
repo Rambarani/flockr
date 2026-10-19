@@ -263,6 +263,11 @@ fn handoff_block(opts: &NewJobOptions) -> String {
          #   agent_command  the agent CLI (default claude). Add {prompt_file} to pass\n\
          #                  the rendered prompt file anywhere; otherwise it becomes\n\
          #                  the first argument.\n\
+         #   submit         true (default): the agent runs the prompt at once.\n\
+         #                  false: the agent starts alone and the prompt is typed\n\
+         #                  into its input box as a draft, without Enter.\n\
+         #   prefill        with submit = false: \"paste\" (default) or \"mention\"\n\
+         #                  (a one-line @<prompt file>).\n\
          #   cwd            directory of the new tab (default: this directory).\n\
          #   tab_title      title of the new tab.\n\
          #   prompt_file    prompt template in this directory (or an inline `prompt`,\n\

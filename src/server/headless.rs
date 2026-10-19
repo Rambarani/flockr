@@ -3360,6 +3360,14 @@ impl HeadlessServer {
 
         if self
             .app
+            .next_draft_deadline()
+            .is_some_and(|deadline| now >= deadline)
+        {
+            changed |= self.app.service_pending_drafts(now);
+        }
+
+        if self
+            .app
             .session_save_deadline
             .is_some_and(|deadline| now >= deadline)
         {

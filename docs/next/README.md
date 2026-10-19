@@ -526,13 +526,15 @@ Master-detail view: list on the left, detail pane on the right (title, state, su
 
 #### Work on items in a new agent tab (`x` / `w`)
 
-Select items with `x` (or click the `✓` column, or ctrl/cmd-click a row). Selections survive category tabs and filtering, and are cleared when you switch feeds. Press `w`: flockr renders a prompt from the items, writes it to `<state_dir>/jobs/<id>/work/<time>.md`, opens a focused tab, and starts the agent with it. Up to 50 items per request.
+Select items with `x` (or click the `✓` column, or ctrl/cmd-click a row). Selections survive category tabs and filtering, and are cleared when you switch feeds. Press `w`: flockr renders a prompt from the items, writes it to `<state_dir>/jobs/<id>/work/<time>.md`, opens a focused tab, and starts the agent there. By default the agent starts **without** submitting anything: the prompt is typed into its input box as a draft, so you add your own instructions and press Enter yourself. Up to 50 items per request.
 
 Configure it per job with an optional `[feed.work]` table (all keys optional):
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `agent_command` | `"claude"` | Command to start; `{prompt_file}` is replaced by the prompt file path, otherwise the prompt is passed as the first argument |
+| `agent_command` | `"claude"` | Command to start. `{prompt_file}` is replaced by the prompt file path (then `submit` and `prefill` do not apply: you chose how the agent gets the file). Otherwise see `submit` |
+| `submit` | `false` | `false`: start the agent alone, then type the prompt into its input box without Enter. `true`: pass the prompt as the first argument, so the agent runs it at once |
+| `prefill` | `"paste"` | With `submit = false`: `"paste"` types the whole prompt as a bracketed paste (Claude Code shows a long paste as `[Pasted text #1 +N lines]`); `"mention"` types one line, `@<prompt file path> ` (Claude's @-file mention), so the draft stays short. Not allowed with `submit = true` |
 | `cwd` | the job's `cwd`, else `$HOME` | Tab folder (template). A templated folder that doesn't exist falls back to the default with a warning |
 | `tab_title` | `"{{job.title}} · {{count}} items"` | Tab title (template) |
 | `prompt` / `prompt_file` | built-in (below) | Prompt template; use one, not both |
@@ -557,7 +559,9 @@ Read each link, say what each needs, propose a plan, and ask before changing cod
 """
 ```
 
-`flockr job validate` checks `[feed.work]` (unknown variables, missing prompt file or agent program), and `flockr job run <id> --dry-run` previews the `w` prompt using the first two feed items. A selection that spans several repos opens in the first item's repo.
+How the draft is typed: flockr waits for the new pane's agent to be detected and idle (the same status `flockr agent wait` uses) and for the terminal to have turned bracketed paste on, then pastes with no Enter. The wait runs on the server's timer, never blocking it. After 20 seconds it types anyway and logs a warning. For an agent flockr does not recognise there is no detection to wait for, so it waits a fixed 1.5 seconds. If bracketed paste is still off, it types the one-line `@<prompt file>` instead of a multi-line prompt, so a newline cannot submit half of it. The notice reads `opened claude with 3 items as a draft — add your note and press Enter`.
+
+`flockr job validate` checks `[feed.work]` (unknown variables, missing prompt file or agent program, a bad `prefill`), and `flockr job run <id> --dry-run` previews the `w` prompt using the first two feed items, including whether it is submitted or left as a draft. A selection that spans several repos opens in the first item's repo.
 
 ### Feed CLI
 
@@ -593,6 +597,8 @@ prompt_file = "prompt.md"          # a template in the job directory ...
 | `when` | Which runs ask. `on_change` (default): stdout or the feed differs from the previous run (the first run counts). |
 | `ask` | The question (template). |
 | `agent_command` | What the tab runs. Default `claude`. If it contains `{prompt_file}` that is replaced by the prompt file path; otherwise the prompt is passed as the first argument (`claude "$(cat '<file>')"`). |
+| `submit` | Default `true`: the prompt is passed to the agent, which runs it at once (an upstream sync handoff must run). `false`: the agent starts alone and the prompt is typed into its input box as a draft, without Enter, once the agent is ready. Has no effect when `agent_command` contains `{prompt_file}`. |
+| `prefill` | With `submit = false`: `"paste"` (default, the whole prompt as a bracketed paste) or `"mention"` (one line, `@<prompt file>`). |
 | `cwd` | Tab working directory. Must exist when you press Start. |
 | `tab_title` | Tab name, cut to 60 characters. |
 | `prompt_file` or `prompt` | The prompt template. At most one. |

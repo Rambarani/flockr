@@ -375,12 +375,27 @@ pub(crate) fn render(job: &JobDef, dry: &DryRun) -> String {
                 out.push_str(&format!("    tab title  {}\n", offer.tab_title));
                 out.push_str(&format!("    cwd        {}\n", offer.cwd));
                 let prompt_path = handoff::prompt_path(std::path::Path::new("<state dir>"), 0);
-                let launch = handoff::launch_command(
+                let has_prompt = !offer.prompt.is_empty();
+                let launch = handoff::agent_launch(
                     &offer.agent_command,
-                    (!offer.prompt.is_empty()).then_some(prompt_path.as_path()),
+                    has_prompt.then_some(prompt_path.as_path()),
+                    offer.submit,
+                    offer.prefill,
                 );
                 match launch {
-                    Ok(command) => out.push_str(&format!("    agent      {command}\n")),
+                    Ok(launch) => {
+                        out.push_str(&format!("    agent      {}\n", launch.command));
+                        if has_prompt {
+                            out.push_str(&format!(
+                                "    {}\n",
+                                handoff::submit_note(
+                                    &offer.agent_command,
+                                    offer.submit,
+                                    offer.prefill
+                                )
+                            ));
+                        }
+                    }
                     Err(error) => out.push_str(&format!(
                         "    agent      {} (cannot launch: {error})\n",
                         offer.agent_command
@@ -456,8 +471,19 @@ fn render_work(out: &mut String, job: &JobDef, dry: &DryRun) {
                 .unwrap_or_else(|| feed_work::default_cwd(job));
             out.push_str(&format!("    cwd        {}\n", cwd.display()));
             let prompt_path = std::path::Path::new("<state dir>/work/<time>.md");
-            match handoff::launch_command(&plan.agent_command, Some(prompt_path)) {
-                Ok(command) => out.push_str(&format!("    agent      {command}\n")),
+            match handoff::agent_launch(
+                &plan.agent_command,
+                Some(prompt_path),
+                plan.submit,
+                plan.prefill,
+            ) {
+                Ok(launch) => {
+                    out.push_str(&format!("    agent      {}\n", launch.command));
+                    out.push_str(&format!(
+                        "    {}\n",
+                        handoff::submit_note(&plan.agent_command, plan.submit, plan.prefill)
+                    ));
+                }
                 Err(error) => out.push_str(&format!(
                     "    agent      {} (cannot launch: {error})\n",
                     plan.agent_command

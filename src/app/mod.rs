@@ -17,6 +17,7 @@ mod api_helpers;
 pub(crate) use api_helpers::limit_snapshot_lines;
 mod creation;
 mod custom_commands;
+pub(crate) mod draft_prompt;
 mod git_refresh;
 mod ids;
 mod popup;
@@ -143,6 +144,9 @@ pub struct App {
     /// Next scheduler pass over the jobs: the earliest due job, a hot-reload
     /// check at most every 30 seconds, or a queued toast waiting its turn.
     pub(crate) next_jobs_tick: Option<Instant>,
+    /// Prompts waiting for their agent to be ready for input, typed in as a
+    /// draft (never submitted) by `service_pending_drafts`.
+    pub(crate) pending_drafts: Vec<draft_prompt::PendingDraft>,
     pub(crate) jobs: crate::jobs::JobsManager,
     pub(crate) feeds: crate::feed::FeedManager,
     /// Job results waiting for the in-frame toast slot.
@@ -670,6 +674,7 @@ impl App {
             next_agent_manifest_update_check: manifest_check_enabled
                 .then_some(Instant::now() + AUTO_UPDATE_CHECK_INTERVAL),
             next_jobs_tick: policy.jobs.then(Instant::now),
+            pending_drafts: Vec::new(),
             jobs: crate::jobs::JobsManager::new(
                 crate::jobs::JobsPaths::system(),
                 std::sync::Arc::new(crate::jobs::env::LoginEnvCache::system()),

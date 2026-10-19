@@ -291,6 +291,12 @@ fn check_handoff(job: &JobDef, path_var: Option<&str>, report: &mut JobReport) {
                 .into(),
         );
     }
+    if handoff.submit == Some(false) && agent.contains("{prompt_file}") {
+        report.warnings.push(
+            "handoff.submit = false has no effect: agent_command passes {prompt_file} itself, so the agent receives the file as that command does"
+                .into(),
+        );
+    }
     if let Some(program) = agent.split_whitespace().next() {
         if !program.contains("{{")
             && !program.contains('=')
@@ -376,6 +382,15 @@ fn check_feed_work(job: &JobDef, path_var: Option<&str>, report: &mut JobReport)
         .agent_command
         .as_deref()
         .unwrap_or(crate::jobs::handoff::DEFAULT_AGENT_COMMAND);
+    if work.submit != Some(true)
+        && (work.submit == Some(false) || work.prefill.is_some())
+        && agent.contains("{prompt_file}")
+    {
+        report.warnings.push(
+            "feed.work.submit = false has no effect: agent_command passes {prompt_file} itself, so the agent receives the file as that command does"
+                .into(),
+        );
+    }
     if let Some(program) = agent.split_whitespace().next() {
         if !program.contains("{{")
             && !program.contains('=')

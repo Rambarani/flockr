@@ -679,11 +679,11 @@ pub(crate) fn submit_note(agent_command: &str, submit: bool, prefill: Prefill) -
         return "submit     no, but the command passes {prompt_file} itself, so the agent gets the file as that command does".into();
     }
     let typed = match prefill {
-        Prefill::Paste => "the prompt, pasted",
-        Prefill::Mention => "an @mention of the prompt file",
+        Prefill::Paste => "the prompt is pasted",
+        Prefill::Mention => "an @mention of the prompt file is typed",
     };
     format!(
-        "submit     no: the agent starts with no prompt and {typed} into its input box (prefill = \"{}\"), without Enter",
+        "submit     no: the agent starts with no prompt; {typed} into its input box (prefill = \"{}\"), without Enter",
         prefill.as_str()
     )
 }

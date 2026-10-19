@@ -817,7 +817,7 @@ fn a_dry_run_says_whether_the_prompt_is_submitted_or_left_as_a_draft() {
         "{text}"
     );
     assert!(
-        text.contains("submit     no: the agent starts with no prompt and the prompt, pasted into its input box (prefill = \"paste\"), without Enter"),
+        text.contains("submit     no: the agent starts with no prompt; the prompt is pasted into its input box (prefill = \"paste\"), without Enter"),
         "{text}"
     );
 
@@ -831,7 +831,8 @@ fn a_dry_run_says_whether_the_prompt_is_submitted_or_left_as_a_draft() {
     );
     let (_, text) = dry(&sandbox, &job, Options::default());
     assert_eq!(
-        text.matches("an @mention of the prompt file").count(),
+        text.matches("an @mention of the prompt file is typed")
+            .count(),
         1,
         "the work preview mentions: {text}"
     );

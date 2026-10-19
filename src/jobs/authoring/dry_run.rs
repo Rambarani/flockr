@@ -69,6 +69,7 @@ fn item_info(item: &ItemRecord) -> FeedItemInfo {
             })
             .collect(),
         group: item.group.clone(),
+        also_groups: item.also_groups.clone(),
         actions: item
             .actions
             .iter()

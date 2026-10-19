@@ -1365,6 +1365,7 @@ mod tests {
             body: None,
             fields: Vec::new(),
             group: None,
+            also_groups: Vec::new(),
             actions: Vec::new(),
         };
         let few: Vec<_> = (0..3).map(item).collect();

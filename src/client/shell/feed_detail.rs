@@ -266,6 +266,7 @@ mod tests {
                 },
             ],
             group: None,
+            also_groups: Vec::new(),
             actions: Vec::new(),
         };
         let lines = plain(&build_detail(&item, 30, 1_700_000_000_000 * 2, &palette()));
@@ -297,6 +298,7 @@ mod tests {
             body: None,
             fields: Vec::new(),
             group: None,
+            also_groups: Vec::new(),
             actions: Vec::new(),
         };
         assert_eq!(
@@ -321,6 +323,7 @@ mod tests {
                 value: "alpha beta gamma delta".into(),
             }],
             group: None,
+            also_groups: Vec::new(),
             actions: Vec::new(),
         };
         let lines = plain(&build_detail(&item, 17, 0, &palette()));

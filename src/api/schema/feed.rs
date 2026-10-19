@@ -61,8 +61,19 @@ pub struct FeedItemInfo {
     /// feed's `groups`. Absent in a feed without groups and from older servers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
+    /// More of the feed's `groups` the item also belongs to (up to 4), shown
+    /// under those categories as well. Absent from older servers.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub also_groups: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub actions: Vec<FeedActionInfo>,
+}
+
+impl FeedItemInfo {
+    /// The item shows under category `group`: its own or one of its extras.
+    pub fn in_group(&self, group: &str) -> bool {
+        self.group.as_deref() == Some(group) || self.also_groups.iter().any(|id| id == group)
+    }
 }
 
 /// A category of a feed with its item counts.

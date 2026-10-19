@@ -9,11 +9,11 @@ use serde_json::{json, Value};
 
 use crate::feed::format::{
     FEED_VERSION, GROUPED_RESERVED_CHARS, MAX_ACTIONS, MAX_ACTION_CONFIRM_CHARS,
-    MAX_ACTION_TITLE_CHARS, MAX_ARGV, MAX_ARG_CHARS, MAX_BADGE_CHARS, MAX_BODY_BYTES,
-    MAX_FEED_BYTES, MAX_FEED_TITLE_CHARS, MAX_FIELDS, MAX_FIELD_LABEL_CHARS, MAX_FIELD_VALUE_CHARS,
-    MAX_GROUPS, MAX_GROUP_ID_CHARS, MAX_GROUP_SHORT_TITLE_CHARS, MAX_GROUP_TITLE_CHARS,
-    MAX_ID_CHARS, MAX_ITEMS, MAX_SUBTITLE_CHARS, MAX_TITLE_CHARS, MAX_UPDATED_AT_CHARS,
-    MAX_URL_CHARS, OTHER_GROUP_ID, RESERVED_CHARS, RESERVED_NAMES,
+    MAX_ACTION_TITLE_CHARS, MAX_ALSO_GROUPS, MAX_ARGV, MAX_ARG_CHARS, MAX_BADGE_CHARS,
+    MAX_BODY_BYTES, MAX_FEED_BYTES, MAX_FEED_TITLE_CHARS, MAX_FIELDS, MAX_FIELD_LABEL_CHARS,
+    MAX_FIELD_VALUE_CHARS, MAX_GROUPS, MAX_GROUP_ID_CHARS, MAX_GROUP_SHORT_TITLE_CHARS,
+    MAX_GROUP_TITLE_CHARS, MAX_ID_CHARS, MAX_ITEMS, MAX_SUBTITLE_CHARS, MAX_TITLE_CHARS,
+    MAX_UPDATED_AT_CHARS, MAX_URL_CHARS, OTHER_GROUP_ID, RESERVED_CHARS, RESERVED_NAMES,
 };
 use crate::jobs::definition::{
     format_duration, DEFAULT_TIMEOUT, JOB_ID_MAX_CHARS, MAX_TIMEOUT, MIN_INTERVAL, MIN_TIMEOUT,
@@ -290,6 +290,12 @@ fn item_schema() -> Value {
                 "type": "string",
                 "maxLength": MAX_GROUP_ID_CHARS,
                 "description": format!("The id of one of the feed's `groups`; the item shows under that category tab. A missing or undeclared id puts the item in the implicit `{OTHER_GROUP_ID}` group. Ignored when the feed declares no groups.")
+            },
+            "also_groups": {
+                "type": "array",
+                "maxItems": MAX_ALSO_GROUPS,
+                "items": { "type": "string", "maxLength": MAX_GROUP_ID_CHARS },
+                "description": format!("More group ids (up to {MAX_ALSO_GROUPS}) the item also belongs to, so it shows under those category tabs as well as under `group`. An undeclared id is ignored with a diagnostic. The All tab still counts the item once. Ignored when the feed declares no groups.")
             },
             "actions": {
                 "type": "array",

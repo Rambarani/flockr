@@ -23,7 +23,7 @@
                 "type": "string"
               },
               "key": {
-                "description": "One visible character, unique per item. Reserved for the overlay: 'j' 'k' 'q' 'g' 'G' 'R' 'S' '/' 'x' 'X' 'w' and these key names: enter, return, esc, escape, up, down, left, right, tab, backtab, pageup, pagedown, home, end, backspace, delete, space. In a feed that declares groups these are reserved too: '[' ']' '0' '1' '2' '3' '4' '5' '6' '7' '8' '9'.",
+                "description": "One visible character, unique per item. Reserved for the overlay: 'j' 'k' 'q' 'g' 'G' 'R' 'S' '/' 'x' 'X' 'w' 'W' and these key names: enter, return, esc, escape, up, down, left, right, tab, backtab, pageup, pagedown, home, end, backspace, delete, space. In a feed that declares groups these are reserved too: '[' ']' '0' '1' '2' '3' '4' '5' '6' '7' '8' '9'.",
                 "maxLength": 1,
                 "minLength": 1,
                 "not": {
@@ -38,7 +38,8 @@
                     "/",
                     "x",
                     "X",
-                    "w"
+                    "w",
+                    "W"
                   ]
                 },
                 "type": "string"
@@ -56,6 +57,15 @@
             "type": "object"
           },
           "maxItems": 8,
+          "type": "array"
+        },
+        "also_groups": {
+          "description": "More group ids (up to 4) the item also belongs to, so it shows under those category tabs as well as under `group`. An undeclared id is ignored with a diagnostic. The All tab still counts the item once. Ignored when the feed declares no groups.",
+          "items": {
+            "maxLength": 40,
+            "type": "string"
+          },
+          "maxItems": 4,
           "type": "array"
         },
         "badge": {

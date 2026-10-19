@@ -392,6 +392,7 @@ The command prints one JSON object on stdout (at most 4 MiB):
 | `groups` | Optional list of up to 16 categories, in tab order: `{"id", "title", "short_title"}` (`id` up to 40 characters and unique, `title` up to 60 and defaulting to the id, `short_title` up to 20, used where space is tight). See [Groups](#groups-category-tabs). |
 | `items[].id` | Required, unique within the feed. Duplicates keep the first. |
 | `items[].group` | Optional id of one of the feed's `groups` (up to 40 characters). Missing or undeclared ids go to an implicit `other` group. Ignored in a feed without `groups`. |
+| `items[].also_groups` | Optional list of up to 4 more group ids the item also belongs to, so it shows under those category tabs as well as under its `group`. See [Groups](#groups-category-tabs). |
 | `items[].title` | Shown in rows. Defaults to the id. |
 | `items[].subtitle`, `badge` | Secondary text, and a short label such as a ticket key. |
 | `items[].state` | `unread`, `read` (default), `done`, `warn` or `error`. It sets the dot and the unread count. An unknown state becomes `read`. |
@@ -407,7 +408,7 @@ Unknown fields are ignored, so newer producers keep working. Limits: 500 items (
 
 An action is `{"key", "title", "command"}` with an optional `"confirm"`: a single visible character that triggers it in the overlay, a label, an argv array, and, for an action that is hard to undo, a question to ask first.
 
-- `key` cannot be `Enter`, `esc`, the arrow keys, `tab`, `space` or any other named key, nor one of `j`, `k`, `q`, `g`, `G`, `R`, `S`, `/`, `x`, `X` and `w`, which the overlay uses (`x`, `X` and `w` select items and start work on them; a feed that used one of them for an action loses that action, with a note, and the rest of the item stays). In a feed that declares `groups`, `[`, `]` and the digits `0` to `9` are reserved too (they switch category); a feed without groups can still use them. Keys must be unique within an item. An invalid action is dropped with a note.
+- `key` cannot be `Enter`, `esc`, the arrow keys, `tab`, `space` or any other named key, nor one of `j`, `k`, `q`, `g`, `G`, `R`, `S`, `/`, `x`, `X`, `w` and `W`, which the overlay uses (`x`, `X`, `w` and `W` select items and start work on them; a feed that used one of them for an action loses that action, with a note, and the rest of the item stays). In a feed that declares `groups`, `[`, `]` and the digits `0` to `9` are reserved too (they switch category); a feed without groups can still use them. Keys must be unique within an item. An invalid action is dropped with a note.
 - `confirm` is a question of up to 120 characters, for example `"Delete NH-1412 from workbox?"`. When it is set, the Feed overlay and the sidebar right-click menu show it with `y` (or Enter) to run the action and `n` (or Esc) to cancel; nothing runs before the answer. It is a prompt in the client only: `flockr feed action` and the API methods run the action without asking. A feed without `confirm` behaves as before, and an older Flockr ignores the field.
 - Running an action starts its command with the job's environment, plus `FLOCKR_FEED_ITEM_ID` and `FLOCKR_FEED_ACTION_KEY`. It gets at most 60 seconds (or the job's timeout when that is shorter). Then the feed command runs again, so the list shows the result. The refresh also runs when the action fails.
 - Commands stay on the server: clients send only the job, the item id and the key, and the server looks the command up in the stored feed. A feed that changed since the client looked answers `feed_item_not_found` instead of running something else.
@@ -426,6 +427,7 @@ Each workbox item is also put in a category, from its `source` and `reason` (the
 
 | Group (id) | Tab title | Items |
 | --- | --- | --- |
+| `today` | Today | Every item on workbox's today list (`today: true`, the `t` action), listed through `also_groups`: it is also in its own category below. Always declared, first; the Feed overlay shows it even when empty, the sidebar hides empty groups. |
 | `new-house-prs` | New House PR Requests (`New House PRs`) | GitHub `review_requested` and `mention`: someone wants you on a PR. |
 | `ticket-mentions` | JIRA Mentions | Jira `mention` (and `commented`). |
 | `jira-assigned` | New Tickets Assigned (`New Tickets`) | Jira `assigned`. |
@@ -452,6 +454,7 @@ A feed can sort its items into categories. Declare them in `groups` (their order
 ```
 
 - Items with no `group`, or one that is not declared (that also draws a note), are collected in an implicit group with the id `other` and the title `Other`, shown after the declared ones and only when it has items. Declare a group with the id `other` to choose its title and place.
+- `also_groups` puts an item in more than one group: up to 4 more declared ids besides its `group`. The item shows under each of those tabs; each group's count and unread count include it, the sidebar group rows too, and All counts it once. An id that is not declared, a repeat, or the item's own `group` is ignored (unknown ids with a note); a feed without `groups` ignores the field. The workbox adapter uses it for the Today tab. The API adds the optional `also_groups` to the items of `feed.get`; older servers and clients leave it out, so an older client shows the item only under its `group`.
 - Caps: 16 declared groups (the rest are dropped with a note), 40 characters for an id, 60 for a title, 20 for a `short_title`. A bad entry (not an object, no id, a repeated id) is dropped with a note. A feed without `groups` is one flat list, exactly as before.
 - The API adds optional fields: `feed.list` and `feed.get` carry `groups` (`id`, `title`, `short_title`, `count`, `unread`) in each feed summary, and each item from `feed.get` carries its `group`. Request shapes are unchanged, and an older server or client simply leaves the fields out.
 
@@ -507,6 +510,7 @@ A feed with [groups](#groups-category-tabs) gets a **category tab bar** under th
 | `x` | Select or unselect the current item. Selections survive category tabs and the filter, and the header counts them (`3 selected`). A click on the checkmark column, or a ctrl-click on a row, does the same |
 | `X` | Clear the selection |
 | `w` | [Work on the selected items](#work-on-items-feedwork) (the current item when none is selected): open a tab and start an agent with the items as the prompt |
+| `W` | Work on every item of the list as shown: the selected category tab and the filter, up to 50 items. The footer shows the count: `W work all (12)` |
 | `/` | Filter by title, subtitle, badge or id within the selected category (`enter` keeps it, `esc` clears it) |
 | item action keys | Run that action on the selected item (the selected item's actions are listed at the bottom of the pane) |
 | `R` | Refresh the feed (run the feed command again) |
@@ -517,7 +521,7 @@ The overlay polls every 2 seconds while it is open. Clicking a row selects it, a
 
 ### Work on items (`[feed.work]`)
 
-Select items with `x` (or ctrl-click), press `w`, and Flockr opens a new tab and starts an agent with those items as its prompt. With nothing selected, `w` uses the current item. The overlay closes so the new tab, which is focused, is in view, and a notice says `opened claude with 3 items as a draft — add your note and press Enter` (`started claude with 3 items in tab …` when `submit = true`). The server does the work through the `feed.work` API method, with the same code as a decision's Start: the tab is typed into like any shell, so the agent owns a real terminal, and it starts with the job's environment rules (your login shell's variables by default). Nothing is stored in the feed.
+Select items with `x` (or ctrl-click), press `w`, and Flockr opens a new tab and starts an agent with those items as its prompt. With nothing selected, `w` uses the current item. `W` starts the agent on every item of the list as shown (the selected category tab, narrowed by the filter), for example the whole Today tab of the workbox feed; more than 50 items are cut to the first 50 and the status line says so. In the sidebar, right-click a category row and choose **Work on all in <tab>** for the same. The overlay closes so the new tab, which is focused, is in view, and a notice says `opened claude with 3 items as a draft — add your note and press Enter` (`started claude with 3 items in tab …` when `submit = true`). The server does the work through the `feed.work` API method, with the same code as a decision's Start: the tab is typed into like any shell, so the agent owns a real terminal, and it starts with the job's environment rules (your login shell's variables by default). Nothing is stored in the feed.
 
 Everything is optional. Without a `[feed.work]` table, `claude` starts in the job's `cwd` when the job file sets one, else your home directory, with the built-in prompt:
 

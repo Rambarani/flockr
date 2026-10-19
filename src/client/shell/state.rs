@@ -563,6 +563,7 @@ pub(super) enum ClientContextMenuAction {
     FeedOpenUrl,
     /// Run the item's action at this index.
     FeedRunAction(usize),
+    FeedWorkAll,
     FeedRefresh,
     /// Run the feed's job now (`job.run`); the feed refreshes after it.
     FeedSyncNow,
@@ -615,6 +616,8 @@ pub(super) enum ClientContextMenuTarget {
     Feed {
         job_id: String,
         item: Option<ClientFeedMenuItem>,
+        /// The category row that was clicked: its id and title.
+        group: Option<(String, String)>,
         collapsed: bool,
     },
 }

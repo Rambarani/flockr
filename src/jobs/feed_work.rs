@@ -370,6 +370,7 @@ mod tests {
                 },
             ],
             group: Some("prs".into()),
+            also_groups: Vec::new(),
             actions: Vec::new(),
         }
     }

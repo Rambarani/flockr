@@ -8664,6 +8664,13 @@
               },
               "type": "array"
             },
+            "also_groups": {
+              "description": "More of the feed's `groups` the item also belongs to (up to 4), shown\nunder those categories as well. Absent from older servers.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
             "badge": {
               "type": [
                 "string",

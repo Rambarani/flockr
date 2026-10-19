@@ -13,6 +13,11 @@
 //! Items on workbox's today list (`today: true`) also belong to a first
 //! "Today" tab, through `also_groups`, whatever their own category is.
 //!
+//! Items marked done in workbox (`done: true`, printed by
+//! `workbox list --json --include-done`) go only to the last tab, "Done": they
+//! are in no category and not in Today, their state is `done`, and their actions
+//! are `u` (undo done: `workbox mark <id> undone`) and `D` (delete).
+//!
 //! Items are grouped into categories (tabs in the Feed overlay) from their
 //! `source` and `reason`, following workbox's own `tabs::classify`: see
 //! `CATEGORIES` and `RULES`. The `tab` field is not used, because workbox
@@ -42,6 +47,13 @@ impl Default for AdaptOptions {
 /// The id of the Today tab: it comes first, and an item on workbox's today
 /// list (`today: true`) lists it in `also_groups`, keeping its own category.
 const TODAY_GROUP: (&str, &str, &str) = ("today", "Today", "Today");
+
+/// The last tab: items workbox reports as done. Declared after the implicit
+/// "Other" group, which is declared explicitly (before it) when an item needs it.
+const DONE_GROUP: (&str, &str, &str) = ("done", "Done", "Done");
+
+/// Id and titles of the "Other" group, declared before Done when needed.
+const OTHER_GROUP: (&str, &str, &str) = ("other", "Other", "Other");
 
 /// The categories after Today, in tab order: id, title, and the shorter title for narrow
 /// places. Items that match no rule are left without a group and land in the
@@ -137,6 +149,10 @@ struct WorkboxItem {
     snippet: Option<String>,
     #[serde(default)]
     snoozed_until: Option<String>,
+    #[serde(default)]
+    done: bool,
+    #[serde(default)]
+    done_at: Option<String>,
 }
 
 /// The labelled values for the detail view. `Updated` is left out: the
@@ -153,6 +169,7 @@ fn fields(item: &WorkboxItem) -> Vec<serde_json::Value> {
         ("From", optional(&item.actor)),
         ("Key", non_empty(&item.key).map(str::to_owned)),
         ("Snoozed until", optional(&item.snoozed_until)),
+        ("Done at", optional(&item.done_at)),
         (
             "Today",
             Some(if item.today { "yes" } else { "no" }.to_owned()),
@@ -230,6 +247,7 @@ pub(crate) fn adapt(
     })?;
     let mut warnings = Vec::new();
     let mut feed_items = Vec::with_capacity(items.len());
+    let mut needs_other = false;
     for (position, value) in items.into_iter().enumerate() {
         let item: WorkboxItem = match serde_json::from_value(value) {
             Ok(item) => item,
@@ -249,10 +267,14 @@ pub(crate) fn adapt(
         if !subtitle.is_empty() {
             entry.insert("subtitle".into(), subtitle.into());
         }
-        entry.insert(
-            "state".into(),
-            if item.unread { "unread" } else { "read" }.into(),
-        );
+        let state = if item.done {
+            "done"
+        } else if item.unread {
+            "unread"
+        } else {
+            "read"
+        };
+        entry.insert("state".into(), state.into());
         if let Some(key) = non_empty(&item.key) {
             entry.insert("badge".into(), key.into());
         }
@@ -262,10 +284,14 @@ pub(crate) fn adapt(
         if let Some(updated_at) = non_empty(&item.updated_at) {
             entry.insert("updated_at".into(), updated_at.into());
         }
-        if let Some(group) = category(&item.source, &item.reason) {
+        if item.done {
+            entry.insert("group".into(), DONE_GROUP.0.into());
+        } else if let Some(group) = category(&item.source, &item.reason) {
             entry.insert("group".into(), group.into());
+        } else {
+            needs_other = true;
         }
-        if item.today {
+        if item.today && !item.done {
             entry.insert("also_groups".into(), serde_json::json!([TODAY_GROUP.0]));
         }
         entry.insert("fields".into(), serde_json::Value::Array(fields(&item)));
@@ -273,9 +299,11 @@ pub(crate) fn adapt(
             entry.insert("body".into(), snippet.into());
         }
         let bin = options.bin.as_str();
-        entry.insert(
-            "actions".into(),
-            serde_json::Value::Array(vec![
+        let delete = delete_action(bin, id, non_empty(&item.key).unwrap_or(id));
+        let actions = if item.done {
+            vec![action(bin, id, "u", "undo done", "undone"), delete]
+        } else {
+            vec![
                 action(bin, id, "d", "done", "done"),
                 action(bin, id, "s", "seen", "seen"),
                 if item.today {
@@ -283,9 +311,10 @@ pub(crate) fn adapt(
                 } else {
                     action(bin, id, "t", "today", "today")
                 },
-                delete_action(bin, id, non_empty(&item.key).unwrap_or(id)),
-            ]),
-        );
+                delete,
+            ]
+        };
+        entry.insert("actions".into(), serde_json::Value::Array(actions));
         feed_items.push(serde_json::Value::Object(entry));
     }
     Ok((
@@ -294,6 +323,8 @@ pub(crate) fn adapt(
             "title": options.title,
             "groups": std::iter::once(&TODAY_GROUP)
                 .chain(CATEGORIES.iter())
+                .chain(needs_other.then_some(&OTHER_GROUP))
+                .chain(std::iter::once(&DONE_GROUP))
                 .map(|(id, title, short_title)| {
                     serde_json::json!({"id": id, "title": title, "short_title": short_title})
                 })
@@ -624,7 +655,8 @@ mod tests {
                 "jira-assigned",
                 "old-house-prs",
                 "my-prs",
-                "other"
+                "other",
+                "done"
             ]
         );
         let titles: Vec<_> = parsed.groups.iter().map(|g| g.title.as_str()).collect();
@@ -655,7 +687,7 @@ mod tests {
         )
         .unwrap();
         let parsed = parse_feed(&feed.to_string()).unwrap();
-        assert_eq!(parsed.groups.len(), 6, "Today plus the five categories");
+        assert_eq!(parsed.groups.len(), 7, "Today, five categories and Done");
         assert!(parsed.groups.iter().all(|g| g.id != "other"));
     }
 
@@ -720,5 +752,102 @@ mod tests {
         for none in 3..7 {
             assert_eq!(repo(none), None, "item {none} has no repository");
         }
+    }
+
+    const DONE_INPUT: &str = r##"[
+      {"id":"gh:o/r#1","source":"github","key":"#1","title":"Open one","where":"o/r#1",
+       "reason":"review_requested","unread":true,"today":false,"done":false,"done_at":null},
+      {"id":"gh:o/r#2","source":"github","key":"#2","title":"Finished PR","where":"o/r#2",
+       "reason":"review_requested","unread":true,"today":true,"done":true,
+       "done_at":"2026-10-18T10:00:00Z"},
+      {"id":"jira:NH-3","source":"jira","key":"NH-3","title":"Finished other","where":"NH-3",
+       "reason":"updated","unread":false,"today":false,"done":true,
+       "done_at":"2026-10-17T10:00:00Z"},
+      {"id":"jira:NH-4","source":"jira","key":"NH-4","title":"Plain other","where":"NH-4",
+       "reason":"updated","unread":false,"today":false}
+    ]"##;
+
+    #[test]
+    fn done_items_go_only_to_the_last_done_group_with_undo_and_delete() {
+        let (feed, warnings) = adapt(DONE_INPUT, &AdaptOptions::default()).unwrap();
+        assert!(warnings.is_empty());
+        let parsed = parse_feed(&feed.to_string()).expect("valid feed");
+        assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+        assert_eq!(parsed.groups.last().unwrap().id, "done");
+        assert_eq!(parsed.groups.last().unwrap().title, "Done");
+        let order: Vec<_> = parsed.groups.iter().map(|g| g.id.as_str()).collect();
+        assert_eq!(order[order.len() - 2], "other", "Other stays before Done");
+        let groups: Vec<_> = parsed.items.iter().map(|i| i.group.as_deref()).collect();
+        assert_eq!(
+            groups,
+            [
+                Some("new-house-prs"),
+                Some("done"),
+                Some("done"),
+                Some("other")
+            ]
+        );
+        // A done item on the today list is not in Today any more.
+        assert!(parsed.items[1].also_groups.is_empty());
+        assert_eq!(parsed.items[1].state, FeedItemState::Done);
+        assert_eq!(parsed.items[0].state, FeedItemState::Unread);
+        let done = &feed["items"][1];
+        let keys: Vec<_> = done["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| a["key"].as_str().unwrap())
+            .collect();
+        assert_eq!(keys, ["u", "D"]);
+        assert_eq!(done["actions"][0]["title"], "undo done");
+        assert_eq!(
+            done["actions"][0]["command"],
+            serde_json::json!(["workbox", "mark", "gh:o/r#2", "undone"])
+        );
+        assert_eq!(
+            done["actions"][1]["command"],
+            serde_json::json!(["workbox", "mark", "gh:o/r#2", "delete"])
+        );
+        assert!(done["fields"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f["label"] == "Done at" && f["value"] == "2026-10-18T10:00:00Z"));
+    }
+
+    #[test]
+    fn category_counts_exclude_done_items() {
+        let (feed, _) = adapt(DONE_INPUT, &AdaptOptions::default()).unwrap();
+        let parsed = parse_feed(&feed.to_string()).unwrap();
+        let count = |group: &str| {
+            parsed
+                .items
+                .iter()
+                .filter(|i| {
+                    i.group.as_deref() == Some(group) || i.also_groups.iter().any(|g| g == group)
+                })
+                .count()
+        };
+        assert_eq!(count("new-house-prs"), 1);
+        assert_eq!(count("today"), 0);
+        assert_eq!(count("other"), 1);
+        assert_eq!(count("done"), 2);
+    }
+
+    #[test]
+    fn input_without_done_fields_has_no_done_items_and_done_is_still_last() {
+        let (feed, _) = adapted(&AdaptOptions::default());
+        let ids: Vec<_> = feed["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|g| g["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(ids.last(), Some(&"done"));
+        assert!(feed["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|i| i["group"] != "done" && i["state"] != "done"));
     }
 }

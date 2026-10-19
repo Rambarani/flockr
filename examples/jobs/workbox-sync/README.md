@@ -70,6 +70,8 @@ overlay.
 
 - Today only as the whole feed: use the commented `command` in `job.toml`
   (`workbox list --tab today --json`). The normal feed already has a Today tab.
+- No Done tab: drop `--include-done` from the feed command (by default it adds
+  items marked done in the last 7 days; `--done-days N` changes that).
 - Different title: `flockr feed adapt workbox --title "..."`. A `title` in the
   `[feed]` table wins over it.
 - No questions, just the list: delete the `[handoff]` table.

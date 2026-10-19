@@ -1,10 +1,13 @@
-//! `flockr upstream sync <tag>`: prepare an isolated worktree for merging an
-//! upstream herdr release and hand it to an agent.
+//! `flockr upstream sync <tag>`: prepare an isolated worktree holding an
+//! upstream herdr release's changes and hand it to an agent.
 //!
 //! The sync never touches the main checkout's working tree or the `flockr`
 //! branch. It only (a) adds a git remote named `upstream` when missing,
-//! (b) fetches tags into the shared object store, and (c) creates a worktree
-//! `<repo>/../flockr-sync-<tag>` on a new branch `upstream-sync/<tag>`.
+//! (b) fetches tags into the shared object store, (c) creates a worktree
+//! `<repo>/../flockr-sync-<tag>` on a new branch `upstream-sync/<tag>`, and
+//! (d) applies upstream's `<base>..<tag>` changes there as a per-file
+//! three-way merge (see `patch`). flockr has no shared history with herdr, so
+//! the tag itself is never merged.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -222,7 +225,9 @@ pub(crate) fn worktree_registered_on_branch(repo: &Path, path: &Path, branch: &s
     false
 }
 
-/// Creates (or resumes) the sync worktree. Returns whether it was newly created.
+/// Creates (or resumes) the sync worktree. Returns whether it starts a new
+/// branch from `flockr`; only then are upstream's changes applied, because an
+/// existing branch may already hold the agent's work.
 fn ensure_worktree(
     repo: &Path,
     path: &Path,
@@ -257,6 +262,7 @@ fn ensure_worktree(
             "created worktree {} on existing branch {branch}",
             path.display()
         );
+        return Ok(false);
     } else {
         run_git(
             repo,
@@ -304,6 +310,9 @@ pub(crate) struct PromptInput<'a> {
     pub repo: &'a Path,
     pub worktree: &'a Path,
     pub release_notes: &'a str,
+    /// Markdown section describing how upstream's changes were applied (starts
+    /// with `patch::PATCH_SECTION_HEADING`).
+    pub patch_summary: &'a str,
 }
 
 /// The instructions handed to the agent. Everything the agent must preserve
@@ -316,6 +325,7 @@ pub(crate) fn build_prompt(input: &PromptInput<'_>) -> String {
         repo,
         worktree,
         release_notes,
+        patch_summary,
     } = input;
     let repo = repo.display();
     let worktree = worktree.display();
@@ -331,6 +341,7 @@ You are working in a dedicated git worktree: `{worktree}`
 Branch: `{branch}` (created from the `{MAIN_BRANCH}` branch).
 The main checkout is `{repo}`. flockr is currently synced to upstream herdr `{base_tag}`; your job is to bring in herdr `{tag}`.
 The upstream remote is `upstream` and the tag is already fetched.
+flockr's git history has no common ancestor with herdr's: `git merge {tag}` fails with "refusing to merge unrelated histories". Do not merge, rebase or cherry-pick herdr commits and do not use `--allow-unrelated-histories`. The sync already applied upstream's changes for you (below).
 
 ## Hard rules
 
@@ -344,15 +355,25 @@ The upstream remote is `upstream` and the tag is already fetched.
 
 ## Steps
 
-1. Merge the release: `git merge --no-ff --no-commit {tag}`. Review the incoming changes with `git log {base_tag}..{tag}` and the diff before resolving anything.
+1. Upstream's changes `{base_tag}..{tag}` were applied to this worktree as a per-file 3-way merge (base = `{base_tag}`, theirs = `{tag}`, ours = flockr), without committing. Read the result below. Files that applied cleanly are staged; conflicted files are modified in place and not staged. Review what upstream changed with `git log {base_tag}..{tag}` and `git diff {base_tag} {tag}`, and what the sync did with `git diff --cached` and `git status`.
+   - Resolve every conflict: find them with `git grep -n '^>>>>>>> herdr '` and `git grep -n '^<<<<<<< flockr'`. `<<<<<<< flockr` .. `=======` is flockr's side, `=======` .. `>>>>>>> herdr {tag}` is upstream's. Remove every marker line.
+   - "Binary file changed in both" and "symlink or submodule" entries have no markers: decide by hand which version to keep (`git show {tag}:<upstream path>` is upstream's).
+   - "Skipped" entries are upstream changes to files flockr no longer has (deleted or moved). Check each: if flockr removed the feature on purpose, leave it removed; if the code moved, port the change to its new place.
+   - Entries listed as `(upstream <path>)` were mapped through flockr's herdr -> flockr rename table (derived from the file renames between `{base_tag}` and `{MAIN_BRANCH}`); upstream's change landed on the renamed path. A NEW file upstream added under a directory flockr renamed is placed in the renamed directory only when the directory move was unambiguous; check the placement of every added file.
+   - Limits of the automatic step: a rename is detected only above 40% similarity, so a heavily rewritten renamed file shows up as a skipped change plus an added file; a text hunk can merge cleanly yet be semantically wrong in flockr's renamed code (for example it still says `herdr`), so read every merged hunk, not only the conflicts.
 2. Resolve conflicts preserving flockr's changes. Always keep:
    - the rename: crate and binary name `flockr`, config/state/socket/log paths, the `FLOCKR_*` environment variables, `flockr:<id>` report sources and every other flockr name;
    - `src/legacy_herdr.rs` and its aliases (`HERDR_*` env twins, `herdr:<id>` report sources, deprecated `"herdr"` config values);
    - `src/product.rs` hosting URLs (flockr's own GitHub repository; do not reintroduce herdr.dev or herdrdev/herdr hosting endpoints other than the upstream watcher constants);
    - sidebar agents grouped under workspace headers;
    - configurable notification sounds and the tones settings tab;
-   - the upstream watcher: `src/upstream/`, `src/cli/upstream.rs`, the `[upstream]` config section and `.flockr/`.
+   - the upstream watcher: `src/upstream/`, `src/cli/upstream.rs`, the `[upstream]` config section and `.flockr/`;
+   - the deleted upstream CI/release workflows (`.github/workflows/`, `.github/dependabot.yml`): do not bring them back.
 3. Apply the herdr -> flockr naming to everything newly added by upstream: new `HERDR_*` env vars become `FLOCKR_*` (read through `crate::legacy_herdr::var` so the `HERDR_*` spelling keeps working), and new ids, paths, strings, docs and tests that say herdr become flockr. Where third-party agents or scripts read a NEW `HERDR_*` name (pane runtime contract, hook scripts), add a legacy alias following the pattern in `src/legacy_herdr.rs`, with a test.
+   Apache-2.0 section 4(b) notices (`NOTICE` explains the policy):
+   - Files that flockr already modified start with the header `Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr <version> (Apache-2.0). See NOTICE.` (as a comment in the file's own syntax). Keep that header when you resolve a conflict in such a file. The version in it names the herdr release flockr was first derived from; leave it as is (it is a statement about where the file came from, not the current sync), and never delete or duplicate the header.
+   - Files upstream added are herdr's: add them as they are, and keep their content. If you then change one (including the herdr -> flockr naming above), it is a modification: give it the header in its comment syntax and list it in `NOTICE` if it cannot carry an inline header (JSON, binary, etc.). Do not add the header to files you leave untouched.
+   - Files flockr creates itself carry no header.
 4. Update `.flockr/upstream-base` to contain exactly `{tag}` and a newline, and add a line to `NOTICE` recording the sync (tag, upstream commit hash, date).
 5. Write `.flockr/parity-{tag}.md` (committed) listing every new upstream feature and fix you adopted: CLI commands and flags, config keys, environment variables, API methods and events, each with its source file. Use the format of `{repo}/docs/flockr/parity-checklist.md` as a reference. That checklist is gitignored; read it but do not edit it in the main checkout.
 6. Verify inside this worktree. The vendored libghostty-vt build needs Zig 0.16.0 (set `ZIG` or put it on `PATH` if it is not already). All four must pass:
@@ -360,11 +381,12 @@ The upstream remote is `upstream` and the tag is already fetched.
    - `cargo nextest run --no-fail-fast` (use nextest; plain `cargo test` gives false environment failures)
    - `cargo clippy --all-targets --locked -- -D warnings`
    - `cargo fmt --check`
-   Fix failures caused by the merge. If a failure also exists on the `{MAIN_BRANCH}` branch, record it as pre-existing instead of hiding it.
+   Fix failures caused by the upstream changes or by conflict resolution. If a failure also exists on the `{MAIN_BRANCH}` branch, record it as pre-existing instead of hiding it.
 7. Commit everything except the two uncommitted files on `{branch}` with a lowercase conventional commit, for example `chore: sync upstream herdr {tag}`.
 8. Only after the final commit and only if all four checks passed, record the verified commit: `git rev-parse HEAD > .flockr/sync-{tag}.verified`. If any check fails or any conflict is unresolved, do not write that file.
 9. Finish with a summary: the new features and fixes adopted, conflicts and how you resolved them, anything you could not resolve, and the result of each check. Tell the user the next step is `flockr upstream apply {tag}`, to be run by them.
 
+{patch_summary}
 ## Upstream release notes
 
 {notes}"#,
@@ -424,12 +446,63 @@ pub(crate) fn run_sync(
         ));
     }
 
-    let branch = sync_branch_name(options.tag);
-    ensure_worktree(options.repo, &worktree, &branch, out)?;
+    // The base comes from the `flockr` branch, not from the worktree: a resumed
+    // worktree may already have recorded the new base.
+    let base_tag = run_git(
+        options.repo,
+        &["show", &format!("refs/heads/{MAIN_BRANCH}:{BASE_FILE}")],
+    )
+    .map(|content| content.trim().to_string())
+    .unwrap_or_else(|_| super::compiled_base_tag().to_string());
+    if base_tag == options.tag {
+        return Err(format!(
+            "flockr is already synced to {}; nothing to copy",
+            options.tag
+        ));
+    }
+    if !tag_exists(options.repo, &base_tag) {
+        return Err(format!(
+            "the recorded upstream base {base_tag} is not a tag in this checkout even after fetching; the sync needs it to compute upstream's changes"
+        ));
+    }
 
-    let base_tag = std::fs::read_to_string(worktree.join(BASE_FILE))
-        .map(|content| content.trim().to_string())
-        .unwrap_or_else(|_| super::compiled_base_tag().to_string());
+    let branch = sync_branch_name(options.tag);
+    let fresh = ensure_worktree(options.repo, &worktree, &branch, out)?;
+
+    let patch_summary = if fresh {
+        let _ = writeln!(
+            out,
+            "applying upstream changes {base_tag}..{} (3-way, per file)",
+            options.tag
+        );
+        let _ = out.flush();
+        match super::patch::apply_upstream_range(&worktree, &base_tag, options.tag, out) {
+            Ok(report) => {
+                let _ = writeln!(out, "{}", report.one_line());
+                report.markdown()
+            }
+            Err(err) => {
+                // Do not leave a half-prepared worktree that a rerun would
+                // mistake for a resumable one.
+                let path_str = worktree.to_string_lossy();
+                let _ = run_git(options.repo, &["worktree", "remove", "--force", &path_str]);
+                let _ = run_git(options.repo, &["branch", "-D", &branch]);
+                return Err(format!(
+                    "could not apply upstream's changes {base_tag}..{}: {err}\nthe sync worktree and branch were removed; `{MAIN_BRANCH}` is unchanged",
+                    options.tag
+                ));
+            }
+        }
+    } else {
+        previous_patch_summary(&prompt_file).unwrap_or_else(|| {
+            format!(
+                "{}\n\nThe worktree was resumed, so upstream's changes were not applied again. Inspect `git status` and `git log {base_tag}..{}` to see what is left.\n",
+                super::patch::PATCH_SECTION_HEADING,
+                options.tag
+            )
+        })
+    };
+
     let notes = cached_notes(options.state, &base_tag, options.tag);
     let prompt = build_prompt(&PromptInput {
         tag: options.tag,
@@ -438,6 +511,7 @@ pub(crate) fn run_sync(
         repo: options.repo,
         worktree: &worktree,
         release_notes: &notes,
+        patch_summary: &patch_summary,
     });
     if let Some(parent) = prompt_file.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -453,6 +527,18 @@ pub(crate) fn run_sync(
     let _ = out.flush();
 
     launch(&worktree, &agent_cmd).map_err(|e| format!("failed to launch agent: {e}"))
+}
+
+/// The patch-result section of a previously written prompt, so a resumed sync
+/// keeps reporting how upstream's changes were applied.
+fn previous_patch_summary(prompt_file: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(prompt_file).ok()?;
+    let start = content.find(super::patch::PATCH_SECTION_HEADING)?;
+    let rest = &content[start..];
+    let end = rest
+        .find("\n## Upstream release notes")
+        .unwrap_or(rest.len());
+    Some(rest[..end].to_string())
 }
 
 /// Replaces this process with the agent shell command (Unix) so the agent owns
@@ -744,19 +830,159 @@ mod tests {
         );
         assert_eq!(git(&worktree, &["rev-parse", "HEAD"]), flockr_before);
         assert!(
-            !worktree.join("feature.txt").exists(),
-            "the tag is merged by the agent, not by sync"
+            worktree.join("feature.txt").is_file(),
+            "upstream's v9.9.8..v9.9.9 change is applied by sync"
+        );
+        assert!(out.contains("1 applied cleanly, 0 conflicted"), "{out}");
+        assert!(git(&worktree, &["status", "--porcelain"])
+            .lines()
+            .any(|line| line.ends_with("feature.txt")));
+        assert!(
+            git(&worktree, &["rev-parse", "HEAD"]) == flockr_before,
+            "sync does not commit"
         );
 
         // Prompt written into the worktree and handed to the agent.
         let prompt = std::fs::read_to_string(prompt_path(&worktree, "v9.9.9")).unwrap();
-        assert!(prompt.contains("git merge --no-ff --no-commit v9.9.9"));
+        assert!(prompt.contains("## Upstream patch result"));
+        assert!(!prompt.contains("git merge --no-ff"));
         assert_eq!(launches.len(), 1);
         assert_eq!(launches[0].0, worktree);
         assert_eq!(
             launches[0].1,
             format!("cat '{}'", prompt_path(&worktree, "v9.9.9").display())
         );
+    }
+
+    #[test]
+    fn sync_with_unrelated_histories_applies_upstream_changes_only() {
+        let root = unique_dir("sync-unrelated");
+        let upstream = root.join("herdr-upstream");
+        std::fs::create_dir_all(&upstream).unwrap();
+        git(&upstream, &["init", "-q", "-b", "main"]);
+        let body: String = (1..=20).map(|i| format!("line {i}\n")).collect();
+        std::fs::write(upstream.join("herdr_core.txt"), &body).unwrap();
+        std::fs::write(upstream.join("shared.txt"), &body).unwrap();
+        std::fs::write(upstream.join("only_upstream.txt"), "old\n").unwrap();
+        git(&upstream, &["add", "."]);
+        git(&upstream, &["commit", "-q", "-m", "v1"]);
+        git(&upstream, &["tag", "v9.9.8"]);
+        std::fs::write(
+            upstream.join("herdr_core.txt"),
+            body.replace("line 20\n", "line 20 upstream\n"),
+        )
+        .unwrap();
+        std::fs::write(
+            upstream.join("shared.txt"),
+            body.replace("line 10\n", "upstream 10\n"),
+        )
+        .unwrap();
+        std::fs::write(upstream.join("only_upstream.txt"), "new\n").unwrap();
+        std::fs::write(upstream.join("added.txt"), "added\n").unwrap();
+        git(&upstream, &["add", "-A"]);
+        git(&upstream, &["commit", "-q", "-m", "v2"]);
+        git(&upstream, &["tag", "v9.9.9"]);
+
+        // flockr: its root commit holds v9.9.8's tree with no parent link to
+        // herdr (what the history rewrite produced).
+        let repo = root.join("flockr");
+        std::fs::create_dir_all(&repo).unwrap();
+        git(&repo, &["init", "-q", "-b", "flockr"]);
+        git(
+            &repo,
+            &["fetch", "-q", upstream.to_str().unwrap(), "v9.9.8"],
+        );
+        git(&repo, &["checkout", "-q", "--orphan", "tmp", "FETCH_HEAD"]);
+        std::fs::create_dir_all(repo.join(".flockr")).unwrap();
+        std::fs::write(repo.join(BASE_FILE), "v9.9.8\n").unwrap();
+        git(&repo, &["add", "."]);
+        git(&repo, &["commit", "-q", "-m", "flockr base"]);
+        git(&repo, &["branch", "-M", "flockr"]);
+        git(&repo, &["mv", "herdr_core.txt", "flockr_core.txt"]);
+        std::fs::write(
+            repo.join("shared.txt"),
+            body.replace("line 10\n", "flockr 10\n"),
+        )
+        .unwrap();
+        git(&repo, &["rm", "-q", "only_upstream.txt"]);
+        git(&repo, &["add", "-A"]);
+        git(&repo, &["commit", "-q", "-m", "flockr changes"]);
+        let fixture = Fixture {
+            root,
+            upstream,
+            repo,
+        };
+        let flockr_before = git(&fixture.repo, &["rev-parse", "refs/heads/flockr"]);
+        assert!(
+            !git_succeeds(&fixture.repo, &["merge-base", "flockr", "v9.9.9"]),
+            "histories are unrelated"
+        );
+
+        let (result, launches, out) = sync(&fixture, "v9.9.9", "cat {prompt_file}");
+        assert_eq!(result.unwrap(), 0, "{out}");
+        assert_eq!(launches.len(), 1);
+        assert!(
+            out.contains("1 applied cleanly, 1 conflicted, 1 skipped")
+                || out.contains("2 applied cleanly, 1 conflicted, 1 skipped"),
+            "{out}"
+        );
+
+        let worktree = worktree_path(&fixture.repo, "v9.9.9");
+        // Renamed file got upstream's edit at flockr's path.
+        let core = std::fs::read_to_string(worktree.join("flockr_core.txt")).unwrap();
+        assert!(core.contains("line 20 upstream"));
+        assert!(!worktree.join("herdr_core.txt").exists());
+        // Conflict is marked in place.
+        let shared = std::fs::read_to_string(worktree.join("shared.txt")).unwrap();
+        assert!(shared.contains("<<<<<<< flockr") && shared.contains(">>>>>>> herdr v9.9.9"));
+        // Added upstream file arrives; a file flockr removed stays removed.
+        assert!(worktree.join("added.txt").is_file());
+        assert!(!worktree.join("only_upstream.txt").exists());
+
+        let prompt = std::fs::read_to_string(prompt_path(&worktree, "v9.9.9")).unwrap();
+        assert!(prompt.contains("## Upstream patch result"));
+        assert!(
+            prompt.contains("`flockr_core.txt` (upstream `herdr_core.txt`)"),
+            "{prompt}"
+        );
+        assert!(prompt.contains("Conflicts: resolve these first (1)"));
+        assert!(prompt.contains("`shared.txt`"));
+        assert!(prompt.contains("Skipped: flockr has no such file (1)"));
+        assert!(prompt.contains("`only_upstream.txt`"));
+
+        // flockr branch and the main checkout never move.
+        assert_eq!(
+            git(&fixture.repo, &["rev-parse", "refs/heads/flockr"]),
+            flockr_before
+        );
+        assert_eq!(git(&fixture.repo, &["branch", "--show-current"]), "flockr");
+        assert!(git(&fixture.repo, &["status", "--porcelain"]).is_empty());
+
+        // Resuming keeps the recorded result and does not re-apply.
+        let before = std::fs::read_to_string(worktree.join("shared.txt")).unwrap();
+        let (second, _, out) = sync(&fixture, "v9.9.9", "cat {prompt_file}");
+        second.unwrap();
+        assert!(out.contains("resuming existing worktree"), "{out}");
+        assert_eq!(
+            std::fs::read_to_string(worktree.join("shared.txt")).unwrap(),
+            before
+        );
+        let prompt = std::fs::read_to_string(prompt_path(&worktree, "v9.9.9")).unwrap();
+        assert!(prompt.contains("`flockr_core.txt` (upstream `herdr_core.txt`)"));
+    }
+
+    #[test]
+    fn sync_refuses_when_already_at_the_target_or_base_tag_is_missing() {
+        let fixture = Fixture::new("sync-base");
+        let (result, launches, _) = sync(&fixture, "v9.9.8", "cat {prompt_file}");
+        assert!(result.unwrap_err().contains("already synced"));
+        assert!(launches.is_empty());
+        std::fs::write(fixture.repo.join(BASE_FILE), "v1.2.3\n").unwrap();
+        git(&fixture.repo, &["commit", "-q", "-am", "bad base"]);
+        let (result, launches, _) = sync(&fixture, "v9.9.9", "cat {prompt_file}");
+        assert!(result.unwrap_err().contains("v1.2.3"));
+        assert!(launches.is_empty());
+        assert!(!worktree_path(&fixture.repo, "v9.9.9").exists());
     }
 
     #[test]
@@ -865,12 +1091,19 @@ mod tests {
             repo: Path::new("/src/flockr"),
             worktree: Path::new("/src/flockr-sync-v0.9.7"),
             release_notes: notes,
+            patch_summary: "## Upstream patch result\n\nsummary-text\n",
         });
         for needle in [
             "# Sync upstream herdr v0.9.7 into flockr",
             "`upstream-sync/v0.9.7`",
-            "git merge --no-ff --no-commit v0.9.7",
+            "refusing to merge unrelated histories",
+            "per-file 3-way merge",
             "git log v0.9.5..v0.9.7",
+            "git grep -n '^>>>>>>> herdr '",
+            "rename table",
+            "Apache-2.0 section 4(b)",
+            "changed from herdr <version>",
+            "summary-text",
             "FLOCKR_*",
             "src/legacy_herdr.rs",
             "src/product.rs",

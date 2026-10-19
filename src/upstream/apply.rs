@@ -1,9 +1,12 @@
 //! `flockr upstream apply <tag>`: merge a finished, verified sync branch into
-//! `flockr`. Only ever runs on explicit user request.
+//! `flockr`. Only ever runs on explicit user request. Both sides are flockr
+//! history (the sync branch starts from `flockr`), so this is an ordinary
+//! fast-forward or merge and needs no shared history with herdr.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use super::patch::CONFLICT_MARKER_PREFIX;
 use super::state::UpstreamState;
 use super::sync::{
     canonical, git_succeeds, marker_path, preflight_repo, run_git, validate_tag, worktree_path,
@@ -110,17 +113,25 @@ pub(crate) fn plan_apply(repo: &Path, tag: &str) -> Result<ApplyPlan, String> {
         ));
     }
 
-    if !git_succeeds(
+    // The tag is not an ancestor of the branch: flockr shares no history with
+    // herdr and the sync applies upstream's changes as a patch. What proves the
+    // sync is finished is that no conflict marker written by it remains.
+    let marker_pattern = format!("^{}", CONFLICT_MARKER_PREFIX);
+    if let Ok(found) = run_git(
         repo,
         &[
-            "merge-base",
-            "--is-ancestor",
-            &format!("refs/tags/{tag}"),
+            "grep",
+            "-l",
+            "-e",
+            &marker_pattern,
             &format!("refs/heads/{branch}"),
         ],
     ) {
+        let files: Vec<&str> = found.lines().collect();
         return Err(format!(
-            "upstream tag {tag} is not merged into {branch}; the sync is incomplete"
+            "{branch} still contains unresolved upstream conflict markers ({}); the sync is incomplete:\n{}",
+            CONFLICT_MARKER_PREFIX.trim_end(),
+            files.join("\n")
         ));
     }
 
@@ -509,8 +520,8 @@ mod tests {
     }
 
     #[test]
-    fn refuses_when_the_tag_is_not_merged_into_the_branch() {
-        let fixture = Fixture::new("apply-unmerged");
+    fn refuses_when_conflict_markers_remain_on_the_branch() {
+        let fixture = Fixture::new("apply-markers");
         let repo = &fixture.repo;
         git(
             repo,
@@ -530,12 +541,30 @@ mod tests {
             ],
         );
         std::fs::write(worktree.join(BASE_FILE), format!("{TAG}\n")).unwrap();
+        std::fs::write(
+            worktree.join("left.rs"),
+            format!("<<<<<<< flockr\na\n=======\nb\n{CONFLICT_MARKER_PREFIX}{TAG}\n"),
+        )
+        .unwrap();
         git(&worktree, &["add", "."]);
-        git(&worktree, &["commit", "-q", "-m", "chore: base only"]);
+        git(&worktree, &["commit", "-q", "-m", "chore: unresolved"]);
         let head = git(&worktree, &["rev-parse", "HEAD"]);
         std::fs::write(marker_path(&worktree, TAG), format!("{head}\n")).unwrap();
         let err = plan_apply(repo, TAG).unwrap_err();
-        assert!(err.contains("is not merged into"), "{err}");
+        assert!(
+            err.contains("unresolved upstream conflict markers"),
+            "{err}"
+        );
+        assert!(err.contains("left.rs"), "{err}");
+
+        // Resolving the markers makes the same branch applicable.
+        std::fs::write(worktree.join("left.rs"), "resolved\n").unwrap();
+        git(&worktree, &["add", "left.rs"]);
+        git(&worktree, &["commit", "-q", "-m", "chore: resolved"]);
+        let head = git(&worktree, &["rev-parse", "HEAD"]);
+        std::fs::write(marker_path(&worktree, TAG), format!("{head}\n")).unwrap();
+        let plan = plan_apply(repo, TAG);
+        assert!(plan.is_ok(), "{plan:?}");
     }
 
     #[test]

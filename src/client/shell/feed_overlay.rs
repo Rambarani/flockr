@@ -532,9 +532,18 @@ impl ClientShellState {
         mut ids: Vec<String>,
         outcome: &mut ClientShellInput,
     ) {
+        // The Feed overlay has a status line; from the sidebar there is none,
+        // so the same text goes out as a notice.
         let say = |state: &mut Self, text: String| {
             if let Some(overlay) = state.feed_overlay_mut() {
                 overlay.status = Some(text);
+            } else {
+                state.push_endpoint_notice(
+                    ClientEndpointNoticeKind::Rejected,
+                    "feed.work",
+                    "Work on feed items",
+                    text,
+                );
             }
         };
         if ids.is_empty() {
@@ -557,15 +566,21 @@ impl ClientShellState {
             );
             return;
         }
-        let text = if total > count {
-            format!(
-                "starting an agent with the first {count} of {total} items (limit {})…",
-                crate::jobs::feed_work::MAX_WORK_ITEMS
-            )
-        } else {
-            format!("starting an agent with {count} item{}…", plural(count))
-        };
-        say(self, text);
+        if total > count {
+            say(
+                self,
+                format!(
+                    "starting an agent with the first {count} of {total} items (limit {})…",
+                    crate::jobs::feed_work::MAX_WORK_ITEMS
+                ),
+            );
+        } else if let Some(overlay) = self.feed_overlay_mut() {
+            // Without the overlay the new tab opening is the feedback.
+            overlay.status = Some(format!(
+                "starting an agent with {count} item{}…",
+                plural(count)
+            ));
+        }
         self.request_feed_work(method, job_id, outcome);
     }
 

@@ -2955,6 +2955,58 @@ fn a_sidebar_menu_action_for_an_item_that_vanished_is_not_sent() {
     );
 }
 
+// ----- work from the sidebar reports through notices ------------------------
+
+fn sidebar_work_all(state: &mut ClientShellState, group_index: usize) -> ClientShellInput {
+    let row = state.hits.feed.groups[group_index].rect;
+    right_click(state, row);
+    let mut outcome = ClientShellInput::default();
+    state.activate_context_menu_item(0, &mut outcome);
+    outcome
+}
+
+#[test]
+fn sidebar_work_all_reports_a_cut_list_as_a_notice() {
+    let items: Vec<FeedItemInfo> = (0..60)
+        .map(|n| {
+            let mut item = item(&format!("n-{n:02}"), "Item", FeedItemState::Read);
+            item.group = Some("big".into());
+            item
+        })
+        .collect();
+    let mut feed = summary("workbox-sync", "Today (workbox)", 60, 0, 1);
+    feed.groups = vec![group_info("big", "Big", None, 60, 0)];
+    let mut state = state_with_feeds(&Config::default(), vec![(feed, items)]);
+    let outcome = sidebar_work_all(&mut state, 0);
+    assert_eq!(requests(&outcome).len(), 1);
+    let notice = state.visible_endpoint_notice.as_ref().expect("notice");
+    assert!(notice.body.contains("first 50 of 60"), "{}", notice.body);
+}
+
+#[test]
+fn sidebar_work_all_with_nothing_to_work_on_says_so() {
+    let (mut feed, mut items) = grouped_feed();
+    // The only item of Reviews is done: nothing is left to start.
+    items[0].state = FeedItemState::Done;
+    items[1].state = FeedItemState::Done;
+    feed.groups[0] = group_info("reviews", "Review Requests", Some("Reviews"), 2, 0);
+    let mut state = state_with_feeds(&Config::default(), vec![(feed, items)]);
+    let outcome = sidebar_work_all(&mut state, 0);
+    assert!(requests(&outcome).is_empty());
+    let notice = state.visible_endpoint_notice.as_ref().expect("notice");
+    assert_eq!(notice.body, "nothing to work on");
+}
+
+#[test]
+fn sidebar_work_all_on_a_server_without_feed_work_says_so() {
+    let mut state = state_with_feeds(&Config::default(), vec![feed_with_today()]);
+    state.set_endpoint_methods(Some(vec!["feed.list".to_owned()]));
+    let outcome = sidebar_work_all(&mut state, 0);
+    assert!(requests(&outcome).is_empty());
+    let notice = state.visible_endpoint_notice.as_ref().expect("notice");
+    assert!(notice.body.contains("does not support"), "{}", notice.body);
+}
+
 // ----- a Today tab: items in more than one group, and W ---------------------
 
 /// `today_items` with a first "today" group: nh-1 and nh-3 are also on it, as

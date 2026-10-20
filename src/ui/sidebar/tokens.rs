@@ -18,6 +18,8 @@ pub(crate) enum ResolvedTokenKind {
     Tab(String),
     Pane(String),
     Agent(String),
+    Label(String),
+    AgentKind(String),
     TerminalTitle(String),
     Branch(String),
     GitStatus { ahead: usize, behind: usize },
@@ -33,6 +35,8 @@ impl ResolvedTokenKind {
             | Self::Tab(value)
             | Self::Pane(value)
             | Self::Agent(value)
+            | Self::Label(value)
+            | Self::AgentKind(value)
             | Self::TerminalTitle(value)
             | Self::Branch(value)
             | Self::Custom(value) => Some(value),
@@ -58,15 +62,43 @@ pub(crate) struct AgentTokenContext<'a> {
     pub(crate) tab: Option<&'a str>,
     pub(crate) pane: Option<&'a str>,
     pub(crate) agent_label: Option<&'a str>,
+    /// Value of the `label` token: the agent's user-facing name.
+    pub(crate) label: Option<&'a str>,
+    /// Value of the `agent_kind` token: detected or reported kind, never the alias.
+    pub(crate) agent_kind: Option<&'a str>,
     pub(crate) terminal_title: Option<&'a str>,
     pub(crate) terminal_title_stripped: Option<&'a str>,
     pub(crate) canonical_agent: Option<crate::detect::Agent>,
     pub(crate) tokens: &'a std::collections::HashMap<String, String>,
 }
 
+/// Resolve an agent's configured rows. A `label` that repeats a visible `tab`
+/// value of the same agent is dropped, so configuring both shows the tab once.
 pub(crate) fn agent_rows(
     config: &AgentsSidebarConfig,
     context: AgentTokenContext<'_>,
+    state_text: &str,
+) -> Vec<Vec<ResolvedToken>> {
+    let mut rows = resolve_agent_rows(config, &context, state_text);
+    let shown_tab = rows.iter().flatten().find_map(|token| match &token.kind {
+        ResolvedTokenKind::Tab(value) => Some(value.clone()),
+        _ => None,
+    });
+    if let Some(tab) = shown_tab {
+        let repeats_tab = |token: &ResolvedToken| matches!(&token.kind, ResolvedTokenKind::Label(value) if *value == tab);
+        if rows.iter().flatten().any(repeats_tab) {
+            for row in &mut rows {
+                row.retain(|token| !repeats_tab(token));
+            }
+            rows.retain(|row| !row.is_empty());
+        }
+    }
+    rows
+}
+
+fn resolve_agent_rows(
+    config: &AgentsSidebarConfig,
+    context: &AgentTokenContext<'_>,
     state_text: &str,
 ) -> Vec<Vec<ResolvedToken>> {
     config
@@ -97,6 +129,12 @@ pub(crate) fn agent_rows(
                         AgentSidebarToken::Agent => context
                             .agent_label
                             .map(|value| ResolvedTokenKind::Agent(value.to_string())),
+                        AgentSidebarToken::Label => context
+                            .label
+                            .map(|value| ResolvedTokenKind::Label(value.to_string())),
+                        AgentSidebarToken::AgentKind => context
+                            .agent_kind
+                            .map(|value| ResolvedTokenKind::AgentKind(value.to_string())),
                         AgentSidebarToken::TerminalTitle => context
                             .terminal_title
                             .map(|value| ResolvedTokenKind::TerminalTitle(value.to_string())),
@@ -197,6 +235,8 @@ mod tests {
         tab: Option<String>,
         pane: Option<String>,
         agent_label: Option<String>,
+        label: Option<String>,
+        agent_kind: Option<String>,
         terminal_title: Option<String>,
         terminal_title_stripped: Option<String>,
         canonical_agent: Option<crate::detect::Agent>,
@@ -209,6 +249,8 @@ mod tests {
             tab: None,
             pane: None,
             agent_label: Some("pi".into()),
+            label: None,
+            agent_kind: Some("pi".into()),
             terminal_title: None,
             terminal_title_stripped: None,
             canonical_agent: Some(crate::detect::Agent::Pi),
@@ -223,6 +265,8 @@ mod tests {
             tab: entry.tab.as_deref(),
             pane: entry.pane.as_deref(),
             agent_label: entry.agent_label.as_deref(),
+            label: entry.label.as_deref(),
+            agent_kind: entry.agent_kind.as_deref(),
             terminal_title: entry.terminal_title.as_deref(),
             terminal_title_stripped: entry.terminal_title_stripped.as_deref(),
             canonical_agent: entry.canonical_agent,
@@ -583,5 +627,70 @@ rows = [[{ token = "$load", rules = [{ lt = 50, hide = true }] }], ["workspace"]
                 "2 changes".into()
             ))]]
         );
+    }
+    fn texts(rows: &[Vec<ResolvedToken>]) -> Vec<Vec<String>> {
+        rows.iter()
+            .map(|row| {
+                row.iter()
+                    .map(|token| match &token.kind {
+                        ResolvedTokenKind::StateIcon => "icon".to_string(),
+                        kind => kind.text_value().unwrap_or_default().to_string(),
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn label_and_agent_kind_resolve_independently_of_the_agent_token() {
+        let config: AgentsSidebarConfig = toml::from_str(
+            r#"rows = [["state_icon", "workspace", "label", "agent_kind"], ["agent"]]"#,
+        )
+        .unwrap();
+        let mut entry = entry();
+        entry.tab = Some("1".into());
+        entry.label = Some("NH-123".into());
+        entry.agent_label = Some("NH-123".into());
+        entry.agent_kind = Some("claude".into());
+        let rows = agent_rows(&config, context(&entry), "idle");
+        assert_eq!(rows[0][2].kind, ResolvedTokenKind::Label("NH-123".into()));
+        assert_eq!(
+            rows[0][3].kind,
+            ResolvedTokenKind::AgentKind("claude".into())
+        );
+        // `agent` keeps its documented meaning: the alias when one is set.
+        assert_eq!(rows[1][0].kind, ResolvedTokenKind::Agent("NH-123".into()));
+
+        entry.label = None;
+        entry.agent_kind = None;
+        let rows = agent_rows(&config, context(&entry), "idle");
+        assert_eq!(texts(&rows), vec![vec!["icon", "repo"], vec!["NH-123"]]);
+    }
+
+    #[test]
+    fn label_that_repeats_the_shown_tab_is_dropped_once() {
+        let config: AgentsSidebarConfig =
+            toml::from_str(r#"rows = [["state_icon", "tab", "label", "agent_kind"], ["label"]]"#)
+                .unwrap();
+        let mut entry = entry();
+        entry.tab = Some("today".into());
+        entry.label = Some("today".into());
+        entry.agent_kind = Some("claude".into());
+        let rows = agent_rows(&config, context(&entry), "idle");
+        assert_eq!(texts(&rows), vec![vec!["icon", "today", "claude"]]);
+
+        entry.label = Some("NH-1234".into());
+        let rows = agent_rows(&config, context(&entry), "idle");
+        assert_eq!(
+            texts(&rows),
+            vec![vec!["icon", "today", "NH-1234", "claude"], vec!["NH-1234"]]
+        );
+
+        // Without a `tab` token the label is the only place the tab shows.
+        let config: AgentsSidebarConfig =
+            toml::from_str(r#"rows = [["state_icon", "label", "agent_kind"]]"#).unwrap();
+        entry.label = Some("today".into());
+        let rows = agent_rows(&config, context(&entry), "idle");
+        assert_eq!(texts(&rows), vec![vec!["icon", "today", "claude"]]);
     }
 }

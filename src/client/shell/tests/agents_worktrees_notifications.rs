@@ -807,8 +807,8 @@ fn muted_agent_sidebar_rows_do_not_stack_terminal_faint() {
         pane_id: "pane_1".into(),
         workspace_id: "ws_1".into(),
         tab_id: "tab_1".into(),
-        name: Some("reviewer".into()),
-        display_agent: None,
+        name: None,
+        display_agent: Some("reviewer".into()),
         agent: Some("pi".into()),
         title: None,
         terminal_title: None,
@@ -826,7 +826,11 @@ fn muted_agent_sidebar_rows_do_not_stack_terminal_faint() {
     let row = state.hits.agents.first().expect("agent row hit").0;
     let buffer = frame.to_ratatui_buffer().expect("agent sidebar buffer");
 
-    for (label, needle) in [("tab", "second"), ("agent", "reviewer"), ("separator", "·")] {
+    for (label, needle) in [
+        ("label", "second"),
+        ("agent kind", "reviewer"),
+        ("separator", "·"),
+    ] {
         let (x, y) = cell_symbol_position(&frame, row, needle);
         let cell = buffer.cell((x, y)).expect("muted sidebar cell");
         assert!(
@@ -1793,6 +1797,9 @@ fn agent_state_with_tab_label(label: &str, collapsed: &[&str]) -> (ClientShellSt
     let mut projected = two_workspace_agent_snapshot();
     projected.tabs[0].label = label.into();
     projected.tabs[0].custom_label = true;
+    for agent in &mut projected.agents {
+        agent.name = None;
+    }
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
     for key in collapsed {
         state.collapsed_groups.insert((*key).into());
@@ -1810,12 +1817,12 @@ fn agent_tree_guides_mark_first_middle_last_and_single_children() {
     // Group one: a middle child then the last child. Group two: a lone child.
     assert!(lines[0].starts_with(" ▾ client-shell"), "{lines:?}");
     assert_eq!(lines[1], " ├─ ● Fidelity", "{lines:?}");
-    assert_eq!(lines[2], " │    pane_1", "{lines:?}");
+    assert_eq!(lines[2], " │    pi", "{lines:?}");
     assert_eq!(lines[3], " └─ ● Fidelity", "{lines:?}");
-    assert_eq!(lines[4], "      pane_2", "{lines:?}");
+    assert_eq!(lines[4], "      pi", "{lines:?}");
     assert!(lines[5].starts_with(" ▾ api-server"), "{lines:?}");
     assert_eq!(lines[6], " └─ ○ Fidelity", "{lines:?}");
-    assert_eq!(lines[7], "      pane_3", "{lines:?}");
+    assert_eq!(lines[7], "      pi", "{lines:?}");
 }
 
 #[test]
@@ -1843,9 +1850,23 @@ fn grouped_agent_rows_drop_the_workspace_prefix_but_ungrouped_rows_keep_it() {
 
 #[test]
 fn grouped_row_without_a_tab_label_keeps_the_workspace_as_its_label() {
-    let (state, frame) = sidebar_agent_state(&Config::default());
+    let mut snapshot = two_workspace_agent_snapshot();
+    for agent in &mut snapshot.agents {
+        agent.name = None;
+    }
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(snapshot));
+    state.set_pane_surface(surface());
+    let frame = state.compose(106, 30).expect("agent sidebar frame").frame;
     let lines = agent_body_lines(&state, &frame);
     assert_eq!(lines[1], " ├─ ● client-shell", "{lines:?}");
+    assert_eq!(lines[2], " │    pi", "{lines:?}");
+
+    // With an alias, the default `label` token names the row instead.
+    let (state, frame) = sidebar_agent_state(&Config::default());
+    let lines = agent_body_lines(&state, &frame);
+    assert_eq!(lines[1], " ├─ ● pane_1", "{lines:?}");
+    assert_eq!(lines[2], " │    pi", "{lines:?}");
 }
 
 #[test]
@@ -2220,13 +2241,27 @@ fn sidebar_agent_label_prefers_the_renamed_alias_over_reported_display_name() {
     let mut snapshot = two_workspace_agent_snapshot();
     snapshot.agents[0].name = Some("reviewer".into());
     snapshot.agents[0].display_agent = Some("Codex CLI".into());
-    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
-    state.set_snapshot(Box::new(snapshot));
+    let mut config = Config::default();
+    config.ui.sidebar.agents.rows = vec![vec![
+        crate::config::AgentSidebarToken::StateIcon,
+        crate::config::AgentSidebarToken::Agent,
+    ]];
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+    state.set_snapshot(Box::new(snapshot.clone()));
     state.set_pane_surface(surface());
     let frame = state.compose(106, 30).expect("frame").frame;
     let text = frame_rows(&frame).join("\n");
     assert!(text.contains("reviewer"), "alias shown: {text}");
     assert!(!text.contains("Codex CLI"));
+
+    // The default rows show the alias as the label and keep the reported kind.
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(snapshot));
+    state.set_pane_surface(surface());
+    let frame = state.compose(106, 30).expect("frame").frame;
+    let text = frame_rows(&frame).join("\n");
+    assert!(text.contains("├─ ● reviewer"), "alias as label: {text}");
+    assert!(text.contains("Codex CLI"), "kind kept: {text}");
 }
 
 fn click_agent_header(state: &mut ClientShellState, index: usize) -> ClientShellInput {
@@ -2848,4 +2883,199 @@ fn step_visible_agent_wraps_skips_hidden_and_falls_back() {
         Some(1)
     );
     assert_eq!(step_visible_agent::<i32>(&[], visible, None, false), None);
+}
+
+/// Grouped tree sidebar like the reported setup: workspace "vitalengine-new-house"
+/// with tabs "today" and "2", workspace "sandbox" with tabs "1" and "2", one
+/// `claude` agent per tab and no aliases. The active endpoint advertises exactly
+/// the methods the real server offers on the client-shell lane.
+fn reported_tree_state(rows: &str) -> ClientShellState {
+    let config: Config = toml::from_str(&format!("[ui.sidebar.agents]\nrows = {rows}\n"))
+        .expect("sidebar rows config");
+    let mut snapshot = two_workspace_agent_snapshot();
+    snapshot.workspaces[0].label = "vitalengine-new-house".into();
+    snapshot.workspaces[1].label = "sandbox".into();
+    let tab = |tab_id: &str, workspace_id: &str, number: usize, label: &str, custom: bool| {
+        let mut tab = snapshot.tabs[0].clone();
+        tab.tab_id = tab_id.into();
+        tab.workspace_id = workspace_id.into();
+        tab.number = number;
+        tab.label = label.into();
+        tab.custom_label = custom;
+        tab.focused = tab_id == "tab_1";
+        tab
+    };
+    snapshot.tabs = vec![
+        tab("tab_1", "ws_1", 1, "today", true),
+        tab("tab_2", "ws_1", 2, "2", false),
+        tab("tab_3", "ws_2", 1, "1", false),
+        tab("tab_4", "ws_2", 2, "2", false),
+    ];
+    for (agent, tab_id) in snapshot.agents.iter_mut().zip(["tab_1", "tab_2", "tab_3"]) {
+        agent.name = None;
+        agent.agent = Some("claude".into());
+        agent.agent_status = AgentStatus::Idle;
+        agent.tab_id = tab_id.into();
+    }
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+    state.set_snapshot(Box::new(snapshot));
+    state.endpoints[0].methods = Some(
+        crate::server::client_commands::supported_client_shell_method_names()
+            .iter()
+            .map(|method| (*method).to_owned())
+            .collect(),
+    );
+    state.set_pane_surface(surface());
+    state.compose(106, 30).expect("agent sidebar frame");
+    state
+}
+
+const REPORTED_ROWS: &str = r#"[["state_icon", "machine", "workspace", "tab", "agent"]]"#;
+const LABEL_ROWS: &str = r#"[["state_icon", "machine", "workspace", "label", "agent_kind"]]"#;
+
+fn agent_row_rect(state: &ClientShellState, pane_id: &str) -> Rect {
+    state
+        .hits
+        .agents
+        .iter()
+        .find(|(_, pane)| pane == pane_id)
+        .map(|(rect, _)| *rect)
+        .unwrap_or_else(|| panic!("agent row for {pane_id}"))
+}
+
+fn sidebar_text(state: &mut ClientShellState) -> String {
+    frame_rows(&recompose(state)).join("\n")
+}
+
+/// Type a name into the open agent prompt and press Enter.
+fn submit_agent_name(state: &mut ClientShellState, name: &str) -> ClientShellInput {
+    assert!(matches!(
+        state.overlay,
+        Some(ClientShellOverlay::Rename(ClientRenameOverlay {
+            target: ClientRenameTarget::Agent { .. },
+            ..
+        }))
+    ));
+    state.handle_input_bytes(&[0x15]);
+    state.handle_input_bytes(name.as_bytes());
+    let saved = state.handle_input_bytes(b"\r");
+    assert!(
+        state.visible_endpoint_notice.is_none(),
+        "rename must reach the server, not stop at a client notice"
+    );
+    saved
+}
+
+#[test]
+fn server_advertises_agent_rename_on_the_client_shell_lane() {
+    // The sidebar prompt only sends methods the server advertises; without this
+    // entry every UI rename ended in "Action unavailable" and never left the client.
+    assert!(
+        crate::server::client_commands::supported_client_shell_method_names()
+            .contains(&"agent.rename")
+    );
+}
+
+#[test]
+fn double_click_on_a_tree_agent_row_renames_that_pane() {
+    let mut state = reported_tree_state(REPORTED_ROWS);
+    let text = sidebar_text(&mut state);
+    assert!(text.contains("├─ ○ today · claude"), "{text}");
+    assert!(text.contains("└─ ○ 2 · claude"), "{text}");
+
+    let row = agent_row_rect(&state, "pane_2");
+    let down = MouseEventKind::Down(MouseButton::Left);
+    mouse_at(&mut state, down, row.x + 6, row.y);
+    mouse_at(
+        &mut state,
+        MouseEventKind::Up(MouseButton::Left),
+        row.x + 6,
+        row.y,
+    );
+    assert!(mouse_at(&mut state, down, row.x + 6, row.y)
+        .actions
+        .is_empty());
+    let saved = submit_agent_name(&mut state, "NH-1234");
+    assert_agent_rename_request(&saved, "pane_2", Some("NH-1234"));
+}
+
+#[test]
+fn context_menu_rename_on_a_tree_agent_row_renames_that_pane() {
+    let mut state = reported_tree_state(REPORTED_ROWS);
+    let row = agent_row_rect(&state, "pane_3");
+    mouse_at(
+        &mut state,
+        MouseEventKind::Down(MouseButton::Right),
+        row.x + 6,
+        row.y,
+    );
+    state.compose(106, 30).expect("context menu frame");
+    let rename = state.hits.context_menu_rows[0].0;
+    mouse_at(
+        &mut state,
+        MouseEventKind::Down(MouseButton::Left),
+        rename.x + 1,
+        rename.y,
+    );
+    let saved = submit_agent_name(&mut state, "NH-1234");
+    assert_agent_rename_request(&saved, "pane_3", Some("NH-1234"));
+
+    // "Clear agent name" (offered once an alias exists) uses the same method.
+    let mut snapshot = state.snapshot.as_deref().cloned().expect("snapshot");
+    snapshot.agents[2].name = Some("NH-1234".into());
+    state.set_snapshot(Box::new(snapshot));
+    state.compose(106, 30).expect("agent sidebar frame");
+    mouse_at(
+        &mut state,
+        MouseEventKind::Down(MouseButton::Right),
+        row.x + 6,
+        row.y,
+    );
+    state.compose(106, 30).expect("context menu frame");
+    let clear = state.hits.context_menu_rows[1].0;
+    let cleared = mouse_at(
+        &mut state,
+        MouseEventKind::Down(MouseButton::Left),
+        clear.x + 1,
+        clear.y,
+    );
+    assert_agent_rename_request(&cleared, "pane_3", None);
+}
+
+#[test]
+fn prefix_shift_a_renames_the_focused_agent_through_the_server() {
+    let mut state = reported_tree_state(REPORTED_ROWS);
+    assert!(state.handle_input_bytes(&[0x02]).actions.is_empty());
+    assert!(state.handle_input_bytes(b"A").actions.is_empty());
+    let saved = submit_agent_name(&mut state, "NH-1234");
+    assert_agent_rename_request(&saved, "pane_1", Some("NH-1234"));
+}
+
+#[test]
+fn label_rows_show_the_alias_in_place_of_the_tab_and_keep_the_agent_kind() {
+    let mut state = reported_tree_state(LABEL_ROWS);
+    let text = sidebar_text(&mut state);
+    assert!(text.contains("├─ ○ today · claude"), "{text}");
+    assert!(text.contains("└─ ○ 1 · claude"), "{text}");
+    assert!(!text.contains("vitalengine-new-house · "), "{text}");
+
+    let mut snapshot = state.snapshot.as_deref().cloned().expect("snapshot");
+    snapshot.agents[0].name = Some("NH-1234".into());
+    snapshot.agents[2].name = Some("NH-123".into());
+    state.set_snapshot(Box::new(snapshot));
+    let text = sidebar_text(&mut state);
+    assert!(text.contains("├─ ○ NH-1234 · claude"), "{text}");
+    assert!(text.contains("└─ ○ NH-123 · claude"), "{text}");
+    assert!(
+        !text.contains("○ today"),
+        "the alias replaces the tab label: {text}"
+    );
+
+    // The reported layout keeps its documented meaning: `agent` shows the alias.
+    let mut state = reported_tree_state(REPORTED_ROWS);
+    let mut snapshot = state.snapshot.as_deref().cloned().expect("snapshot");
+    snapshot.agents[0].name = Some("NH-1234".into());
+    state.set_snapshot(Box::new(snapshot));
+    let text = sidebar_text(&mut state);
+    assert!(text.contains("├─ ○ today · NH-1234"), "{text}");
 }

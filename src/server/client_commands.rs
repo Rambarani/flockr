@@ -14,6 +14,8 @@ pub(crate) const MAX_ENDPOINT_REQUEST_ID_BYTES: usize = 128;
 const ENDPOINT_RESPONSE_CHUNK_BYTES: usize = 512 * 1024;
 
 const CLIENT_SHELL_METHODS: &[&str] = &[
+    // Sent by the sidebar rename prompt (double-click, context menu, keys.rename_agent).
+    "agent.rename",
     "client_shell.surface.set",
     "command.invoke",
     "decision.dismiss",
@@ -365,6 +367,13 @@ mod tests {
             assert_eq!(actual.remove(method).as_deref(), Some(digest), "{method}");
         }
 
+        // `agent.rename` joined the client lane after the v1 fixture: its own digest.
+        assert_eq!(
+            actual.remove("agent.rename").as_deref(),
+            Some("64ab3bd3539bf45342439e0ab4f20a1dcffbd3c5dc20cf8448131d998551a168"),
+            "agent.rename"
+        );
+
         // `feed.work` was added after the other feed methods: its own digest.
         assert_eq!(
             actual.remove("feed.work").as_deref(),
@@ -470,6 +479,12 @@ mod tests {
                 col: 0,
                 content_revision: None,
                 offset_from_bottom: None,
+            },
+        )));
+        assert!(supports_client_shell_method(&Method::AgentRename(
+            crate::api::schema::AgentRenameParams {
+                target: "w1:p1".into(),
+                name: Some("NH-1234".into()),
             },
         )));
         assert!(!supports_client_shell_method(&Method::Ping(

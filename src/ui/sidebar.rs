@@ -134,6 +134,8 @@ pub(crate) fn resolved_token_spans(
             | ResolvedTokenKind::Tab(text)
             | ResolvedTokenKind::Pane(text)
             | ResolvedTokenKind::Agent(text)
+            | ResolvedTokenKind::Label(text)
+            | ResolvedTokenKind::AgentKind(text)
             | ResolvedTokenKind::TerminalTitle(text)
             | ResolvedTokenKind::Branch(text)
             | ResolvedTokenKind::Custom(text) => display_width(text),
@@ -231,14 +233,18 @@ pub(crate) fn resolved_token_spans(
                 truncate_end(text, budgets[index]),
                 apply_token_style(state_text_style, token.style),
             )),
-            ResolvedTokenKind::Workspace(text) => spans.push(Span::styled(
-                truncate_end(text, budgets[index]),
-                apply_token_style(workspace_style, token.style),
-            )),
+            // The label is the row's name, so it takes the primary name style.
+            ResolvedTokenKind::Workspace(text) | ResolvedTokenKind::Label(text) => {
+                spans.push(Span::styled(
+                    truncate_end(text, budgets[index]),
+                    apply_token_style(workspace_style, token.style),
+                ))
+            }
             ResolvedTokenKind::Machine(text)
             | ResolvedTokenKind::Tab(text)
             | ResolvedTokenKind::Pane(text)
             | ResolvedTokenKind::Agent(text)
+            | ResolvedTokenKind::AgentKind(text)
             | ResolvedTokenKind::Branch(text) => spans.push(Span::styled(
                 truncate_end(text, budgets[index]),
                 apply_token_style(secondary_style, token.style),

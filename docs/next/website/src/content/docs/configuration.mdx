@@ -369,8 +369,8 @@ The expanded desktop sidebar renders each inner array in `rows` as one line. The
 [ui.sidebar.agents]
 row_gap = 0
 rows = [
-  ["state_icon", "machine", "workspace", "tab"],
-  ["agent"],
+  ["state_icon", "machine", "workspace", "label"],
+  ["agent_kind"],
 ]
 
 [ui.sidebar.spaces]
@@ -387,9 +387,11 @@ Agent rows accept these built-in tokens:
 - `state_text` — `idle`, `working`, `blocked`, `done`, or `unknown`, including a reported display label when present.
 - `machine` — machine label when the client has multiple machines; omitted for a single local machine.
 - `workspace` — workspace name.
-- `tab` — tab name when available.
+- `tab` — tab name when the tab was renamed or its workspace has more than one tab.
 - `pane` — pane name when available.
-- `agent` — detected or reported agent display name.
+- `agent` — the agent's alias when it was renamed, else the reported display name, the detected agent, or the pane title.
+- `label` — the agent's user-facing name: its alias when it was renamed (`flockr agent rename`, or the sidebar rename prompt), else the tab name under the same rule as `tab`, else the pane's manual name. It is omitted when none of these exist; it does not fall back to the workspace, which the `workspace` token and the group header already show. When a row layout also contains `tab` and the label would repeat that tab name, the label is left out so the tab appears once.
+- `agent_kind` — the reported display name or the detected agent, such as `claude`. Never the alias.
 - `terminal_title` — latest OSC 0/2 terminal title after safety normalization.
 - `terminal_title_stripped` — the terminal title with one recognized leading activity or spinner glyph and its following whitespace removed.
 - `$name` — custom pane metadata named `name`.
@@ -402,6 +404,13 @@ Space rows accept these built-in tokens:
 - `branch` — Git branch when available.
 - `git_status` — Git ahead and behind counts when nonzero.
 - `$name` — custom workspace metadata named `name`.
+
+Renaming an agent changes its alias, never its tab: one tab can hold several agents. With `label` and `agent_kind`, a renamed agent's row reads `○ NH-123 · claude` where it read `○ 1 · claude` before, so the name takes the tab's place and the agent kind stays visible. Layouts that use `tab` and `agent` keep their earlier meaning: the alias replaces the agent kind there (`○ 1 · NH-123`). To get the label behavior in a one-line grouped layout, use:
+
+```toml
+[ui.sidebar.agents]
+rows = [["state_icon", "machine", "workspace", "label", "agent_kind"]]
+```
 
 Tokens render in their configured order. Flockr normally separates adjacent values with ` · ` and uses a single space after `state_icon`. Missing values and their separators disappear; a row disappears when none of its tokens have a value. Existing custom rows remain unchanged, so add `machine` explicitly if you want machine identity in a custom multi-machine layout. Each layout may contain at most 16 rows, with at most 16 tokens in each row.
 

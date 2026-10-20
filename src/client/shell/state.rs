@@ -576,8 +576,19 @@ pub(super) enum ClientContextMenuAction {
 pub(super) struct ClientFeedMenuItem {
     pub(super) item_id: String,
     pub(super) url: Option<String>,
-    /// Key and title of each action, in the order the menu lists them.
-    pub(super) actions: Vec<(String, String)>,
+    /// Each action, in the order the menu lists them.
+    pub(super) actions: Vec<ClientFeedMenuAction>,
+}
+
+/// One action of the item a feed context menu was opened on, as it was when
+/// the menu opened. The confirm question travels with it so the question
+/// asked at click time is the one the menu was built from, even if the feed
+/// refreshed in between.
+#[derive(Debug, Clone)]
+pub(super) struct ClientFeedMenuAction {
+    pub(super) key: String,
+    pub(super) title: String,
+    pub(super) confirm: Option<String>,
 }
 
 #[derive(Debug)]

@@ -2902,6 +2902,59 @@ fn the_sidebar_menu_asks_before_a_confirm_action_and_n_cancels() {
     assert!(state.overlay.is_none());
 }
 
+#[test]
+fn the_sidebar_menu_keeps_the_confirm_question_from_when_it_opened() {
+    let mut state = state_with_feeds(&Config::default(), vec![feed_with_delete()]);
+    let row = state.hits.feed.rows[0].rect;
+    right_click(&mut state, row);
+    // A refresh lands while the menu is open: the same items, now without the
+    // confirm question on `D`.
+    let (feed, mut items) = feed_with_delete();
+    for item in &mut items {
+        for action in &mut item.actions {
+            action.confirm = None;
+        }
+    }
+    load(&mut state, vec![(feed, items)]);
+    let mut outcome = ClientShellInput::default();
+    state.activate_context_menu_item(3, &mut outcome);
+    assert!(
+        requests(&outcome).is_empty(),
+        "the snapshot still asks first"
+    );
+    assert!(matches!(
+        state.overlay,
+        Some(ClientShellOverlay::ConfirmFeedAction(_))
+    ));
+}
+
+#[test]
+fn a_sidebar_menu_action_for_an_item_that_vanished_is_not_sent() {
+    let mut state = state_with_feeds(&Config::default(), vec![feed_with_delete()]);
+    let row = state.hits.feed.rows[0].rect;
+    right_click(&mut state, row);
+    // The refresh drops nh-1 before the click.
+    let (feed, mut items) = feed_with_delete();
+    items.retain(|item| item.id != "nh-1");
+    load(&mut state, vec![(feed, items)]);
+    let mut outcome = ClientShellInput::default();
+    state.activate_context_menu_item(3, &mut outcome);
+    assert!(requests(&outcome).is_empty());
+    assert!(
+        !matches!(
+            state.overlay,
+            Some(ClientShellOverlay::ConfirmFeedAction(_))
+        ),
+        "no question for a gone item"
+    );
+    let notice = state.visible_endpoint_notice.as_ref().expect("notice");
+    assert!(
+        notice.body.contains("no longer in the feed"),
+        "{}",
+        notice.body
+    );
+}
+
 // ----- a Today tab: items in more than one group, and W ---------------------
 
 /// `today_items` with a first "today" group: nh-1 and nh-3 are also on it, as

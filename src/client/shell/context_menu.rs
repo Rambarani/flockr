@@ -98,9 +98,9 @@ impl ClientContextMenuOverlay {
                     if feed_item.url.is_some() {
                         items.push(item("Open link", Action::FeedOpenUrl));
                     }
-                    for (index, (key, title)) in feed_item.actions.iter().enumerate() {
+                    for (index, action) in feed_item.actions.iter().enumerate() {
                         items.push(item_for(
-                            format!("{title} ({key})"),
+                            format!("{} ({})", action.title, action.key),
                             Action::FeedRunAction(index),
                         ));
                     }

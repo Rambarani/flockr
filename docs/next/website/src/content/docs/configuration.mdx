@@ -390,7 +390,7 @@ Agent rows accept these built-in tokens:
 - `tab` — tab name when the tab was renamed or its workspace has more than one tab.
 - `pane` — pane name when available.
 - `agent` — the agent's alias when it was renamed, else the reported display name, the detected agent, or the pane title.
-- `label` — the agent's user-facing name: its alias when it was renamed (`flockr agent rename`, or the sidebar rename prompt), else the tab name under the same rule as `tab`, else the pane's manual name. It is omitted when none of these exist; it does not fall back to the workspace, which the `workspace` token and the group header already show. When a row layout also contains `tab` and the label would repeat that tab name, the label is left out so the tab appears once.
+- `label` — the agent's user-facing name: its alias when it was renamed (`flockr agent rename`, or the sidebar rename prompt), else the tab name under the same rule as `tab`, else the pane's manual name. It is omitted when none of these exist; it does not fall back to the workspace, which the `workspace` token and the group header already show. When a row layout also contains `tab` and the label would repeat that tab name, the label is left out so the tab appears once. Renaming an agent also renames its tab when the tab holds exactly one agent; `ui.rename_agent_renames_tab = false` turns that off (default `true`).
 - `agent_kind` — the reported display name or the detected agent, such as `claude`. Never the alias.
 - `terminal_title` — latest OSC 0/2 terminal title after safety normalization.
 - `terminal_title_stripped` — the terminal title with one recognized leading activity or spinner glyph and its following whitespace removed.

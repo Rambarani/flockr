@@ -331,6 +331,11 @@ const DEFAULT_CONFIG: &str = r##"# flockr configuration
 # Ask for a workspace name before interactive creation.
 # prompt_new_workspace_name = false
 
+# Renaming an agent (sidebar, CLI, or API) also renames its tab when that tab holds
+# exactly one agent. Clearing the agent name reverts the tab label if it still equals
+# the old agent name. Set false to keep tab names independent of agent names.
+# rename_agent_renames_tab = true
+
 # Draw borders around split panes.
 # "auto" draws them only for split panes, "always" also frames a lone pane
 # (only while pane_outer_borders is enabled), "off" disables them.

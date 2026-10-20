@@ -223,7 +223,7 @@ Keyboard-only users can set `[ui] mouse_capture = false`, which also turns off t
 ### Agent sidebar and settings
 
 - Agents are grouped under a header per workspace (`[ui.sidebar] group_agents_by_workspace = true`). A collapsed header (`▸ workspace`) keeps its state counts, and the name turns the blocked colour if it hides a blocked agent. Collapsed state is remembered across detach and restart.
-- Agent rows name the agent with the `label` token (its alias from `flockr agent rename` or the sidebar rename, else the tab name) and show what runs there with `agent_kind` (for example `claude`). A renamed agent reads `○ NH-123 · claude` instead of `○ 1 · claude`; renaming never renames the tab. One-line layout: `[ui.sidebar.agents] rows = [["state_icon", "machine", "workspace", "label", "agent_kind"]]`. The older `tab` and `agent` tokens keep their meaning (`agent` shows the alias in place of the agent kind).
+- Agent rows name the agent with the `label` token (its alias from `flockr agent rename` or the sidebar rename, else the tab name) and show what runs there with `agent_kind` (for example `claude`). A renamed agent reads `○ NH-123 · claude` instead of `○ 1 · claude`; renaming also renames the tab when it holds exactly one agent (`ui.rename_agent_renames_tab = false` opts out). One-line layout: `[ui.sidebar.agents] rows = [["state_icon", "machine", "workspace", "label", "agent_kind"]]`. The older `tab` and `agent` tokens keep their meaning (`agent` shows the alias in place of the agent kind).
 - The which-key popup is controlled by `[ui.which_key]` (`enabled`, `delay_ms`).
 - The agent preview by `[ui.agent_preview]` (`enabled`, `hover_delay_ms`, `lines`).
 

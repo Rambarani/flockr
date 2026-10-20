@@ -141,6 +141,16 @@ pub(crate) fn public_workspace_number(id: &str) -> Option<usize> {
     id.strip_prefix('w').and_then(decode_public_number)
 }
 
+/// Whether `value` has the shape of a public pane ID: `w<number>:p<number>`
+/// with both numbers in the public ID alphabet (for example `w1:p2`).
+pub(crate) fn looks_like_public_pane_id(value: &str) -> bool {
+    let Some((workspace, pane)) = value.rsplit_once(":p") else {
+        return false;
+    };
+    let is_number = |raw: &str| !raw.is_empty() && decode_public_number(raw).is_some();
+    workspace.strip_prefix('w').is_some_and(is_number) && is_number(pane)
+}
+
 pub(crate) fn public_pane_id_for_number(workspace_id: &str, pane_number: usize) -> String {
     format!("{workspace_id}:p{}", encode_public_number(pane_number))
 }

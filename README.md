@@ -223,7 +223,7 @@ Keyboard-only users can set `[ui] mouse_capture = false`, which also turns off t
 ### Agent sidebar and settings
 
 - Agents are grouped under a header per workspace (`[ui.sidebar] group_agents_by_workspace = true`). A collapsed header (`▸ workspace`) keeps its state counts, and the name turns the blocked colour if it hides a blocked agent. Collapsed state is remembered across detach and restart.
-- Agent rows name the agent with the `label` token (its alias from `flockr agent rename` or the sidebar rename, else the tab name) and show what runs there with `agent_kind` (for example `claude`). A renamed agent reads `○ NH-123 · claude` instead of `○ 1 · claude`; renaming also renames the tab when it holds exactly one agent (`ui.rename_agent_renames_tab = false` opts out). One-line layout: `[ui.sidebar.agents] rows = [["state_icon", "machine", "workspace", "label", "agent_kind"]]`. The older `tab` and `agent` tokens keep their meaning (`agent` shows the alias in place of the agent kind).
+- Agent rows name the agent with the `label` token (its alias from `flockr agent rename` or the sidebar rename, else the tab name) and show what runs there with `agent_kind` (for example `claude`). A renamed agent reads `○ NH-123 · claude` instead of `○ 1 · claude`; renaming also renames the tab when it holds exactly one agent and the tab still follows the agent (a tab you named yourself is never overwritten; `ui.rename_agent_renames_tab = false` opts out). Agent names cannot look like a pane ID (`w1:p2`) or contain invisible Unicode format characters. One-line layout: `[ui.sidebar.agents] rows = [["state_icon", "machine", "workspace", "label", "agent_kind"]]`. The older `tab` and `agent` tokens keep their meaning (`agent` shows the alias in place of the agent kind).
 - The which-key popup is controlled by `[ui.which_key]` (`enabled`, `delay_ms`).
 - The agent preview by `[ui.agent_preview]` (`enabled`, `hover_delay_ms`, `lines`).
 
@@ -527,7 +527,7 @@ Master-detail view: list on the left, detail pane on the right (title, state, su
 | `x` | Select / unselect the current item (a `✓` column; the header shows `N selected`) |
 | `X` | Clear the selection |
 | `w` | **Work on it**: open a new tab and start an agent (default `claude`) with the selected items, or the current item if none are selected |
-| `W` | **Work on all**: the same, with every item of the list as shown (current category tab and filter), up to 50 |
+| `W` | **Work on all**: the same, with every not-done item of the list as shown (current category tab and filter), up to 50 |
 | `esc` or `q` | Leave zoom, then clear the selection, then the filter, then close |
 
 #### Work on items in a new agent tab (`x` / `w`)

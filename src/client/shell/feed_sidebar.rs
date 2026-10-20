@@ -18,6 +18,7 @@ use std::collections::HashSet;
 
 use ratatui::style::{Modifier, Style};
 
+use super::feed_overlay::is_workable;
 use super::feed_state::{FeedClientState, FeedOrigin};
 use super::render::{display_width, put_text};
 use super::*;
@@ -582,7 +583,11 @@ impl ClientShellState {
                     actions: item
                         .actions
                         .into_iter()
-                        .map(|action| (action.key, action.title))
+                        .map(|action| ClientFeedMenuAction {
+                            key: action.key,
+                            title: action.title,
+                            confirm: action.confirm,
+                        })
                         .collect(),
                 }),
                 group: None,
@@ -650,7 +655,7 @@ impl ClientShellState {
                         .feeds
                         .items_of(&job_id)
                         .iter()
-                        .filter(|item| item.in_group(&group_id))
+                        .filter(|item| item.in_group(&group_id) && is_workable(item))
                         .map(|item| item.id.clone())
                         .collect();
                     self.start_feed_work(job_id, ids, outcome);
@@ -662,11 +667,42 @@ impl ClientShellState {
                 }
             }
             ClientContextMenuAction::FeedRunAction(index) => {
-                if let Some((item, key)) = item.and_then(|item| {
-                    let key = item.actions.get(index).map(|(key, _)| key.clone())?;
-                    Some((item.item_id, key))
-                }) {
-                    self.run_feed_action(job_id, item, key, FeedOrigin::Elsewhere, outcome);
+                if let Some(menu_item) = item {
+                    let Some(action) = menu_item.actions.get(index).cloned() else {
+                        outcome.repaint = true;
+                        return;
+                    };
+                    // The menu is a snapshot from when it opened. If the item
+                    // has gone since (a refresh dropped it), do not send an
+                    // action for it.
+                    let Some(live) = self.feed_item(&job_id, &menu_item.item_id) else {
+                        self.push_endpoint_notice(
+                            ClientEndpointNoticeKind::Rejected,
+                            format!("feed.action:{job_id}"),
+                            "Feed action not sent",
+                            format!(
+                                "{} is no longer in the feed; nothing was run",
+                                menu_item.item_id
+                            ),
+                        );
+                        outcome.repaint = true;
+                        return;
+                    };
+                    // Ask if either the snapshot or the live item says to.
+                    let question = action.confirm.or_else(|| {
+                        live.actions
+                            .into_iter()
+                            .find(|candidate| candidate.key == action.key)
+                            .and_then(|candidate| candidate.confirm)
+                    });
+                    self.run_feed_action_with_question(
+                        job_id,
+                        menu_item.item_id,
+                        action.key,
+                        question,
+                        FeedOrigin::Elsewhere,
+                        outcome,
+                    );
                 }
             }
             ClientContextMenuAction::FeedRefresh => {

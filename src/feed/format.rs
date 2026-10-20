@@ -583,8 +583,10 @@ fn parse_item(
     })
 }
 
-/// The optional `also_groups` array of strings (ids are checked against the
-/// declared groups later, in `resolve_groups`).
+/// The optional `also_groups` array of strings. Ids are checked against the
+/// declared groups, and the cap of [`MAX_ALSO_GROUPS`] applied, later in
+/// `resolve_groups`, so an undeclared id or the item's own group does not use
+/// up a slot.
 fn parse_also_groups(
     object: &serde_json::Map<String, serde_json::Value>,
     context: &str,
@@ -600,12 +602,6 @@ fn parse_also_groups(
     };
     let mut ids: Vec<String> = Vec::new();
     for value in list {
-        if ids.len() >= MAX_ALSO_GROUPS {
-            diagnostics.push(format!(
-                "{context}: more than {MAX_ALSO_GROUPS} also_groups; the rest are dropped"
-            ));
-            break;
-        }
         let Some(text) = value.as_str() else {
             diagnostics.push(format!(
                 "{context}: also_groups must contain only strings; entry dropped"
@@ -699,6 +695,7 @@ fn resolve_groups(
         let primary = item.group.clone();
         let declared = |id: &str| groups.iter().any(|group| group.id == id);
         let extra = std::mem::take(&mut item.also_groups);
+        let mut over_cap = false;
         for id in extra {
             if !declared(&id) {
                 diagnostics.push(format!(
@@ -706,8 +703,19 @@ fn resolve_groups(
                     item.id
                 ));
             } else if primary.as_deref() != Some(id.as_str()) {
-                item.also_groups.push(id);
+                // The cap counts only ids that will be kept.
+                if item.also_groups.len() >= MAX_ALSO_GROUPS {
+                    over_cap = true;
+                } else {
+                    item.also_groups.push(id);
+                }
             }
+        }
+        if over_cap {
+            diagnostics.push(format!(
+                "item {:?}: more than {MAX_ALSO_GROUPS} also_groups; the rest are dropped",
+                item.id
+            ));
         }
         match item.group.take() {
             Some(id) if groups.iter().any(|group| group.id == id) => item.group = Some(id),
@@ -1206,14 +1214,42 @@ mod tests {
     #[test]
     fn at_most_four_also_groups_are_read() {
         let feed = parse(
-            r#"{"version":1,"groups":[{"id":"a"},{"id":"b"},{"id":"c"},{"id":"d"},{"id":"e"}],
-                "items":[{"id":"1","group":"a","also_groups":["b","c","d","e","a"]}]}"#,
+            r#"{"version":1,"groups":[{"id":"a"},{"id":"b"},{"id":"c"},{"id":"d"},{"id":"e"},{"id":"f"}],
+                "items":[{"id":"1","group":"a","also_groups":["b","c","d","e","f"]}]}"#,
         );
         assert_eq!(feed.items[0].also_groups, ["b", "c", "d", "e"]);
-        assert!(feed
-            .diagnostics
-            .iter()
-            .any(|line| line.contains("more than 4 also_groups")));
+        assert!(
+            feed.diagnostics
+                .iter()
+                .any(|line| line
+                    .contains("item \"1\": more than 4 also_groups; the rest are dropped"))
+        );
+    }
+
+    #[test]
+    fn the_also_groups_cap_ignores_undeclared_ids_and_the_primary_group() {
+        let feed = parse(
+            r#"{"version":1,"groups":[{"id":"a"},{"id":"b"},{"id":"c"},{"id":"d"},{"id":"e"}],
+                "items":[{"id":"1","group":"a","also_groups":["x1","a","x2","b","x3","c","d","e"]}]}"#,
+        );
+        // Four declared extras survive even though eight entries were given
+        // and the first three were undeclared or the item's own group.
+        assert_eq!(feed.items[0].also_groups, ["b", "c", "d", "e"]);
+        assert!(
+            !feed
+                .diagnostics
+                .iter()
+                .any(|line| line.contains("more than 4 also_groups")),
+            "{:?}",
+            feed.diagnostics
+        );
+        assert_eq!(
+            feed.diagnostics
+                .iter()
+                .filter(|line| line.contains("unknown also_groups entry"))
+                .count(),
+            3
+        );
     }
 
     #[test]

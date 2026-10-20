@@ -1121,6 +1121,72 @@ mod tests {
     }
 
     #[test]
+    fn agent_rename_never_overwrites_a_hand_set_tab_label() {
+        let mut app = app_with_agent();
+        let pane_id = app.state.workspaces[0].tabs[0].root_pane;
+        let target = mark_agent(&mut app, pane_id);
+
+        app.state.workspaces[0].tabs[0].set_custom_name("my tab".into());
+        rename_agent(&mut app, &target, Some("alpha"));
+        assert_eq!(tab_label(&app).as_deref(), Some("my tab"));
+
+        // Sync, then a manual rename, then the same agent name again.
+        app.state.workspaces[0].tabs[0].custom_name = None;
+        rename_agent(&mut app, &target, Some("beta"));
+        assert_eq!(tab_label(&app).as_deref(), Some("beta"));
+        app.state.workspaces[0].tabs[0].set_custom_name("hand set".into());
+        rename_agent(&mut app, &target, Some("beta"));
+        assert_eq!(tab_label(&app).as_deref(), Some("hand set"));
+        rename_agent(&mut app, &target, Some("gamma"));
+        assert_eq!(tab_label(&app).as_deref(), Some("hand set"));
+    }
+
+    #[test]
+    fn agent_rename_syncs_a_default_named_tab_then_follows_later_renames() {
+        let mut app = app_with_agent();
+        let pane_id = app.state.workspaces[0].tabs[0].root_pane;
+        let target = mark_agent(&mut app, pane_id);
+
+        assert_eq!(tab_label(&app), None);
+        rename_agent(&mut app, &target, Some("first"));
+        assert_eq!(tab_label(&app).as_deref(), Some("first"));
+        rename_agent(&mut app, &target, Some("second"));
+        assert_eq!(tab_label(&app).as_deref(), Some("second"));
+    }
+
+    #[test]
+    fn agent_rename_reverts_a_followed_label_when_the_tab_gains_another_agent() {
+        let mut app = app_with_agent();
+        let first = app.state.workspaces[0].tabs[0].root_pane;
+        let second = app.state.workspaces[0].test_split(ratatui::layout::Direction::Horizontal);
+        app.state.ensure_test_terminals();
+        let target = mark_agent(&mut app, first);
+        rename_agent(&mut app, &target, Some("alpha"));
+        assert_eq!(tab_label(&app).as_deref(), Some("alpha"));
+
+        mark_agent(&mut app, second);
+        rename_agent(&mut app, &target, Some("beta"));
+        assert_eq!(tab_label(&app), None);
+    }
+
+    #[test]
+    fn agent_rename_rejects_pane_id_and_format_character_names() {
+        let mut app = app_with_agent();
+        let pane_id = app.state.workspaces[0].tabs[0].root_pane;
+        let target = mark_agent(&mut app, pane_id);
+
+        let value = rename_agent(&mut app, &target, Some("w1:p2"));
+        assert_eq!(value["error"]["code"], "invalid_agent_name");
+        assert!(value["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("pane ID"));
+        let value = rename_agent(&mut app, &target, Some("a\u{200b}b"));
+        assert_eq!(value["error"]["code"], "invalid_agent_name");
+        assert_eq!(tab_label(&app), None);
+    }
+
+    #[test]
     fn agent_rename_tab_sync_can_be_disabled_by_config() {
         let mut app = app_with_agent();
         app.state.rename_agent_renames_tab = false;

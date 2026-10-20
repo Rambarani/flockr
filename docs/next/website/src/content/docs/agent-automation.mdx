@@ -37,7 +37,7 @@ Use pane commands for shells, tests, servers, CI watchers, and other ordinary te
 
 ## Agent identity and launch
 
-A pane ID such as `w1:p2` identifies the terminal location. An agent name such as `reviewer` is a convenient alias for the current agent in that pane. Names are 1 to 64 characters after trimming, may contain spaces, uppercase, and Unicode, cannot contain control characters, and must be unique among live agents. When a name looks like a pane ID, the pane ID wins. The alias is cleared when that agent exits, is released, or is replaced; it does not permanently rename the pane.
+A pane ID such as `w1:p2` identifies the terminal location. An agent name such as `reviewer` is a convenient alias for the current agent in that pane. Names are 1 to 64 characters after trimming, may contain spaces, uppercase, and Unicode, cannot contain control or invisible formatting characters, cannot look like a pane ID (`w1:p2` is rejected with `invalid_agent_name`), and must be unique among live agents. The alias is cleared when that agent exits, is released, or is replaced; it does not permanently rename the pane.
 
 Agent commands accept either a unique live name or the pane ID that currently hosts the agent.
 

@@ -153,6 +153,17 @@ fn dot(state: FeedItemState, palette: &Palette) -> (&'static str, ratatui::style
     }
 }
 
+/// The id of the group a feed uses for finished items (the workbox feed's
+/// Done tab).
+pub(super) const DONE_GROUP_ID: &str = "done";
+
+/// Whether "work on all" (`W`, or a category row's **Work on all in ...**)
+/// takes the item: finished items, in state `done` or in the `done` group, are
+/// history and are never started as work in bulk.
+pub(super) fn is_workable(item: &FeedItemInfo) -> bool {
+    item.state != FeedItemState::Done && item.group.as_deref() != Some(DONE_GROUP_ID)
+}
+
 impl ClientShellState {
     pub(super) fn open_feed_overlay(&mut self, job_id: Option<String>) {
         let group = job_id
@@ -498,7 +509,8 @@ impl ClientShellState {
     }
 
     /// `W`: start an agent tab on every item of the list as shown (the
-    /// current category and filter), up to the work limit.
+    /// current category and filter), up to the work limit. Done items are
+    /// history, not work, and are left out (see [`is_workable`]).
     fn work_on_all_feed_items(&mut self, outcome: &mut ClientShellInput) {
         let Some(job_id) = self.current_feed().map(|feed| feed.job_id.clone()) else {
             return;
@@ -506,6 +518,7 @@ impl ClientShellState {
         let ids: Vec<String> = self
             .visible_feed_items()
             .into_iter()
+            .filter(|item| is_workable(item))
             .map(|item| item.id.clone())
             .collect();
         self.start_feed_work(job_id, ids, outcome);
@@ -519,9 +532,18 @@ impl ClientShellState {
         mut ids: Vec<String>,
         outcome: &mut ClientShellInput,
     ) {
+        // The Feed overlay has a status line; from the sidebar there is none,
+        // so the same text goes out as a notice.
         let say = |state: &mut Self, text: String| {
             if let Some(overlay) = state.feed_overlay_mut() {
                 overlay.status = Some(text);
+            } else {
+                state.push_endpoint_notice(
+                    ClientEndpointNoticeKind::Rejected,
+                    "feed.work",
+                    "Work on feed items",
+                    text,
+                );
             }
         };
         if ids.is_empty() {
@@ -544,15 +566,21 @@ impl ClientShellState {
             );
             return;
         }
-        let text = if total > count {
-            format!(
-                "starting an agent with the first {count} of {total} items (limit {})…",
-                crate::jobs::feed_work::MAX_WORK_ITEMS
-            )
-        } else {
-            format!("starting an agent with {count} item{}…", plural(count))
-        };
-        say(self, text);
+        if total > count {
+            say(
+                self,
+                format!(
+                    "starting an agent with the first {count} of {total} items (limit {})…",
+                    crate::jobs::feed_work::MAX_WORK_ITEMS
+                ),
+            );
+        } else if let Some(overlay) = self.feed_overlay_mut() {
+            // Without the overlay the new tab opening is the feedback.
+            overlay.status = Some(format!(
+                "starting an agent with {count} item{}…",
+                plural(count)
+            ));
+        }
         self.request_feed_work(method, job_id, outcome);
     }
 
@@ -1482,7 +1510,8 @@ fn render_feed(
         );
     }
     let marked_count = state.marked_feed_count();
-    let work_all = format!("w work · W work all ({})", state.visible_feed_items().len());
+    let workable_count = items.iter().filter(|item| is_workable(item)).count();
+    let work_all = format!("w work · W work all ({workable_count})");
     let with_work_all = |lines: &[&str]| -> Vec<String> {
         // Each hint is tried with `W work all (N)` first, then as it was, so
         // a narrow terminal keeps the hints it always had.

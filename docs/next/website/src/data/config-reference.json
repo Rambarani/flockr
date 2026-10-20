@@ -1076,7 +1076,7 @@
           "key": "ui.rename_agent_renames_tab",
           "type": "boolean",
           "default": "true",
-          "description": "Renaming an agent also renames its tab when the tab holds exactly one agent (non-agent shell panes do not count). Clearing the agent name reverts the tab label only if it still equals the old agent name. Set false to keep tab names independent. Applies to the sidebar, CLI, and API rename alike."
+          "description": "Renaming an agent also renames its tab when the tab holds exactly one agent (non-agent shell panes do not count). Only a tab that still follows the agent is synced (no custom name, or a name equal to the previous agent name); a tab you named yourself is never overwritten. Clearing the agent name reverts the tab label only if it still equals the old agent name. Set false to keep tab names independent. Applies to the sidebar, CLI, and API rename alike."
         },
         {
           "key": "ui.pane_borders",

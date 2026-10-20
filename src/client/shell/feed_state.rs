@@ -544,6 +544,20 @@ impl ClientShellState {
             .feed_item(&job_id, &item_id)
             .and_then(|item| item.actions.into_iter().find(|action| action.key == key))
             .and_then(|action| action.confirm);
+        self.run_feed_action_with_question(job_id, item_id, key, question, origin, outcome);
+    }
+
+    /// Like [`Self::run_feed_action`] with the confirm question already
+    /// known, for callers that hold a snapshot of the action.
+    pub(super) fn run_feed_action_with_question(
+        &mut self,
+        job_id: String,
+        item_id: String,
+        key: String,
+        question: Option<String>,
+        origin: FeedOrigin,
+        outcome: &mut ClientShellInput,
+    ) {
         if let Some(question) = question {
             let return_to = match self.overlay.take() {
                 Some(ClientShellOverlay::Feed(overlay)) => Some(overlay),

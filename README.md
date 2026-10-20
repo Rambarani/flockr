@@ -16,6 +16,18 @@
 
 This README is written for two readers: a human setting flockr up for the first time, and an AI agent (for example Claude) that is helping that human. Section 13 is a short rule list written for the agent.
 
+## Why I built flockr
+
+I run several coding agents at once, across different projects, and herdr became the place they live. It keeps them running when I close the terminal and tells me which one is working, blocked or idle. I didn't want to replace it. I wanted a few things it didn't have yet:
+
+- **I couldn't tell my agents apart.** With many agents across many projects, the agent list was one flat column. I wanted them grouped under their workspace, collapsible, and renameable to the ticket or task they're on, so one glance tells me which agent is doing what.
+- **I wanted to hear the difference.** An agent finishing and an agent waiting for my answer should sound different, and I wanted to choose those sounds myself.
+- **My work list lived somewhere else.** The things that decide what my agents should do (PRs to review, tickets assigned to me, mentions) sat in other tools. I wanted them inside the same window as the agents, refreshed on a schedule, without asking an agent to fetch them and spending tokens on it every time. That became jobs and feeds, with [workbox](https://github.com/Rambarani/workbox) as the first feed.
+- **I wanted to go from "this needs me" to "an agent is on it" in one key.** Select items in the feed, press `w`, and a new tab opens with Claude and a ready prompt about those items. I still read the prompt and press Enter myself.
+- **I didn't want to fall behind herdr.** flockr checks herdr's releases every day and can merge them into a separate branch with an agent, so I keep herdr's improvements without losing my own.
+
+flockr is that set of changes. Everything herdr does still works the same way.
+
 ## Contents
 
 1. [What flockr is, and what it adds over herdr](#1-what-flockr-is-and-what-it-adds-over-herdr)

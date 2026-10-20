@@ -1329,7 +1329,8 @@ fn aggregate_agents_use_configured_rows_machine_token_and_status_colors() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(text.contains("○ Local · local agent"), "frame: {text}");
-    assert!(text.contains("× Build · remote agent"), "frame: {text}");
+    // Tree guides take four columns, so the 25-column row truncates the label.
+    assert!(text.contains("× Build · remote"), "frame: {text}");
     assert!(text.contains("grouped"), "frame: {text}");
     let toggle = state.hits.agent_sort_toggle;
     assert!(!toggle.is_empty());
@@ -1415,7 +1416,7 @@ fn current_workspace_agent_view_excludes_same_workspace_id_on_other_machine() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(!text.contains("Local · local agent"), "frame: {text}");
-    assert!(text.contains("Build · remote agent"), "frame: {text}");
+    assert!(text.contains("Build · remote"), "frame: {text}");
 }
 
 #[test]
@@ -2272,7 +2273,7 @@ fn disconnected_active_endpoint_freezes_surface_and_marks_cached_ui_stale() {
         Some(ClientEndpointStatus::Reconnecting)
     );
     assert!(text.contains("◐ reconnecting"), "frame: {text}");
-    assert!(text.contains("Build · remote agent"), "frame: {text}");
+    assert!(text.contains("Build · remote"), "frame: {text}");
     assert!(
         text.contains("LIVE"),
         "frozen surface should remain: {text}"
@@ -2896,8 +2897,8 @@ fn combined_agent_list_groups_by_machine_and_workspace() {
 
     let frame = state.compose(100, 28).expect("combined endpoint frame");
     let text = frame_rows(&frame).join("\n");
-    let local_header = text.find(" Local · client-shell").expect("local header");
-    let remote_header = text.find(" Build · client-shell").expect("remote header");
+    let local_header = text.find(" Local · client-she").expect("local header");
+    let remote_header = text.find(" Build · client-she").expect("remote header");
     assert!(local_header < remote_header);
 
     let body = state.hits.agent_body;

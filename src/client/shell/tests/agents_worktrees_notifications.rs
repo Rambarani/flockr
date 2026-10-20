@@ -2885,7 +2885,7 @@ fn step_visible_agent_wraps_skips_hidden_and_falls_back() {
     assert_eq!(step_visible_agent::<i32>(&[], visible, None, false), None);
 }
 
-/// Grouped tree sidebar like the reported setup: workspace "vitalengine-new-house"
+/// Grouped tree sidebar like the reported setup: workspace "acme-platform"
 /// with tabs "today" and "2", workspace "sandbox" with tabs "1" and "2", one
 /// `claude` agent per tab and no aliases. The active endpoint advertises exactly
 /// the methods the real server offers on the client-shell lane.
@@ -2893,7 +2893,7 @@ fn reported_tree_state(rows: &str) -> ClientShellState {
     let config: Config = toml::from_str(&format!("[ui.sidebar.agents]\nrows = {rows}\n"))
         .expect("sidebar rows config");
     let mut snapshot = two_workspace_agent_snapshot();
-    snapshot.workspaces[0].label = "vitalengine-new-house".into();
+    snapshot.workspaces[0].label = "acme-platform".into();
     snapshot.workspaces[1].label = "sandbox".into();
     let tab = |tab_id: &str, workspace_id: &str, number: usize, label: &str, custom: bool| {
         let mut tab = snapshot.tabs[0].clone();
@@ -3057,7 +3057,7 @@ fn label_rows_show_the_alias_in_place_of_the_tab_and_keep_the_agent_kind() {
     let text = sidebar_text(&mut state);
     assert!(text.contains("├─ ○ today · claude"), "{text}");
     assert!(text.contains("└─ ○ 1 · claude"), "{text}");
-    assert!(!text.contains("vitalengine-new-house · "), "{text}");
+    assert!(!text.contains("acme-platform · "), "{text}");
 
     let mut snapshot = state.snapshot.as_deref().cloned().expect("snapshot");
     snapshot.agents[0].name = Some("NH-1234".into());

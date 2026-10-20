@@ -65,11 +65,11 @@ fn item(id: &str, title: &str, state: FeedItemState) -> FeedItemInfo {
 /// Five items for the first feed: two unread.
 fn today_items() -> Vec<FeedItemInfo> {
     vec![
-        item("nh-1", "Fix login", FeedItemState::Unread),
-        item("nh-2", "Review retry", FeedItemState::Unread),
-        item("nh-3", "Reply Dana", FeedItemState::Read),
-        item("nh-4", "Update runbook", FeedItemState::Done),
-        item("nh-5", "Check flaky", FeedItemState::Warn),
+        item("pr-1", "Fix login", FeedItemState::Unread),
+        item("pr-2", "Review retry", FeedItemState::Unread),
+        item("pr-3", "Reply Dana", FeedItemState::Read),
+        item("pr-4", "Update runbook", FeedItemState::Done),
+        item("pr-5", "Check flaky", FeedItemState::Warn),
     ]
 }
 
@@ -227,11 +227,11 @@ fn the_section_sits_below_the_agents_with_an_unread_count() {
         lines[1], " ▾ Today (workbox) 2",
         "header with the unread count"
     );
-    assert_eq!(lines[2], "  ● NH-1 Fix login");
-    assert_eq!(lines[3], "  ● NH-2 Review retry");
-    assert_eq!(lines[4], "  ○ NH-3 Reply Dana");
-    assert_eq!(lines[5], "  ✓ NH-4 Update runbook");
-    assert_eq!(lines[6], "  ▲ NH-5 Check flaky");
+    assert_eq!(lines[2], "  ● PR-1 Fix login");
+    assert_eq!(lines[3], "  ● PR-2 Review retry");
+    assert_eq!(lines[4], "  ○ PR-3 Reply Dana");
+    assert_eq!(lines[5], "  ✓ PR-4 Update runbook");
+    assert_eq!(lines[6], "  ▲ PR-5 Check flaky");
     assert_eq!(lines.len(), 7, "nothing after the last row");
     // Below the agent panel, not over it.
     let agents = state.hits.agent_body;
@@ -255,8 +255,8 @@ fn rows_beyond_max_rows_become_a_more_row_that_opens_the_overlay() {
     let mut state = state_with_feeds(&config, vec![workbox_feed()]);
     let frame = compose(&mut state);
     let lines = feed_rows_text(&state, &frame);
-    assert_eq!(lines[2], "  ● NH-1 Fix login");
-    assert_eq!(lines[3], "  ● NH-2 Review retry");
+    assert_eq!(lines[2], "  ● PR-1 Fix login");
+    assert_eq!(lines[3], "  ● PR-2 Review retry");
     assert_eq!(lines[4], "   +3 more");
     assert_eq!(state.hits.feed.rows.len(), 2);
     let (rect, job_id) = state.hits.feed.more[0].clone();
@@ -543,7 +543,7 @@ fn clicking_an_item_opens_its_link_through_the_safe_url_action() {
     let input = left_click(&mut state, row);
     assert!(matches!(
         &input.actions[..],
-        [ClientShellAction::OpenSafeWebUrl(url)] if url == "https://example.com/nh-2"
+        [ClientShellAction::OpenSafeWebUrl(url)] if url == "https://example.com/pr-2"
     ));
     assert!(
         requests(&input).is_empty(),
@@ -611,7 +611,7 @@ fn right_clicking_an_item_lists_its_actions_and_runs_the_chosen_one() {
         sent[0].method,
         Method::FeedRunAction(FeedRunActionParams {
             job_id: "workbox-sync".into(),
-            item_id: "nh-1".into(),
+            item_id: "pr-1".into(),
             key: "s".into(),
         })
     );
@@ -627,7 +627,7 @@ fn the_context_menu_can_open_the_link_refresh_or_open_the_overlay() {
     state.activate_context_menu_item(0, &mut outcome);
     assert!(matches!(
         &outcome.actions[..],
-        [ClientShellAction::OpenSafeWebUrl(url)] if url == "https://example.com/nh-1"
+        [ClientShellAction::OpenSafeWebUrl(url)] if url == "https://example.com/pr-1"
     ));
 
     right_click(&mut state, row);
@@ -987,7 +987,7 @@ fn a_failed_action_started_here_raises_one_notice_when_the_outcome_arrives() {
         &sent[0],
         ResponseResult::FeedActionRequested {
             job_id: "workbox-sync".into(),
-            item_id: "nh-1".into(),
+            item_id: "pr-1".into(),
             key: "d".into(),
             started: true,
             reason: None,
@@ -996,7 +996,7 @@ fn a_failed_action_started_here_raises_one_notice_when_the_outcome_arrives() {
     // The next list carries the failure.
     let mut failed = workbox_feed().0;
     failed.last_action = Some(FeedActionResult {
-        item_id: "nh-1".into(),
+        item_id: "pr-1".into(),
         key: "d".into(),
         ok: false,
         summary: "exit 2: no network".into(),
@@ -1034,7 +1034,7 @@ fn a_busy_server_reply_to_an_action_is_reported() {
         &sent[0],
         ResponseResult::FeedActionRequested {
             job_id: "workbox-sync".into(),
-            item_id: "nh-1".into(),
+            item_id: "pr-1".into(),
             key: "d".into(),
             started: false,
             reason: Some("the feed is already refreshing".into()),
@@ -1127,8 +1127,8 @@ fn the_overlay_shows_tabs_counts_and_the_selected_items_actions() {
         "Today (workbox) 2",
         "News 1",
         "5 items · 2 unread · updated 2m ago",
-        "NH-1 Fix login",
-        "NH-5 Check flaky",
+        "PR-1 Fix login",
+        "PR-5 Check flaky",
         "d done",
         "s seen",
         "enter open",
@@ -1144,7 +1144,7 @@ fn the_overlay_shows_tabs_counts_and_the_selected_items_actions() {
 fn tab_and_the_arrow_keys_switch_feeds_and_clicking_a_tab_does_too() {
     let mut state = overlay_state(two_feeds());
     compose(&mut state);
-    assert_eq!(selected_item(&state), "nh-1");
+    assert_eq!(selected_item(&state), "pr-1");
     state.handle_raw_events(vec![key(KeyCode::Tab)]);
     let frame = compose(&mut state);
     assert!(frame.contains("Rust 2027 edition"), "{frame}");
@@ -1173,7 +1173,7 @@ fn a_single_feed_shows_its_title_instead_of_tabs() {
     assert!(state.hits.feed_overlay.tabs.is_empty());
     // Tab does nothing with one feed.
     state.handle_raw_events(vec![key(KeyCode::Tab)]);
-    assert_eq!(selected_item(&state), "nh-1");
+    assert_eq!(selected_item(&state), "pr-1");
 }
 
 #[test]
@@ -1181,15 +1181,15 @@ fn selection_moves_with_arrows_and_vim_keys() {
     let mut state = overlay_state(vec![workbox_feed()]);
     compose(&mut state);
     press(&mut state, 'j');
-    assert_eq!(selected_item(&state), "nh-2");
+    assert_eq!(selected_item(&state), "pr-2");
     state.handle_raw_events(vec![key(KeyCode::Down)]);
-    assert_eq!(selected_item(&state), "nh-3");
+    assert_eq!(selected_item(&state), "pr-3");
     press(&mut state, 'k');
-    assert_eq!(selected_item(&state), "nh-2");
+    assert_eq!(selected_item(&state), "pr-2");
     press_shifted(&mut state, 'G');
-    assert_eq!(selected_item(&state), "nh-5");
+    assert_eq!(selected_item(&state), "pr-5");
     press(&mut state, 'g');
-    assert_eq!(selected_item(&state), "nh-1");
+    assert_eq!(selected_item(&state), "pr-1");
 }
 
 #[test]
@@ -1201,12 +1201,12 @@ fn enter_opens_the_link_and_an_item_without_one_says_so() {
     let input = state.handle_raw_events(vec![key(KeyCode::Enter)]);
     assert!(matches!(
         &input.actions[..],
-        [ClientShellAction::OpenSafeWebUrl(url)] if url == "https://example.com/nh-1"
+        [ClientShellAction::OpenSafeWebUrl(url)] if url == "https://example.com/pr-1"
     ));
     press(&mut state, 'j');
     let input = state.handle_raw_events(vec![key(KeyCode::Enter)]);
     assert!(input.actions.is_empty());
-    assert!(compose(&mut state).contains("nh-2 has no link"));
+    assert!(compose(&mut state).contains("pr-2 has no link"));
 }
 
 #[test]
@@ -1220,7 +1220,7 @@ fn action_keys_run_the_selected_items_actions_through_the_server() {
         sent[0].method,
         Method::FeedRunAction(FeedRunActionParams {
             job_id: "workbox-sync".into(),
-            item_id: "nh-2".into(),
+            item_id: "pr-2".into(),
             key: "s".into(),
         })
     );
@@ -1234,17 +1234,17 @@ fn action_keys_run_the_selected_items_actions_through_the_server() {
         &sent[0],
         ResponseResult::FeedActionRequested {
             job_id: "workbox-sync".into(),
-            item_id: "nh-2".into(),
+            item_id: "pr-2".into(),
             key: "s".into(),
             started: true,
             reason: None,
         },
     );
-    assert!(compose(&mut state).contains("running s on nh-2"));
+    assert!(compose(&mut state).contains("running s on pr-2"));
     // The outcome arrives with the next list.
     let mut done = workbox_feed().0;
     done.last_action = Some(FeedActionResult {
-        item_id: "nh-2".into(),
+        item_id: "pr-2".into(),
         key: "s".into(),
         ok: true,
         summary: "ok".into(),
@@ -1252,7 +1252,7 @@ fn action_keys_run_the_selected_items_actions_through_the_server() {
     });
     let list = requests(&tick(&mut state, Instant::now() + Duration::from_secs(2)));
     answer(&mut state, &list[0], feed_list_result(vec![done], 12));
-    assert!(compose(&mut state).contains("s on nh-2: ok"));
+    assert!(compose(&mut state).contains("s on pr-2: ok"));
 }
 
 #[test]
@@ -1293,7 +1293,7 @@ fn slash_filters_by_title_subtitle_badge_and_id() {
     assert!(!frame.contains("Fix login"));
     assert_eq!(
         selected_item(&state),
-        "nh-2",
+        "pr-2",
         "selection jumps to the first match"
     );
     assert_eq!(state.hits.feed_overlay.rows.len(), 1);
@@ -1323,7 +1323,7 @@ fn filtering_matches_the_badge_and_subtitle_case_insensitively() {
     let mut state = overlay_state(vec![workbox_feed()]);
     compose(&mut state);
     press(&mut state, '/');
-    for ch in "NH-3".chars() {
+    for ch in "PR-3".chars() {
         press_shifted_or_plain(&mut state, ch);
     }
     assert_eq!(state.visible_feed_items().len(), 1);
@@ -1354,11 +1354,11 @@ fn clicking_selects_a_second_click_opens_and_outside_closes() {
     let (rect, _) = state.hits.feed_overlay.rows[2];
     let input = left_click(&mut state, rect);
     assert!(input.actions.is_empty());
-    assert_eq!(selected_item(&state), "nh-3");
+    assert_eq!(selected_item(&state), "pr-3");
     let input = left_click(&mut state, rect);
     assert!(matches!(
         &input.actions[..],
-        [ClientShellAction::OpenSafeWebUrl(url)] if url == "https://example.com/nh-3"
+        [ClientShellAction::OpenSafeWebUrl(url)] if url == "https://example.com/pr-3"
     ));
 }
 
@@ -1368,9 +1368,9 @@ fn the_wheel_moves_the_selection() {
     compose(&mut state);
     let (rect, _) = state.hits.feed_overlay.rows[0];
     click(&mut state, MouseEventKind::ScrollDown, rect);
-    assert_eq!(selected_item(&state), "nh-4");
+    assert_eq!(selected_item(&state), "pr-4");
     click(&mut state, MouseEventKind::ScrollUp, rect);
-    assert_eq!(selected_item(&state), "nh-1");
+    assert_eq!(selected_item(&state), "pr-1");
 }
 
 #[test]
@@ -1417,7 +1417,7 @@ fn the_selection_survives_a_refresh_that_reorders_items() {
     compose(&mut state);
     press(&mut state, 'j');
     press(&mut state, 'j');
-    assert_eq!(selected_item(&state), "nh-3");
+    assert_eq!(selected_item(&state), "pr-3");
     let mut items = today_items();
     items.reverse();
     let mut fresh = workbox_feed().0;
@@ -1427,7 +1427,7 @@ fn the_selection_survives_a_refresh_that_reorders_items() {
         .items
         .insert("workbox-sync".into(), FeedItems { revision: 4, items });
     state.feeds.feeds[0] = fresh;
-    assert_eq!(selected_item(&state), "nh-3");
+    assert_eq!(selected_item(&state), "pr-3");
 }
 
 // ----- palette ------------------------------------------------------------
@@ -1516,7 +1516,7 @@ fn which_key_lists_the_feed_binding() {
 // ----- master-detail ------------------------------------------------------
 
 fn detailed_feed() -> (FeedSummary, Vec<FeedItemInfo>) {
-    let mut first = item("nh-1", "Fix login redirect", FeedItemState::Unread);
+    let mut first = item("pr-1", "Fix login redirect", FeedItemState::Unread);
     first.updated_at = Some("2026-10-18T08:30:00Z".into());
     first.fields = vec![
         FeedField {
@@ -1529,7 +1529,7 @@ fn detailed_feed() -> (FeedSummary, Vec<FeedItemInfo>) {
         },
     ];
     first.body = Some("can you look at the redirect?".into());
-    let mut second = item("nh-2", "Review retry", FeedItemState::Read);
+    let mut second = item("pr-2", "Review retry", FeedItemState::Read);
     second.fields = vec![FeedField {
         label: "Source".into(),
         value: "github".into(),
@@ -1571,7 +1571,7 @@ fn a_wide_overlay_shows_the_list_left_and_the_detail_right() {
         "Source   jira",
         "Status   In Progress",
         "can you look at the redirect?",
-        "Link     https://example.com/nh-1",
+        "Link     https://example.com/pr-1",
         "d done",
     ] {
         assert!(frame.contains(expected), "missing {expected:?}\n{frame}");
@@ -1579,7 +1579,7 @@ fn a_wide_overlay_shows_the_list_left_and_the_detail_right() {
     // The list rows are compact: the subtitle is only in the detail.
     let list_line = frame
         .lines()
-        .find(|line| line.contains("NH-1") && line.contains("Fix login"))
+        .find(|line| line.contains("PR-1") && line.contains("Fix login"))
         .unwrap();
     assert!(!list_line
         .split('│')
@@ -1979,7 +1979,7 @@ fn a_feed_without_groups_has_no_tab_bar_and_keeps_its_layout() {
     let input = press(&mut state, '1');
     assert!(requests(&input).is_empty());
     press(&mut state, ']');
-    assert_eq!(selected_item(&state), "nh-1");
+    assert_eq!(selected_item(&state), "pr-1");
 }
 
 #[test]
@@ -2024,9 +2024,9 @@ fn brackets_and_digits_switch_category_and_zero_is_all() {
     assert_eq!(selected_group(&state), None);
     press(&mut state, ']');
     assert_eq!(selected_group(&state).as_deref(), Some("reviews"));
-    assert_eq!(titles(&state), ["nh-1", "nh-2"]);
+    assert_eq!(titles(&state), ["pr-1", "pr-2"]);
     press(&mut state, ']');
-    assert_eq!(titles(&state), ["nh-3"]);
+    assert_eq!(titles(&state), ["pr-3"]);
     press(&mut state, '[');
     press(&mut state, '[');
     assert_eq!(selected_group(&state), None, "[ steps back to All");
@@ -2041,7 +2041,7 @@ fn brackets_and_digits_switch_category_and_zero_is_all() {
 
     press(&mut state, '3');
     assert_eq!(selected_group(&state).as_deref(), Some("tickets"));
-    assert_eq!(titles(&state), ["nh-4"]);
+    assert_eq!(titles(&state), ["pr-4"]);
     press(&mut state, '4');
     assert!(titles(&state).is_empty(), "a declared but empty category");
     assert!(compose(&mut state).contains("Nothing in this category."));
@@ -2061,13 +2061,13 @@ fn the_selection_restarts_at_the_top_of_the_new_category() {
     compose(&mut state);
     press(&mut state, 'j');
     press(&mut state, 'j');
-    assert_eq!(selected_item(&state), "nh-3");
+    assert_eq!(selected_item(&state), "pr-3");
     press(&mut state, '1');
-    assert_eq!(selected_item(&state), "nh-1");
+    assert_eq!(selected_item(&state), "pr-1");
     press(&mut state, 'j');
-    assert_eq!(selected_item(&state), "nh-2");
+    assert_eq!(selected_item(&state), "pr-2");
     press(&mut state, '0');
-    assert_eq!(selected_item(&state), "nh-1");
+    assert_eq!(selected_item(&state), "pr-1");
 }
 
 #[test]
@@ -2078,7 +2078,7 @@ fn clicking_a_category_tab_selects_it() {
     assert_eq!(group.as_deref(), Some("mentions"));
     left_click(&mut state, rect);
     assert_eq!(selected_group(&state).as_deref(), Some("mentions"));
-    assert_eq!(titles(&state), ["nh-3"]);
+    assert_eq!(titles(&state), ["pr-3"]);
     let frame = compose_at(&mut state, 200, 50);
     assert!(frame.contains("Reply Dana"));
     let (all, _) = state.hits.feed_overlay.groups[0].clone();
@@ -2098,12 +2098,12 @@ fn the_filter_applies_within_the_selected_category() {
     }
     // "Review retry" is in Reviews; "Reply Dana" and "Update runbook" also
     // contain "re" but belong to other categories.
-    assert_eq!(titles(&state), ["nh-2"]);
+    assert_eq!(titles(&state), ["pr-2"]);
     state.handle_raw_events(vec![key(KeyCode::Enter)]);
     // Digits are not typed into the filter once it is accepted: they switch.
     press(&mut state, '0');
     assert_eq!(selected_group(&state), None);
-    assert!(titles(&state).contains(&"nh-2".to_owned()) && titles(&state).len() > 1);
+    assert!(titles(&state).contains(&"pr-2".to_owned()) && titles(&state).len() > 1);
     // While typing, digits and brackets belong to the filter.
     press(&mut state, '/');
     press(&mut state, '1');
@@ -2120,7 +2120,7 @@ fn the_filter_applies_within_the_selected_category() {
         Some("tickets"),
         "esc clears only the filter"
     );
-    assert_eq!(titles(&state), ["nh-4"]);
+    assert_eq!(titles(&state), ["pr-4"]);
 }
 
 #[test]
@@ -2141,7 +2141,7 @@ fn the_detail_pane_follows_the_category_and_its_filtered_list() {
         frame.contains("body line 1") && !frame.contains("can you look"),
         "{frame}"
     );
-    assert_eq!(selected_item(&state), "nh-2");
+    assert_eq!(selected_item(&state), "pr-2");
     press(&mut state, '1');
     let frame = compose_at(&mut state, 200, 50);
     assert!(frame.contains("can you look") && !frame.contains("body line 1"));
@@ -2153,7 +2153,7 @@ fn the_detail_pane_follows_the_category_and_its_filtered_list() {
         sent[0].method,
         Method::FeedRunAction(FeedRunActionParams {
             job_id: "workbox-sync".into(),
-            item_id: "nh-2".into(),
+            item_id: "pr-2".into(),
             key: "d".into(),
         })
     );
@@ -2189,7 +2189,7 @@ fn the_category_is_remembered_per_feed_and_across_reopening() {
     assert!(state.overlay.is_none());
     open_overlay(&mut state);
     assert_eq!(selected_group(&state).as_deref(), Some("mentions"));
-    assert_eq!(titles(&state), ["nh-3"]);
+    assert_eq!(titles(&state), ["pr-3"]);
     press(&mut state, '0');
     state.handle_raw_events(vec![key(KeyCode::Esc)]);
     open_overlay(&mut state);
@@ -2313,7 +2313,7 @@ fn clicking_a_group_row_opens_the_overlay_on_that_category() {
     }
     let frame = compose_at(&mut state, 200, 50);
     assert!(frame.contains("Reply Dana"));
-    assert_eq!(titles(&state), ["nh-3"]);
+    assert_eq!(titles(&state), ["pr-3"]);
 }
 
 #[test]
@@ -2470,31 +2470,31 @@ fn x_marks_the_current_item_with_a_checkmark_and_the_header_counts() {
     let frame = compose(&mut state);
     assert!(!frame.contains("selected"), "nothing marked yet");
     press(&mut state, 'x');
-    assert_eq!(marked(&state), ["nh-1"]);
+    assert_eq!(marked(&state), ["pr-1"]);
     press(&mut state, 'j');
     press(&mut state, 'j');
     press(&mut state, 'x');
-    assert_eq!(marked(&state), ["nh-1", "nh-3"]);
+    assert_eq!(marked(&state), ["pr-1", "pr-3"]);
     let frame = compose(&mut state);
     assert!(frame.contains("5 items · 2 unread · 2 selected"), "{frame}");
-    let rows: Vec<&str> = frame.lines().filter(|line| line.contains("NH-")).collect();
+    let rows: Vec<&str> = frame.lines().filter(|line| line.contains("PR-")).collect();
     let checked: Vec<&&str> = rows.iter().filter(|line| line.contains('✓')).collect();
-    // nh-4 is `done` and has its own check dot; the marks are in column 0 of the row.
+    // pr-4 is `done` and has its own check dot; the marks are in column 0 of the row.
     assert!(
-        rows.iter().any(|row| row.contains("✓ ● NH-1")),
+        rows.iter().any(|row| row.contains("✓ ● PR-1")),
         "marked unread row: {rows:?}"
     );
     assert!(
-        rows.iter().any(|row| row.contains("✓ ○ NH-3")),
+        rows.iter().any(|row| row.contains("✓ ○ PR-3")),
         "marked read row: {rows:?}"
     );
     assert!(
-        rows.iter().all(|row| !row.contains("✓ ● NH-2")),
+        rows.iter().all(|row| !row.contains("✓ ● PR-2")),
         "{checked:?}"
     );
     // x again unmarks.
     press(&mut state, 'x');
-    assert_eq!(marked(&state), ["nh-1"]);
+    assert_eq!(marked(&state), ["pr-1"]);
     assert!(compose(&mut state).contains("1 selected"));
 }
 
@@ -2519,31 +2519,31 @@ fn capital_x_clears_the_selection() {
 fn the_selection_survives_category_tabs_and_filtering() {
     let mut state = overlay_state(vec![grouped_feed()]);
     compose_at(&mut state, 200, 50);
-    press(&mut state, 'x'); // nh-1, in Reviews
+    press(&mut state, 'x'); // pr-1, in Reviews
     press(&mut state, '2'); // Mentions
-    assert_eq!(titles(&state), ["nh-3"]);
+    assert_eq!(titles(&state), ["pr-3"]);
     press(&mut state, 'x');
-    assert_eq!(marked(&state), ["nh-1", "nh-3"]);
+    assert_eq!(marked(&state), ["pr-1", "pr-3"]);
     // The header counts items the current feed has, shown or not.
     let frame = compose_at(&mut state, 200, 50);
     assert!(frame.contains("2 selected"), "{frame}");
-    // A filter that hides nh-1 keeps it marked.
+    // A filter that hides pr-1 keeps it marked.
     press(&mut state, '0');
     press(&mut state, '/');
     for ch in "reply".chars() {
         press(&mut state, ch);
     }
-    assert_eq!(titles(&state), ["nh-3"]);
-    assert_eq!(marked(&state), ["nh-1", "nh-3"]);
+    assert_eq!(titles(&state), ["pr-3"]);
+    assert_eq!(marked(&state), ["pr-1", "pr-3"]);
     // While typing a filter, x is text.
     press(&mut state, 'x');
-    assert_eq!(marked(&state), ["nh-1", "nh-3"]);
+    assert_eq!(marked(&state), ["pr-1", "pr-3"]);
     state.handle_raw_events(vec![key(KeyCode::Esc)]);
     // And `w` sends both, in feed order.
     compose_at(&mut state, 200, 50);
     let input = press(&mut state, 'w');
     let sent = requests(&input);
-    assert_eq!(sent[0].method, work_params(&["nh-1", "nh-3"]));
+    assert_eq!(sent[0].method, work_params(&["pr-1", "pr-3"]));
 }
 
 #[test]
@@ -2592,7 +2592,7 @@ fn w_works_on_the_current_item_when_nothing_is_selected() {
     let input = press(&mut state, 'w');
     let sent = requests(&input);
     assert_eq!(sent.len(), 1);
-    assert_eq!(sent[0].method, work_params(&["nh-2"]));
+    assert_eq!(sent[0].method, work_params(&["pr-2"]));
     assert!(compose(&mut state).contains("starting an agent with 1 item…"));
 }
 
@@ -2600,7 +2600,7 @@ fn w_works_on_the_current_item_when_nothing_is_selected() {
 fn w_sends_every_selected_id_in_feed_order() {
     let mut state = overlay_state(vec![workbox_feed()]);
     compose(&mut state);
-    // Select out of order: nh-4, nh-1, nh-2.
+    // Select out of order: pr-4, pr-1, pr-2.
     press(&mut state, 'G');
     press(&mut state, 'k');
     press(&mut state, 'x');
@@ -2610,7 +2610,7 @@ fn w_sends_every_selected_id_in_feed_order() {
     press(&mut state, 'x');
     let input = press(&mut state, 'w');
     let sent = requests(&input);
-    assert_eq!(sent[0].method, work_params(&["nh-1", "nh-2", "nh-4"]));
+    assert_eq!(sent[0].method, work_params(&["pr-1", "pr-2", "pr-4"]));
     assert!(compose(&mut state).contains("starting an agent with 3 items…"));
 }
 
@@ -2670,7 +2670,7 @@ fn a_failed_work_request_keeps_the_overlay_and_the_selection() {
             message: "the working directory /nope does not exist".into(),
         }),
     );
-    assert_eq!(marked(&state), ["nh-1"]);
+    assert_eq!(marked(&state), ["pr-1"]);
     assert_eq!(
         status_line(&state).as_deref(),
         Some("the working directory /nope does not exist")
@@ -2694,7 +2694,7 @@ fn a_server_without_feed_work_disables_only_w() {
     assert!(!state.feeds.unsupported, "feeds keep working");
     // Selecting and the other keys still work.
     press(&mut state, 'x');
-    assert_eq!(marked(&state), ["nh-1"]);
+    assert_eq!(marked(&state), ["pr-1"]);
 }
 
 #[test]
@@ -2724,8 +2724,8 @@ fn a_click_on_the_checkmark_column_or_ctrl_click_marks_the_row() {
     };
     // The checkmark column marks, and selects the row too.
     state.handle_raw_events(vec![at(row.x, KeyModifiers::empty())]);
-    assert_eq!(marked(&state), ["nh-3"]);
-    assert_eq!(selected_item(&state), "nh-3");
+    assert_eq!(marked(&state), ["pr-3"]);
+    assert_eq!(selected_item(&state), "pr-3");
     // Clicking it again unmarks.
     compose(&mut state);
     state.handle_raw_events(vec![at(row.x + 1, KeyModifiers::empty())]);
@@ -2739,7 +2739,7 @@ fn a_click_on_the_checkmark_column_or_ctrl_click_marks_the_row() {
         row: other.y,
         modifiers: KeyModifiers::CONTROL,
     })]);
-    assert_eq!(marked(&state), ["nh-1"]);
+    assert_eq!(marked(&state), ["pr-1"]);
     assert!(
         input.actions.is_empty(),
         "ctrl-click does not open the link"
@@ -2753,8 +2753,8 @@ fn a_click_on_the_checkmark_column_or_ctrl_click_marks_the_row() {
         row: third.y,
         modifiers: KeyModifiers::empty(),
     })]);
-    assert_eq!(marked(&state), ["nh-1"]);
-    assert_eq!(selected_item(&state), "nh-2");
+    assert_eq!(marked(&state), ["pr-1"]);
+    assert_eq!(selected_item(&state), "pr-2");
 }
 
 #[test]
@@ -2898,7 +2898,7 @@ fn the_sidebar_menu_asks_before_a_confirm_action_and_n_cancels() {
     let mut outcome = ClientShellInput::default();
     state.activate_context_menu_item(3, &mut outcome);
     let input = press(&mut state, 'y');
-    assert_eq!(requests(&input)[0].method, delete_request("nh-1"));
+    assert_eq!(requests(&input)[0].method, delete_request("pr-1"));
     assert!(state.overlay.is_none());
 }
 
@@ -2933,9 +2933,9 @@ fn a_sidebar_menu_action_for_an_item_that_vanished_is_not_sent() {
     let mut state = state_with_feeds(&Config::default(), vec![feed_with_delete()]);
     let row = state.hits.feed.rows[0].rect;
     right_click(&mut state, row);
-    // The refresh drops nh-1 before the click.
+    // The refresh drops pr-1 before the click.
     let (feed, mut items) = feed_with_delete();
-    items.retain(|item| item.id != "nh-1");
+    items.retain(|item| item.id != "pr-1");
     load(&mut state, vec![(feed, items)]);
     let mut outcome = ClientShellInput::default();
     state.activate_context_menu_item(3, &mut outcome);
@@ -3009,12 +3009,12 @@ fn sidebar_work_all_on_a_server_without_feed_work_says_so() {
 
 // ----- a Today tab: items in more than one group, and W ---------------------
 
-/// `today_items` with a first "today" group: nh-1 and nh-3 are also on it, as
+/// `today_items` with a first "today" group: pr-1 and pr-3 are also on it, as
 /// `also_groups`, while their own group stays `reviews` or `mentions`.
 fn feed_with_today() -> (FeedSummary, Vec<FeedItemInfo>) {
     let (mut feed, mut items) = grouped_feed();
     for item in &mut items {
-        if item.id == "nh-1" || item.id == "nh-3" {
+        if item.id == "pr-1" || item.id == "pr-3" {
             item.also_groups = vec!["today".into()];
         }
     }
@@ -3035,11 +3035,11 @@ fn the_today_tab_lists_items_whose_own_group_is_another_tab() {
     );
     press(&mut state, '1');
     assert_eq!(selected_group(&state).as_deref(), Some("today"));
-    assert_eq!(titles(&state), ["nh-1", "nh-3"]);
+    assert_eq!(titles(&state), ["pr-1", "pr-3"]);
     // The item is still in its own category as well.
     press(&mut state, '2');
     assert_eq!(selected_group(&state).as_deref(), Some("reviews"));
-    assert_eq!(titles(&state), ["nh-1", "nh-2"]);
+    assert_eq!(titles(&state), ["pr-1", "pr-2"]);
     press(&mut state, '0');
     assert_eq!(titles(&state).len(), 5, "All shows each item once");
 }
@@ -3050,7 +3050,7 @@ fn w_capital_works_on_every_item_of_the_tab_and_the_filter_narrows_it() {
     compose_at(&mut state, 200, 50);
     press(&mut state, '1');
     let sent = requests(&press(&mut state, 'W'));
-    assert_eq!(sent[0].method, work_params(&["nh-1", "nh-3"]));
+    assert_eq!(sent[0].method, work_params(&["pr-1", "pr-3"]));
     assert!(compose_at(&mut state, 200, 50).contains("starting an agent with 2 items"));
 
     press(&mut state, '/');
@@ -3059,11 +3059,11 @@ fn w_capital_works_on_every_item_of_the_tab_and_the_filter_narrows_it() {
     }
     state.handle_raw_events(vec![key(KeyCode::Enter)]);
     let sent = requests(&press(&mut state, 'W'));
-    assert_eq!(sent[0].method, work_params(&["nh-3"]));
+    assert_eq!(sent[0].method, work_params(&["pr-3"]));
 
     // `w` still means the selection or the current item.
     let sent = requests(&press(&mut state, 'w'));
-    assert_eq!(sent[0].method, work_params(&["nh-3"]));
+    assert_eq!(sent[0].method, work_params(&["pr-3"]));
 }
 
 #[test]
@@ -3073,21 +3073,21 @@ fn w_capital_in_the_all_tab_of_a_flat_feed_takes_the_whole_list() {
     let sent = requests(&press(&mut state, 'W'));
     assert_eq!(
         sent[0].method,
-        work_params(&["nh-1", "nh-2", "nh-3", "nh-5"]),
-        "nh-4 is done and is left out"
+        work_params(&["pr-1", "pr-2", "pr-3", "pr-5"]),
+        "pr-4 is done and is left out"
     );
 }
 
 #[test]
 fn w_capital_skips_done_items_and_the_hint_counts_only_the_rest() {
     let (feed, mut items) = grouped_feed();
-    // nh-5 is not in state Done but sits in the Done group.
+    // pr-5 is not in state Done but sits in the Done group.
     items[4].group = Some("done".into());
     let mut state = overlay_state(vec![(feed, items)]);
     let frame = compose_at(&mut state, 220, 50);
     assert!(frame.contains("w work · W work all (3)"), "{frame}");
     let sent = requests(&press(&mut state, 'W'));
-    assert_eq!(sent[0].method, work_params(&["nh-1", "nh-2", "nh-3"]));
+    assert_eq!(sent[0].method, work_params(&["pr-1", "pr-2", "pr-3"]));
 }
 
 #[test]
@@ -3143,7 +3143,7 @@ fn a_group_row_menu_work_on_all_leaves_out_done_items() {
     right_click(&mut state, row);
     let mut outcome = ClientShellInput::default();
     state.activate_context_menu_item(0, &mut outcome);
-    assert_eq!(requests(&outcome)[0].method, work_params(&["nh-1"]));
+    assert_eq!(requests(&outcome)[0].method, work_params(&["pr-1"]));
 }
 
 #[test]
@@ -3195,7 +3195,7 @@ fn a_group_row_menu_offers_work_on_all_in_that_tab() {
     assert_eq!(labels[0], "Work on all in Today");
     let mut outcome = ClientShellInput::default();
     state.activate_context_menu_item(0, &mut outcome);
-    assert_eq!(requests(&outcome)[0].method, work_params(&["nh-1", "nh-3"]));
+    assert_eq!(requests(&outcome)[0].method, work_params(&["pr-1", "pr-3"]));
 }
 
 #[test]
@@ -3203,9 +3203,9 @@ fn toggling_today_shows_up_in_the_today_tab_after_the_refresh() {
     let mut state = overlay_state(vec![feed_with_today()]);
     compose_at(&mut state, 200, 50);
     press(&mut state, '1');
-    assert_eq!(titles(&state), ["nh-1", "nh-3"]);
+    assert_eq!(titles(&state), ["pr-1", "pr-3"]);
 
-    // `t` on nh-2 (in Reviews) puts it on the list; the next poll brings the
+    // `t` on pr-2 (in Reviews) puts it on the list; the next poll brings the
     // refreshed feed with a newer revision.
     let (mut after, mut items) = feed_with_today();
     items[1].also_groups = vec!["today".into()];
@@ -3226,7 +3226,7 @@ fn toggling_today_shows_up_in_the_today_tab_after_the_refresh() {
         })
         .expect("get request");
     answer(&mut state, &get, detail_result(after, items));
-    assert_eq!(titles(&state), ["nh-1", "nh-2", "nh-3"]);
+    assert_eq!(titles(&state), ["pr-1", "pr-2", "pr-3"]);
     assert!(compose_at(&mut state, 200, 50).contains("Today 3 ●2"));
 
     // Taking an item off the list drops it from the tab, and an empty

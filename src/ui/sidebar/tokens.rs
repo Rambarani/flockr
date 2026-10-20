@@ -649,22 +649,22 @@ rows = [[{ token = "$load", rules = [{ lt = 50, hide = true }] }], ["workspace"]
         .unwrap();
         let mut entry = entry();
         entry.tab = Some("1".into());
-        entry.label = Some("NH-123".into());
-        entry.agent_label = Some("NH-123".into());
+        entry.label = Some("PR-123".into());
+        entry.agent_label = Some("PR-123".into());
         entry.agent_kind = Some("claude".into());
         let rows = agent_rows(&config, context(&entry), "idle");
-        assert_eq!(rows[0][2].kind, ResolvedTokenKind::Label("NH-123".into()));
+        assert_eq!(rows[0][2].kind, ResolvedTokenKind::Label("PR-123".into()));
         assert_eq!(
             rows[0][3].kind,
             ResolvedTokenKind::AgentKind("claude".into())
         );
         // `agent` keeps its documented meaning: the alias when one is set.
-        assert_eq!(rows[1][0].kind, ResolvedTokenKind::Agent("NH-123".into()));
+        assert_eq!(rows[1][0].kind, ResolvedTokenKind::Agent("PR-123".into()));
 
         entry.label = None;
         entry.agent_kind = None;
         let rows = agent_rows(&config, context(&entry), "idle");
-        assert_eq!(texts(&rows), vec![vec!["icon", "repo"], vec!["NH-123"]]);
+        assert_eq!(texts(&rows), vec![vec!["icon", "repo"], vec!["PR-123"]]);
     }
 
     #[test]
@@ -679,11 +679,11 @@ rows = [[{ token = "$load", rules = [{ lt = 50, hide = true }] }], ["workspace"]
         let rows = agent_rows(&config, context(&entry), "idle");
         assert_eq!(texts(&rows), vec![vec!["icon", "today", "claude"]]);
 
-        entry.label = Some("NH-1234".into());
+        entry.label = Some("PR-1234".into());
         let rows = agent_rows(&config, context(&entry), "idle");
         assert_eq!(
             texts(&rows),
-            vec![vec!["icon", "today", "NH-1234", "claude"], vec!["NH-1234"]]
+            vec![vec!["icon", "today", "PR-1234", "claude"], vec!["PR-1234"]]
         );
 
         // Without a `tab` token the label is the only place the tab shows.

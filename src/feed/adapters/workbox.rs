@@ -59,39 +59,39 @@ const OTHER_GROUP: (&str, &str, &str) = ("other", "Other", "Other");
 /// places. Items that match no rule are left without a group and land in the
 /// feed's implicit "Other".
 const CATEGORIES: &[(&str, &str, &str)] = &[
-    ("new-house-prs", "New House PR Requests", "New House PRs"),
+    ("github-prs", "GitHub PR Reviews", "GitHub PRs"),
     ("ticket-mentions", "JIRA Mentions", "JIRA Mentions"),
     ("jira-assigned", "New Tickets Assigned", "New Tickets"),
-    ("old-house-prs", "Old House PR Requests", "Old House PRs"),
+    ("bitbucket-prs", "Bitbucket PR Reviews", "Bitbucket PRs"),
     ("my-prs", "My PRs (activity)", "My PRs"),
 ];
 
 /// Which category a `source` and `reason` (workbox's `Reason::as_str`) belong
 /// to. The first matching rule wins.
 ///
-/// - GitHub `review_requested` and `mention`: someone wants me on a new-house
-///   PR. Workbox shows these on its "New House" tab with its other GitHub
+/// - GitHub `review_requested` and `mention`: someone wants me on a GitHub
+///   PR. Workbox shows these on its "GitHub" tab with its other GitHub
 ///   reasons; a mention on a PR is a request to look, so it stays here (the
 ///   `review-pr` skill treats the two the same way).
 /// - GitHub `changes_requested`, `commented`, `approved` come only from
 ///   workbox's activity scan of my own open PRs (and `authored` is my own
 ///   PR), so they are "My PRs (activity)", not requests of me. Workbox shows
-///   them on the New House tab, but mixing them in would hide the actual
+///   them on the GitHub tab, but mixing them in would hide the actual
 ///   requests; they stay visible in their own tab.
 /// - Jira `mention` (and `commented`, which workbox never emits for Jira)
 ///   are mentions; Jira `assigned` is a ticket assigned to me. Workbox has no
 ///   Jira `status_changed` item (only GitHub notifications give that reason),
 ///   so it is not mapped.
-/// - Bitbucket `review_requested` is the old-house PR request. Other
+/// - Bitbucket `review_requested` is the Bitbucket PR review request. Other
 ///   Bitbucket reasons (my own PRs) have no workbox tab; `authored`,
 ///   `changes_requested`, `commented` and `approved` go to My PRs.
 /// - Everything else (`status_changed`, `updated`, unknown reasons, other
 ///   sources) is "Other".
 const RULES: &[(&str, &[&str], &str)] = &[
-    ("github", &["review_requested", "mention"], "new-house-prs"),
+    ("github", &["review_requested", "mention"], "github-prs"),
     ("jira", &["mention", "commented"], "ticket-mentions"),
     ("jira", &["assigned"], "jira-assigned"),
-    ("bitbucket", &["review_requested"], "old-house-prs"),
+    ("bitbucket", &["review_requested"], "bitbucket-prs"),
     (
         "github",
         &["authored", "changes_requested", "commented", "approved"],
@@ -343,12 +343,12 @@ mod tests {
 
     /// A sample of `workbox list --json`, field for field.
     const SAMPLE: &str = r#"[
-      {"id":"jira:NH-1412","source":"jira","key":"NH-1412","title":"Fix login redirect",
-       "where":"NH board","reason":"mention","status":"In Progress","tab":"jira","actor":"alice",
-       "url":"https://example.atlassian.net/browse/NH-1412","updated_at":"2026-10-18T08:30:00Z",
+      {"id":"jira:PROJ-123","source":"jira","key":"PROJ-123","title":"Fix login redirect",
+       "where":"PR board","reason":"mention","status":"In Progress","tab":"jira","actor":"alice",
+       "url":"https://example.atlassian.net/browse/PROJ-123","updated_at":"2026-10-18T08:30:00Z",
        "snippet":"can you look?","unread":true,"today":false,"snoozed_until":null},
       {"id":"gh:o/r#12","source":"github","key":"o/r#12","title":"Add retry to uploader",
-       "where":"","reason":"review_requested","status":null,"tab":"new-house","actor":null,
+       "where":"","reason":"review_requested","status":null,"tab":"github","actor":null,
        "url":"https://github.com/o/r/pull/12","updated_at":"2026-10-17T17:00:00Z",
        "snippet":null,"unread":false,"today":true,"snoozed_until":null}
     ]"#;
@@ -364,12 +364,15 @@ mod tests {
         assert_eq!(feed["version"], 1);
         assert_eq!(feed["title"], "workbox");
         let first = &feed["items"][0];
-        assert_eq!(first["id"], "jira:NH-1412");
+        assert_eq!(first["id"], "jira:PROJ-123");
         assert_eq!(first["title"], "Fix login redirect");
-        assert_eq!(first["subtitle"], "jira · mention · NH board");
+        assert_eq!(first["subtitle"], "jira · mention · PR board");
         assert_eq!(first["state"], "unread");
-        assert_eq!(first["badge"], "NH-1412");
-        assert_eq!(first["url"], "https://example.atlassian.net/browse/NH-1412");
+        assert_eq!(first["badge"], "PROJ-123");
+        assert_eq!(
+            first["url"],
+            "https://example.atlassian.net/browse/PROJ-123"
+        );
         assert_eq!(first["updated_at"], "2026-10-18T08:30:00Z");
         let keys: Vec<_> = first["actions"]
             .as_array()
@@ -380,24 +383,24 @@ mod tests {
         assert_eq!(keys, ["d", "s", "t", "D"]);
         assert_eq!(
             first["actions"][0]["command"],
-            serde_json::json!(["workbox", "mark", "jira:NH-1412", "done"])
+            serde_json::json!(["workbox", "mark", "jira:PROJ-123", "done"])
         );
         assert_eq!(
             first["actions"][1]["command"],
-            serde_json::json!(["workbox", "mark", "jira:NH-1412", "seen"])
+            serde_json::json!(["workbox", "mark", "jira:PROJ-123", "seen"])
         );
         assert_eq!(
             first["actions"][2]["command"],
-            serde_json::json!(["workbox", "mark", "jira:NH-1412", "today"])
+            serde_json::json!(["workbox", "mark", "jira:PROJ-123", "today"])
         );
         assert_eq!(first["actions"][3]["title"], "delete");
         assert_eq!(
             first["actions"][3]["command"],
-            serde_json::json!(["workbox", "mark", "jira:NH-1412", "delete"])
+            serde_json::json!(["workbox", "mark", "jira:PROJ-123", "delete"])
         );
         assert_eq!(
             first["actions"][3]["confirm"],
-            "Delete NH-1412 from workbox?"
+            "Delete PROJ-123 from workbox?"
         );
         assert!(
             first["actions"][0].get("confirm").is_none(),
@@ -467,10 +470,10 @@ mod tests {
             want(&[
                 ("Source", "jira"),
                 ("Reason", "mention"),
-                ("Where", "NH board"),
+                ("Where", "PR board"),
                 ("Status", "In Progress"),
                 ("From", "alice"),
-                ("Key", "NH-1412"),
+                ("Key", "PROJ-123"),
                 ("Today", "no"),
             ])
         );
@@ -554,8 +557,8 @@ mod tests {
     /// One item per source and reason that workbox can produce, plus
     /// combinations it cannot, with the category each must land in.
     const MATRIX: &[(&str, &str, Option<&str>)] = &[
-        ("github", "review_requested", Some("new-house-prs")),
-        ("github", "mention", Some("new-house-prs")),
+        ("github", "review_requested", Some("github-prs")),
+        ("github", "mention", Some("github-prs")),
         ("github", "changes_requested", Some("my-prs")),
         ("github", "commented", Some("my-prs")),
         ("github", "approved", Some("my-prs")),
@@ -572,7 +575,7 @@ mod tests {
         ("jira", "updated", None),
         ("jira", "changes_requested", None),
         ("jira", "approved", None),
-        ("bitbucket", "review_requested", Some("old-house-prs")),
+        ("bitbucket", "review_requested", Some("bitbucket-prs")),
         ("bitbucket", "authored", Some("my-prs")),
         ("bitbucket", "changes_requested", Some("my-prs")),
         ("bitbucket", "commented", Some("my-prs")),
@@ -590,10 +593,7 @@ mod tests {
         for (source, reason, want) in MATRIX {
             assert_eq!(category(source, reason), *want, "{source} / {reason}");
         }
-        assert_eq!(
-            category(" GitHub ", "Review_Requested"),
-            Some("new-house-prs")
-        );
+        assert_eq!(category(" GitHub ", "Review_Requested"), Some("github-prs"));
     }
 
     #[test]
@@ -650,10 +650,10 @@ mod tests {
             order,
             [
                 "today",
-                "new-house-prs",
+                "github-prs",
                 "ticket-mentions",
                 "jira-assigned",
-                "old-house-prs",
+                "bitbucket-prs",
                 "my-prs",
                 "other",
                 "done"
@@ -664,10 +664,10 @@ mod tests {
             titles[..5],
             [
                 "Today",
-                "New House PR Requests",
+                "GitHub PR Reviews",
                 "JIRA Mentions",
                 "New Tickets Assigned",
-                "Old House PR Requests"
+                "Bitbucket PR Reviews"
             ]
         );
         for (item, (source, reason, want)) in parsed.items.iter().zip(MATRIX) {
@@ -703,14 +703,14 @@ mod tests {
         let second = &feed["items"][1];
         assert!(first.get("also_groups").is_none());
         assert_eq!(second["also_groups"], serde_json::json!(["today"]));
-        assert_eq!(second["group"], "new-house-prs", "its own tab is kept");
+        assert_eq!(second["group"], "github-prs", "its own tab is kept");
 
         let parsed = parse_feed(&feed.to_string()).expect("valid feed");
         assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
         assert_eq!(parsed.groups[0].id, "today");
         assert!(parsed.items[0].also_groups.is_empty());
         assert_eq!(parsed.items[1].also_groups, ["today"]);
-        assert_eq!(parsed.items[1].group.as_deref(), Some("new-house-prs"));
+        assert_eq!(parsed.items[1].group.as_deref(), Some("github-prs"));
     }
 
     #[test]
@@ -732,7 +732,7 @@ mod tests {
           {"id":"a","source":"github","key":"#915","title":"t","where":"acme/web-app#915","reason":"review_requested"},
           {"id":"b","source":"github","key":"#571","title":"t","where":"acme/platform-ui#571","reason":"mention"},
           {"id":"c","source":"bitbucket","key":"#7","title":"t","where":"ws/old.repo_x#7","reason":"review_requested"},
-          {"id":"d","source":"jira","key":"NH-1","title":"t","where":"NH-1","reason":"mention"},
+          {"id":"d","source":"jira","key":"PR-1","title":"t","where":"PR-1","reason":"mention"},
           {"id":"e","source":"github","key":"x","title":"t","where":"no-hash/repo","reason":"mention"},
           {"id":"f","source":"github","key":"#1","title":"t","where":"a/../b#1","reason":"mention"},
           {"id":"g","source":"github","key":"#1","title":"t","where":"","reason":"mention"}
@@ -760,10 +760,10 @@ mod tests {
       {"id":"gh:o/r#2","source":"github","key":"#2","title":"Finished PR","where":"o/r#2",
        "reason":"review_requested","unread":true,"today":true,"done":true,
        "done_at":"2026-10-18T10:00:00Z"},
-      {"id":"jira:NH-3","source":"jira","key":"NH-3","title":"Finished other","where":"NH-3",
+      {"id":"jira:PR-3","source":"jira","key":"PR-3","title":"Finished other","where":"PR-3",
        "reason":"updated","unread":false,"today":false,"done":true,
        "done_at":"2026-10-17T10:00:00Z"},
-      {"id":"jira:NH-4","source":"jira","key":"NH-4","title":"Plain other","where":"NH-4",
+      {"id":"jira:PR-4","source":"jira","key":"PR-4","title":"Plain other","where":"PR-4",
        "reason":"updated","unread":false,"today":false}
     ]"##;
 
@@ -781,7 +781,7 @@ mod tests {
         assert_eq!(
             groups,
             [
-                Some("new-house-prs"),
+                Some("github-prs"),
                 Some("done"),
                 Some("done"),
                 Some("other")
@@ -828,7 +828,7 @@ mod tests {
                 })
                 .count()
         };
-        assert_eq!(count("new-house-prs"), 1);
+        assert_eq!(count("github-prs"), 1);
         assert_eq!(count("today"), 0);
         assert_eq!(count("other"), 1);
         assert_eq!(count("done"), 2);

@@ -838,7 +838,7 @@ fn agent_start_and_rename_validate_names() {
     }
 
     for good in [
-        "NH-123",
+        "PR-123",
         "Fix login bug",
         "\u{30c6}\u{30b9}\u{30c8}",
         &"z".repeat(64),

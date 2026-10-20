@@ -10,7 +10,7 @@
 //! exactly as before, in the rows the feed section leaves it.
 //!
 //! A feed that declares groups shows one compact row per non-empty group
-//! (`New House PRs 9 ●3`) instead of item rows; clicking one opens the Feed
+//! (`GitHub PRs 9 ●3`) instead of item rows; clicking one opens the Feed
 //! overlay on that category. Such a section does not need its items, so the
 //! client does not fetch them for the sidebar.
 
@@ -395,7 +395,7 @@ fn render_header(buffer: &mut Buffer, rect: Rect, section: &FeedSection<'_>, pal
     put(flag, flag_style);
 }
 
-/// `   New House PRs 9 ●3`: the group's short title, its total and its unread.
+/// `   GitHub PRs 9 ●3`: the group's short title, its total and its unread.
 fn render_group(buffer: &mut Buffer, rect: Rect, group: &FeedGroupInfo, palette: &Palette) {
     let title = group.short_title.as_deref().unwrap_or(&group.title);
     let unread = (group.unread > 0).then(|| format!(" ●{}", group.unread));

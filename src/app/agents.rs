@@ -660,7 +660,7 @@ mod tests {
     fn agent_names_accept_ordinary_text() {
         for name in [
             "a",
-            "NH-123",
+            "PR-123",
             "Fix login bug",
             "reviewer_2",
             "w1",
@@ -675,7 +675,7 @@ mod tests {
         ] {
             assert_eq!(normalize_agent_name(name).as_deref(), Ok(name));
         }
-        assert_eq!(normalize_agent_name("  NH-123 \t").as_deref(), Ok("NH-123"));
+        assert_eq!(normalize_agent_name("  PR-123 \t").as_deref(), Ok("PR-123"));
     }
 
     #[test]

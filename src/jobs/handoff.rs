@@ -1400,7 +1400,7 @@ mod tests {
         assert_eq!(handoff.prompt_file.as_deref(), Some("prompt.md"));
 
         let feed = FeedSnapshot {
-            json: "{\"items\":[{\"id\":\"jira:NH-1\",\"title\":\"Fix login\"}]}".into(),
+            json: "{\"items\":[{\"id\":\"jira:PR-1\",\"title\":\"Fix login\"}]}".into(),
             unread: 3,
             fingerprint: feed_fingerprint("x"),
         };
@@ -1419,7 +1419,7 @@ mod tests {
         assert!(offer.cwd.ends_with("Desktop/poc/workbox"), "{}", offer.cwd);
         assert!(offer.prompt.contains("Today is 2026-10-18."));
         assert!(
-            offer.prompt.contains("jira:NH-1"),
+            offer.prompt.contains("jira:PR-1"),
             "feed json is in the prompt"
         );
         assert!(offer.prompt.contains("/plan-day"));

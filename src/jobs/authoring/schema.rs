@@ -313,7 +313,7 @@ fn item_schema() -> Value {
                             "description": format!("One visible character, unique per item. Reserved for the overlay: {} and these key names: {}.", RESERVED_CHARS.iter().map(|c| format!("'{c}'")).collect::<Vec<_>>().join(" "), reserved_names.join(", ")) + &format!(" In a feed that declares groups these are reserved too: {}.", GROUPED_RESERVED_CHARS.iter().map(|c| format!("'{c}'")).collect::<Vec<_>>().join(" "))
                         },
                         "title": text(MAX_ACTION_TITLE_CHARS, "Menu text; defaults to the key."),
-                        "confirm": text(MAX_ACTION_CONFIRM_CHARS, "Optional question, for example \"Delete NH-1406 from workbox?\". The Feed overlay and the sidebar menu ask y or n before running the action. Other callers (`flockr feed action`, the API) run it without asking."),
+                        "confirm": text(MAX_ACTION_CONFIRM_CHARS, "Optional question, for example \"Delete PR-1406 from workbox?\". The Feed overlay and the sidebar menu ask y or n before running the action. Other callers (`flockr feed action`, the API) run it without asking."),
                         "command": {
                             "type": "array",
                             "minItems": 1,

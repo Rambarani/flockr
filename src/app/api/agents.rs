@@ -966,7 +966,7 @@ mod tests {
         let target = app.public_pane_id(0, pane_id).unwrap();
 
         for (input, stored) in [
-            ("NH-123", "NH-123"),
+            ("PR-123", "PR-123"),
             ("Fix login bug", "Fix login bug"),
             ("  padded name  ", "padded name"),
             ("\u{30c6}\u{30b9}\u{30c8}", "\u{30c6}\u{30b9}\u{30c8}"),

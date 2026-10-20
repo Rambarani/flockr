@@ -1030,6 +1030,134 @@ mod tests {
         );
     }
 
+    fn mark_agent(app: &mut App, pane_id: crate::layout::PaneId) -> String {
+        let terminal_id = app.state.workspaces[0].tabs[0].panes[&pane_id]
+            .attached_terminal_id
+            .clone();
+        app.state
+            .terminals
+            .get_mut(&terminal_id)
+            .unwrap()
+            .set_detected_state(Some(Agent::Pi), AgentState::Idle);
+        app.public_pane_id(0, pane_id).unwrap()
+    }
+
+    fn rename_agent(app: &mut App, target: &str, name: Option<&str>) -> serde_json::Value {
+        let response = app.handle_agent_rename(
+            "req".into(),
+            AgentRenameParams {
+                target: target.into(),
+                name: name.map(str::to_string),
+            },
+        );
+        serde_json::from_str(&response).unwrap()
+    }
+
+    fn tab_label(app: &App) -> Option<String> {
+        app.state.workspaces[0].tabs[0].custom_name.clone()
+    }
+
+    #[test]
+    fn agent_rename_renames_a_single_agent_tab_and_emits_tab_renamed() {
+        let mut app = app_with_agent();
+        let pane_id = app.state.workspaces[0].tabs[0].root_pane;
+        let target = mark_agent(&mut app, pane_id);
+
+        let value = rename_agent(&mut app, &target, Some("  Flockr Enhancements "));
+        assert!(value["result"].is_object());
+        assert_eq!(tab_label(&app).as_deref(), Some("Flockr Enhancements"));
+        assert_eq!(
+            app.tab_info(0, 0).unwrap().label,
+            "Flockr Enhancements".to_string()
+        );
+
+        // Renaming again follows the agent name.
+        rename_agent(&mut app, &target, Some("Second"));
+        assert_eq!(tab_label(&app).as_deref(), Some("Second"));
+    }
+
+    #[test]
+    fn agent_rename_ignores_shell_panes_when_counting_agents() {
+        let mut app = app_with_agent();
+        let pane_id = app.state.workspaces[0].tabs[0].root_pane;
+        app.state.workspaces[0].test_split(ratatui::layout::Direction::Horizontal);
+        app.state.ensure_test_terminals();
+        let target = mark_agent(&mut app, pane_id);
+
+        rename_agent(&mut app, &target, Some("solo"));
+        assert_eq!(tab_label(&app).as_deref(), Some("solo"));
+    }
+
+    #[test]
+    fn agent_rename_leaves_a_multi_agent_tab_alone() {
+        let mut app = app_with_agent();
+        let first = app.state.workspaces[0].tabs[0].root_pane;
+        let second = app.state.workspaces[0].test_split(ratatui::layout::Direction::Horizontal);
+        app.state.ensure_test_terminals();
+        let target = mark_agent(&mut app, first);
+        mark_agent(&mut app, second);
+
+        let value = rename_agent(&mut app, &target, Some("one of two"));
+        assert!(value["result"].is_object());
+        assert_eq!(tab_label(&app), None);
+    }
+
+    #[test]
+    fn agent_rename_clear_reverts_the_tab_only_when_the_label_matches() {
+        let mut app = app_with_agent();
+        let pane_id = app.state.workspaces[0].tabs[0].root_pane;
+        let target = mark_agent(&mut app, pane_id);
+
+        rename_agent(&mut app, &target, Some("alpha"));
+        assert_eq!(tab_label(&app).as_deref(), Some("alpha"));
+        rename_agent(&mut app, &target, None);
+        assert_eq!(tab_label(&app), None);
+
+        // A tab label set by hand after the sync survives the clear.
+        rename_agent(&mut app, &target, Some("alpha"));
+        app.state.workspaces[0].tabs[0].set_custom_name("my tab".into());
+        rename_agent(&mut app, &target, None);
+        assert_eq!(tab_label(&app).as_deref(), Some("my tab"));
+    }
+
+    #[test]
+    fn agent_rename_tab_sync_can_be_disabled_by_config() {
+        let mut app = app_with_agent();
+        app.state.rename_agent_renames_tab = false;
+        let pane_id = app.state.workspaces[0].tabs[0].root_pane;
+        let target = mark_agent(&mut app, pane_id);
+
+        rename_agent(&mut app, &target, Some("opt-out"));
+        assert_eq!(tab_label(&app), None);
+        app.state.workspaces[0].tabs[0].set_custom_name("opt-out".into());
+        rename_agent(&mut app, &target, None);
+        assert_eq!(tab_label(&app).as_deref(), Some("opt-out"));
+    }
+
+    #[test]
+    fn agent_rename_tab_label_and_agent_name_survive_a_snapshot() {
+        let mut app = app_with_agent();
+        let pane_id = app.state.workspaces[0].tabs[0].root_pane;
+        let target = mark_agent(&mut app, pane_id);
+        rename_agent(&mut app, &target, Some("persisted"));
+
+        let snapshot = crate::persist::capture(
+            &app.state.workspaces,
+            &app.state.terminals,
+            &app.terminal_runtimes,
+            app.state.active,
+            app.state.selected,
+        );
+        let json = serde_json::to_string(&snapshot).unwrap();
+        let restored: crate::persist::SessionSnapshot = serde_json::from_str(&json).unwrap();
+        let tab = &restored.workspaces[0].tabs[0];
+        assert_eq!(tab.custom_name.as_deref(), Some("persisted"));
+        assert!(tab
+            .panes
+            .values()
+            .any(|pane| pane.agent_name.as_deref() == Some("persisted")));
+    }
+
     #[test]
     fn agent_target_prefers_a_pane_id_over_an_agent_named_like_one() {
         let mut app = app_with_agent();

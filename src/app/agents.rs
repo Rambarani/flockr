@@ -156,12 +156,21 @@ impl App {
         if terminal.effective_agent_label().is_none() {
             return Err(AgentRenameError::NotAgent);
         }
-        match normalized_name {
+        let old_name = terminal.agent_name.clone();
+        match normalized_name.clone() {
             Some(name) => terminal.set_agent_name(name),
             None => terminal.clear_agent_name(),
         }
         self.state.mark_session_dirty();
         self.schedule_session_save();
+        if self.state.rename_agent_renames_tab {
+            self.sync_tab_label_with_agent_rename(
+                resolved.ws_idx,
+                resolved.tab_idx,
+                old_name.as_deref(),
+                normalized_name.as_deref(),
+            );
+        }
         self.emit_pane_updated(resolved.ws_idx, resolved.pane_id);
         self.agent_info(resolved.ws_idx, resolved.pane_id)
             .ok_or_else(|| {
@@ -169,6 +178,73 @@ impl App {
                     target: target.to_string(),
                 })
             })
+    }
+
+    /// Keeps a tab's label in step with the agent renamed inside it.
+    ///
+    /// Setting a name renames the tab only when it holds exactly one agent
+    /// pane (shell panes do not count). Clearing reverts the tab to its
+    /// default label only when the label still equals the old agent name, so
+    /// a label the user set by hand is never touched. Emits the same
+    /// `tab.renamed` event as a direct tab rename.
+    fn sync_tab_label_with_agent_rename(
+        &mut self,
+        ws_idx: usize,
+        tab_idx: usize,
+        old_name: Option<&str>,
+        new_name: Option<&str>,
+    ) {
+        let Some(tab) = self
+            .state
+            .workspaces
+            .get(ws_idx)
+            .and_then(|ws| ws.tabs.get(tab_idx))
+        else {
+            return;
+        };
+        let new_custom_name = match new_name {
+            Some(name) => {
+                let agent_panes = tab
+                    .layout
+                    .pane_ids()
+                    .into_iter()
+                    .filter(|pane_id| {
+                        tab.panes
+                            .get(pane_id)
+                            .and_then(|pane| self.state.terminals.get(&pane.attached_terminal_id))
+                            .is_some_and(|terminal| terminal.is_agent_terminal())
+                    })
+                    .count();
+                if agent_panes != 1 || tab.custom_name.as_deref() == Some(name) {
+                    return;
+                }
+                Some(name.to_string())
+            }
+            None => {
+                if old_name.is_none() || tab.custom_name.as_deref() != old_name {
+                    return;
+                }
+                None
+            }
+        };
+        let tab = &mut self.state.workspaces[ws_idx].tabs[tab_idx];
+        tab.custom_name = new_custom_name;
+        let Some(label) = self.state.workspaces[ws_idx].tab_display_name(tab_idx) else {
+            return;
+        };
+        let Some(tab_id) = self.public_tab_id(ws_idx, tab_idx) else {
+            return;
+        };
+        let workspace_id = self.public_workspace_id(ws_idx);
+        crate::logging::tab_renamed(&self.state.workspaces[ws_idx].id, &tab_id);
+        self.emit_event(crate::api::schema::EventEnvelope {
+            event: crate::api::schema::EventKind::TabRenamed,
+            data: crate::api::schema::EventData::TabRenamed {
+                tab_id,
+                workspace_id,
+                label,
+            },
+        });
     }
 
     pub(super) fn start_agent(

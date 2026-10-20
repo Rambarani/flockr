@@ -831,6 +831,8 @@ pub struct AppState {
     pub sidebar_spaces: crate::config::SpacesSidebarConfig,
     pub next_agent_state_change_seq: u64,
     pub confirm_close: bool,
+    /// Agent rename also renames a single-agent tab (`ui.rename_agent_renames_tab`).
+    pub rename_agent_renames_tab: bool,
     pub pane_borders: crate::config::PaneBordersConfig,
     pub pane_outer_borders: bool,
     pub pane_scrollbars: bool,
@@ -1073,6 +1075,7 @@ impl AppState {
             sidebar_spaces: crate::config::SpacesSidebarConfig::default(),
             next_agent_state_change_seq: 0,
             confirm_close: true,
+            rename_agent_renames_tab: true,
             pane_borders: crate::config::PaneBordersConfig::Auto,
             pane_outer_borders: true,
             pane_scrollbars: true,

@@ -1077,6 +1077,8 @@ pub struct UiConfig {
     pub prompt_new_tab_name: bool,
     /// Ask for a workspace name before interactive creation. Default: false.
     pub prompt_new_workspace_name: bool,
+    /// Renaming an agent also renames its tab when the tab holds exactly one agent. Default: true.
+    pub rename_agent_renames_tab: bool,
     /// Draw borders around split panes. auto draws them only for split panes,
     /// always also frames a lone pane (only while pane_outer_borders is
     /// enabled, since every edge of a lone pane is an outer edge), off
@@ -1337,6 +1339,7 @@ impl Default for UiConfig {
             confirm_close: true,
             prompt_new_tab_name: true,
             prompt_new_workspace_name: false,
+            rename_agent_renames_tab: true,
             pane_borders: PaneBordersConfig::Auto,
             pane_outer_borders: true,
             pane_scrollbars: true,
@@ -1793,6 +1796,13 @@ directory = "~/Projects/flockr-worktrees"
 "#;
         let config: Config = toml::from_str(toml).unwrap();
         assert_eq!(config.worktrees.directory, "~/Projects/flockr-worktrees");
+    }
+
+    #[test]
+    fn rename_agent_renames_tab_defaults_on_and_parses() {
+        assert!(Config::default().ui.rename_agent_renames_tab);
+        let config: Config = toml::from_str("[ui]\nrename_agent_renames_tab = false\n").unwrap();
+        assert!(!config.ui.rename_agent_renames_tab);
     }
 
     #[test]

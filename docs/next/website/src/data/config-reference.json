@@ -1073,6 +1073,12 @@
           "description": "Ask for a workspace name before interactive TUI creation."
         },
         {
+          "key": "ui.rename_agent_renames_tab",
+          "type": "boolean",
+          "default": "true",
+          "description": "Renaming an agent also renames its tab when the tab holds exactly one agent (non-agent shell panes do not count). Clearing the agent name reverts the tab label only if it still equals the old agent name. Set false to keep tab names independent. Applies to the sidebar, CLI, and API rename alike."
+        },
+        {
           "key": "ui.pane_borders",
           "type": "enum",
           "default": "\"auto\"",

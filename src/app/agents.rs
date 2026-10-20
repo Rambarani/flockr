@@ -178,9 +178,7 @@ impl App {
             .resolve_agent_target(target)
             .map_err(AgentRenameError::Target)?;
         let normalized_name = match name {
-            Some(name) => {
-                Some(normalize_agent_name(&name).map_err(AgentRenameError::InvalidName)?)
-            }
+            Some(name) => Some(normalize_agent_name(&name).map_err(AgentRenameError::InvalidName)?),
             None => None,
         };
 

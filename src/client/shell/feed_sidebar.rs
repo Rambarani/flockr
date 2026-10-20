@@ -18,6 +18,7 @@ use std::collections::HashSet;
 
 use ratatui::style::{Modifier, Style};
 
+use super::feed_overlay::is_workable;
 use super::feed_state::{FeedClientState, FeedOrigin};
 use super::render::{display_width, put_text};
 use super::*;
@@ -650,7 +651,7 @@ impl ClientShellState {
                         .feeds
                         .items_of(&job_id)
                         .iter()
-                        .filter(|item| item.in_group(&group_id))
+                        .filter(|item| item.in_group(&group_id) && is_workable(item))
                         .map(|item| item.id.clone())
                         .collect();
                     self.start_feed_work(job_id, ids, outcome);

@@ -527,7 +527,7 @@ Master-detail view: list on the left, detail pane on the right (title, state, su
 | `x` | Select / unselect the current item (a `✓` column; the header shows `N selected`) |
 | `X` | Clear the selection |
 | `w` | **Work on it**: open a new tab and start an agent (default `claude`) with the selected items, or the current item if none are selected |
-| `W` | **Work on all**: the same, with every item of the list as shown (current category tab and filter), up to 50 |
+| `W` | **Work on all**: the same, with every not-done item of the list as shown (current category tab and filter), up to 50 |
 | `esc` or `q` | Leave zoom, then clear the selection, then the filter, then close |
 
 #### Work on items in a new agent tab (`x` / `w`)

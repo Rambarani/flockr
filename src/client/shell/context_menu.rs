@@ -84,7 +84,11 @@ impl ClientContextMenuOverlay {
                 ..
             } => {
                 let mut items = Vec::new();
-                if let Some((_, title)) = group {
+                // The Done tab holds history; there is nothing to work on.
+                if let Some((_, title)) = group
+                    .as_ref()
+                    .filter(|(id, _)| id != super::feed_overlay::DONE_GROUP_ID)
+                {
                     items.push(item_for(
                         format!("Work on all in {title}"),
                         Action::FeedWorkAll,

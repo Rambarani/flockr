@@ -2968,8 +2968,77 @@ fn w_capital_in_the_all_tab_of_a_flat_feed_takes_the_whole_list() {
     let sent = requests(&press(&mut state, 'W'));
     assert_eq!(
         sent[0].method,
-        work_params(&["nh-1", "nh-2", "nh-3", "nh-4", "nh-5"])
+        work_params(&["nh-1", "nh-2", "nh-3", "nh-5"]),
+        "nh-4 is done and is left out"
     );
+}
+
+#[test]
+fn w_capital_skips_done_items_and_the_hint_counts_only_the_rest() {
+    let (feed, mut items) = grouped_feed();
+    // nh-5 is not in state Done but sits in the Done group.
+    items[4].group = Some("done".into());
+    let mut state = overlay_state(vec![(feed, items)]);
+    let frame = compose_at(&mut state, 220, 50);
+    assert!(frame.contains("w work · W work all (3)"), "{frame}");
+    let sent = requests(&press(&mut state, 'W'));
+    assert_eq!(sent[0].method, work_params(&["nh-1", "nh-2", "nh-3"]));
+}
+
+#[test]
+fn w_capital_on_a_list_of_only_done_items_has_nothing_to_work_on() {
+    let items = vec![item("d-1", "Old", FeedItemState::Done)];
+    let mut state = overlay_state(vec![(
+        summary("workbox-sync", "Today (workbox)", 1, 0, 1),
+        items,
+    )]);
+    compose(&mut state);
+    let sent = requests(&press(&mut state, 'W'));
+    assert!(sent.is_empty());
+    assert_eq!(status_line(&state).as_deref(), Some("nothing to work on"));
+}
+
+#[test]
+fn the_done_group_row_menu_has_no_work_on_all_entry() {
+    let (mut feed, mut items) = grouped_feed();
+    items[3].group = Some("done".into());
+    feed.groups[2] = group_info("done", "Done", None, 1, 0);
+    let mut state = state_with_feeds(&Config::default(), vec![(feed, items)]);
+    let hit = state
+        .hits
+        .feed
+        .groups
+        .iter()
+        .find(|hit| hit.group_id == "done")
+        .expect("done row")
+        .rect;
+    right_click(&mut state, hit);
+    let labels: Vec<String> = match &state.overlay {
+        Some(ClientShellOverlay::ContextMenu(menu)) => menu
+            .items()
+            .iter()
+            .map(|item| item.label.to_string())
+            .collect(),
+        other => panic!("expected a context menu, got {other:?}"),
+    };
+    assert!(
+        labels.iter().all(|label| !label.starts_with("Work on all")),
+        "{labels:?}"
+    );
+}
+
+#[test]
+fn a_group_row_menu_work_on_all_leaves_out_done_items() {
+    let (mut feed, mut items) = grouped_feed();
+    // A done item that also belongs to the Reviews group.
+    items[1].state = FeedItemState::Done;
+    feed.groups[0] = group_info("reviews", "Review Requests", Some("Reviews"), 2, 1);
+    let mut state = state_with_feeds(&Config::default(), vec![(feed, items)]);
+    let row = state.hits.feed.groups[0].rect;
+    right_click(&mut state, row);
+    let mut outcome = ClientShellInput::default();
+    state.activate_context_menu_item(0, &mut outcome);
+    assert_eq!(requests(&outcome)[0].method, work_params(&["nh-1"]));
 }
 
 #[test]
@@ -2999,7 +3068,7 @@ fn w_capital_cuts_to_the_work_limit_and_says_so() {
 fn the_footer_offers_w_and_capital_w_with_the_list_size() {
     let mut state = overlay_state(vec![feed_with_today()]);
     let frame = compose_at(&mut state, 220, 50);
-    assert!(frame.contains("w work · W work all (5)"), "{frame}");
+    assert!(frame.contains("w work · W work all (4)"), "{frame}");
     press(&mut state, '1');
     let frame = compose_at(&mut state, 220, 50);
     assert!(frame.contains("w work · W work all (2)"), "{frame}");

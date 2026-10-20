@@ -89,6 +89,38 @@ pub(super) struct AgentGroupMember<'a> {
     pub(super) pane_id: &'a str,
 }
 
+/// Position of an agent row inside its group, for the tree guides.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(super) enum TreeGuide {
+    /// Ungrouped list: no guides.
+    #[default]
+    None,
+    /// A group child with siblings below it (`├─`).
+    Middle,
+    /// The last child of its group (`└─`).
+    Last,
+}
+
+/// Mark every row as a middle or last child of the header above it.
+pub(super) fn assign_tree_guides<T>(
+    items: &mut [AgentListItem<T>],
+    mut set: impl FnMut(&mut T, TreeGuide),
+) {
+    for index in 0..items.len() {
+        let last = !matches!(items.get(index + 1), Some(AgentListItem::Row(_)));
+        if let AgentListItem::Row(row) = &mut items[index] {
+            set(
+                row,
+                if last {
+                    TreeGuide::Last
+                } else {
+                    TreeGuide::Middle
+                },
+            );
+        }
+    }
+}
+
 pub(super) fn display_status(
     status: crate::api::schema::AgentStatus,
 ) -> crate::api::schema::AgentStatus {
@@ -263,10 +295,9 @@ pub(super) fn render_group_header(
         .fg(if blocked {
             // A hidden blocked agent needs attention more than focus does.
             status_color(AgentStatus::Blocked, palette)
-        } else if header.focused {
-            palette.text
         } else {
-            palette.overlay0
+            // Workspace names stand apart from the agent rows below them.
+            palette.blue
         })
         .add_modifier(Modifier::BOLD);
     if header.focused {

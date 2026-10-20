@@ -10,8 +10,9 @@ use ratatui::{
 };
 
 use super::agent_groups::{
-    group_agent_items, group_headers_enabled, item_layout, render_group_header, ungrouped_items,
-    AgentGroupMember, AgentGroupSeed, AgentHeaderHit, AgentListItem, CollapsedGroups,
+    assign_tree_guides, group_agent_items, group_headers_enabled, item_layout, render_group_header,
+    ungrouped_items, AgentGroupMember, AgentGroupSeed, AgentHeaderHit, AgentListItem,
+    CollapsedGroups, TreeGuide,
 };
 use super::*;
 
@@ -20,6 +21,58 @@ pub(super) struct AgentRow {
     pub(super) status: crate::api::schema::AgentStatus,
     pub(super) focused: bool,
     pub(super) rows: Vec<Vec<crate::ui::ResolvedToken>>,
+    /// Tree guide drawn left of the row; set only in grouped lists.
+    pub(super) tree: TreeGuide,
+}
+
+/// Drop the machine and workspace labels a group header already shows. A line
+/// that would be left with nothing but the state icon keeps its full form.
+pub(super) fn strip_group_labels(row: &mut AgentRow, machine_too: bool) {
+    use crate::ui::ResolvedTokenKind;
+    let redundant = |kind: &ResolvedTokenKind| match kind {
+        ResolvedTokenKind::Workspace(_) => true,
+        ResolvedTokenKind::Machine(_) => machine_too,
+        _ => false,
+    };
+    for line in &mut row.rows {
+        if !line.iter().any(|token| redundant(&token.kind)) {
+            continue;
+        }
+        let keeps_content = line.iter().any(|token| {
+            !redundant(&token.kind) && !matches!(token.kind, ResolvedTokenKind::StateIcon)
+        });
+        if keeps_content {
+            line.retain(|token| !redundant(&token.kind));
+        }
+    }
+}
+
+const GUIDE_FULL_MIN_WIDTH: u16 = 14;
+const GUIDE_COMPACT_MIN_WIDTH: u16 = 8;
+
+/// Guide text for line `index` of a row and its display width. Guides shrink
+/// and then vanish on narrow sidebars so the state icon always fits.
+fn tree_prefix(tree: TreeGuide, index: usize, width: u16) -> (&'static str, u16) {
+    let first = index == 0;
+    if tree == TreeGuide::None || width < GUIDE_COMPACT_MIN_WIDTH {
+        return if first { (" ", 1) } else { ("   ", 3) };
+    }
+    let last = tree == TreeGuide::Last;
+    if width >= GUIDE_FULL_MIN_WIDTH {
+        match (first, last) {
+            (true, false) => (" ├─ ", 4),
+            (true, true) => (" └─ ", 4),
+            (false, false) => (" │    ", 6),
+            (false, true) => ("      ", 6),
+        }
+    } else {
+        match (first, last) {
+            (true, false) => (" ├ ", 3),
+            (true, true) => (" └ ", 3),
+            (false, false) => (" │   ", 5),
+            (false, true) => ("     ", 5),
+        }
+    }
 }
 
 pub(super) fn ordered_agent_pane_ids(
@@ -281,11 +334,16 @@ pub(super) fn agent_items(
             (seed, row)
         })
         .collect();
-    group_agent_items(entries, collapsed, |row| AgentGroupMember {
+    let mut items = group_agent_items(entries, collapsed, |row| AgentGroupMember {
         status: row.status,
         focused: row.focused,
         pane_id: &row.pane_id,
-    })
+    });
+    assign_tree_guides(&mut items, |row, tree| {
+        row.tree = tree;
+        strip_group_labels(row, true);
+    });
+    items
 }
 
 pub(super) fn agent_row(
@@ -360,6 +418,7 @@ pub(super) fn agent_row(
         status: agent.agent_status,
         focused: agent.focused,
         rows,
+        tree: TreeGuide::None,
     })
 }
 
@@ -399,8 +458,12 @@ pub(super) fn render_agent_row(
         row.rows.clone()
     };
     for (index, tokens) in rows.iter().take(rect.height as usize).enumerate() {
-        let indent = if index == 0 { 1 } else { 3 };
-        let mut spans = vec![ratatui::text::Span::raw(" ".repeat(indent))];
+        let (prefix, indent) = tree_prefix(row.tree, index, rect.width);
+        let mut spans = vec![if row.tree == TreeGuide::None {
+            ratatui::text::Span::raw(prefix)
+        } else {
+            ratatui::text::Span::styled(prefix, secondary)
+        }];
         spans.extend(crate::ui::resolved_token_spans(
             tokens,
             icon,
@@ -409,7 +472,7 @@ pub(super) fn render_agent_row(
             secondary,
             secondary,
             palette,
-            rect.width.saturating_sub(indent as u16) as usize,
+            rect.width.saturating_sub(indent) as usize,
         ));
         Paragraph::new(Line::from(spans)).style(row_style).render(
             Rect::new(rect.x, rect.y + index as u16, rect.width, 1),

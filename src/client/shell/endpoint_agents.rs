@@ -1,7 +1,7 @@
 // Modified by flockr (https://github.com/Rambarani/flockr): changed from herdr v0.9.5 (Apache-2.0). See NOTICE.
 use super::agent_groups::{
-    group_agent_items, group_headers_enabled, item_layout, reveal_index, ungrouped_items,
-    AgentGroupMember, AgentGroupSeed, AgentListItem, CollapsedGroups,
+    assign_tree_guides, group_agent_items, group_headers_enabled, item_layout, reveal_index,
+    ungrouped_items, AgentGroupMember, AgentGroupSeed, AgentListItem, CollapsedGroups,
 };
 use super::render::put_text;
 use super::*;
@@ -236,9 +236,19 @@ fn agent_items(
     if !group_headers_enabled(config, agent_view_active) {
         return ungrouped_items(entries.into_iter().map(|(_, row)| row).collect());
     }
-    group_agent_items(entries, collapsed, |row| AgentGroupMember {
+    let single_machine = endpoints.len() <= 1;
+    let mut items = group_agent_items(entries, collapsed, |row| AgentGroupMember {
         status: row.agent.status,
         focused: row.agent.focused,
         pane_id: &row.agent.pane_id,
-    })
+    });
+    assign_tree_guides(&mut items, |row, tree| {
+        row.agent.tree = tree;
+        // Several machines: the header names `Machine · workspace` and the row
+        // keeps its full form.
+        if single_machine {
+            super::agent_sidebar::strip_group_labels(&mut row.agent, true);
+        }
+    });
+    items
 }

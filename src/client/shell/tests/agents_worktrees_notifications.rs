@@ -792,6 +792,12 @@ fn agent_sidebar_honors_priority_symbols_tokens_and_stable_hits() {
     assert_eq!(compact.cells[row_start].bg, compact.cells[row_start + 2].bg);
 }
 
+fn ungrouped_config() -> Config {
+    let mut config = Config::default();
+    config.ui.sidebar.group_agents_by_workspace = false;
+    config
+}
+
 #[test]
 fn muted_agent_sidebar_rows_do_not_stack_terminal_faint() {
     let mut projected = snapshot();
@@ -813,7 +819,7 @@ fn muted_agent_sidebar_rows_do_not_stack_terminal_faint() {
         tokens: Vec::new(),
         focused: true,
     }];
-    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&ungrouped_config()));
     state.set_snapshot(Box::new(projected));
     state.set_pane_surface(surface());
     let frame = state.compose(106, 30).expect("agent sidebar frame");
@@ -1764,6 +1770,179 @@ fn agent_sidebar_groups_agents_under_workspace_headers() {
     assert_eq!(second, vec![body.y + 5]);
     assert_eq!(hits[2], ("pane_3", body.y + 6));
     assert!(hits.iter().all(|(_, y)| *y != first[0] && *y != second[0]));
+}
+
+/// Sidebar body rows (trimmed of the right-hand border) for the agent list.
+fn agent_body_lines(state: &ClientShellState, frame: &FrameData) -> Vec<String> {
+    let body = state.hits.agent_body;
+    let rows = frame_rows(frame);
+    (body.y..body.bottom())
+        .map(|y| {
+            rows[y as usize]
+                .chars()
+                .skip(body.x as usize)
+                .take(body.width as usize)
+                .collect::<String>()
+                .trim_end()
+                .to_owned()
+        })
+        .collect()
+}
+
+fn agent_state_with_tab_label(label: &str, collapsed: &[&str]) -> (ClientShellState, FrameData) {
+    let mut projected = two_workspace_agent_snapshot();
+    projected.tabs[0].label = label.into();
+    projected.tabs[0].custom_label = true;
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    for key in collapsed {
+        state.collapsed_groups.insert((*key).into());
+    }
+    state.set_snapshot(Box::new(projected));
+    state.set_pane_surface(surface());
+    let frame = state.compose(106, 30).expect("agent sidebar frame").frame;
+    (state, frame)
+}
+
+#[test]
+fn agent_tree_guides_mark_first_middle_last_and_single_children() {
+    let (state, frame) = agent_state_with_tab_label("Fidelity", &[]);
+    let lines = agent_body_lines(&state, &frame);
+    // Group one: a middle child then the last child. Group two: a lone child.
+    assert!(lines[0].starts_with(" ▾ client-shell"), "{lines:?}");
+    assert_eq!(lines[1], " ├─ ● Fidelity", "{lines:?}");
+    assert_eq!(lines[2], " │    pane_1", "{lines:?}");
+    assert_eq!(lines[3], " └─ ● Fidelity", "{lines:?}");
+    assert_eq!(lines[4], "      pane_2", "{lines:?}");
+    assert!(lines[5].starts_with(" ▾ api-server"), "{lines:?}");
+    assert_eq!(lines[6], " └─ ○ Fidelity", "{lines:?}");
+    assert_eq!(lines[7], "      pane_3", "{lines:?}");
+}
+
+#[test]
+fn grouped_agent_rows_drop_the_workspace_prefix_but_ungrouped_rows_keep_it() {
+    let (state, frame) = agent_state_with_tab_label("Fidelity", &[]);
+    let lines = agent_body_lines(&state, &frame);
+    assert!(
+        lines[1..5]
+            .iter()
+            .all(|line| !line.contains("client-shell")),
+        "{lines:?}"
+    );
+
+    let mut config = Config::default();
+    config.ui.sidebar.group_agents_by_workspace = false;
+    let (state, frame) = sidebar_agent_state(&config);
+    let lines = agent_body_lines(&state, &frame);
+    assert!(
+        lines.iter().any(|line| line.contains("client-shell")),
+        "{lines:?}"
+    );
+    assert!(lines.iter().all(|line| !line.contains('├')), "{lines:?}");
+    assert!(lines.iter().all(|line| !line.contains('└')), "{lines:?}");
+}
+
+#[test]
+fn grouped_row_without_a_tab_label_keeps_the_workspace_as_its_label() {
+    let (state, frame) = sidebar_agent_state(&Config::default());
+    let lines = agent_body_lines(&state, &frame);
+    assert_eq!(lines[1], " ├─ ● client-shell", "{lines:?}");
+}
+
+#[test]
+fn collapsed_agent_group_shows_only_its_header_without_guides() {
+    let (state, frame) = agent_state_with_tab_label("Fidelity", &["agents:ws_1"]);
+    let lines = agent_body_lines(&state, &frame);
+    assert!(lines[0].starts_with(" ▸ client-shell"), "{lines:?}");
+    assert!(lines[1].starts_with(" ▾ api-server"), "{lines:?}");
+    assert_eq!(lines[2], " └─ ○ Fidelity", "{lines:?}");
+    assert_eq!(state.hits.agent_headers.len(), 2);
+}
+
+#[test]
+fn group_header_uses_the_blue_palette_token_and_stays_bold() {
+    let (state, frame) = sidebar_agent_state(&Config::default());
+    let header = state.hits.agent_headers[1].rect;
+    let (x, y) = cell_symbol_position(&frame, header, "a");
+    let buffer = frame.to_ratatui_buffer().expect("sidebar buffer");
+    let cell = buffer.cell((x, y)).expect("header cell");
+    assert_eq!(cell.fg, state.config.palette.blue);
+    assert!(cell.modifier.contains(Modifier::BOLD));
+}
+
+#[test]
+fn tree_guides_use_the_muted_color() {
+    let (state, frame) = agent_state_with_tab_label("Fidelity", &[]);
+    let row = state.hits.agents[0].0;
+    let (x, y) = cell_symbol_position(&frame, row, "├");
+    let buffer = frame.to_ratatui_buffer().expect("sidebar buffer");
+    assert_eq!(
+        buffer.cell((x, y)).unwrap().fg,
+        state.config.palette.overlay0
+    );
+}
+
+#[test]
+fn tree_guides_shrink_then_vanish_on_narrow_rows() {
+    use crate::client::shell::agent_groups::TreeGuide;
+    use crate::client::shell::agent_sidebar::{render_agent_row, AgentRow};
+    use crate::ui::{ResolvedToken, ResolvedTokenKind};
+
+    let config = ClientShellConfig::from_config(&Config::default());
+    let render = |tree: TreeGuide, width: u16| {
+        let row = AgentRow {
+            pane_id: "pane_1".into(),
+            status: AgentStatus::Idle,
+            focused: false,
+            rows: vec![
+                vec![
+                    ResolvedToken {
+                        kind: ResolvedTokenKind::StateIcon,
+                        style: Default::default(),
+                    },
+                    ResolvedToken {
+                        kind: ResolvedTokenKind::Tab("webapp".into()),
+                        style: Default::default(),
+                    },
+                ],
+                vec![ResolvedToken {
+                    kind: ResolvedTokenKind::Agent("claude".into()),
+                    style: Default::default(),
+                }],
+            ],
+            tree,
+        };
+        let area = Rect::new(0, 0, width, 2);
+        let mut buffer = Buffer::empty(area);
+        render_agent_row(&mut buffer, area, &row, &config);
+        (0..2)
+            .map(|y| {
+                (0..width)
+                    .map(|x| buffer[(x, y)].symbol().to_owned())
+                    .collect::<String>()
+                    .trim_end()
+                    .to_owned()
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        render(TreeGuide::Middle, 20),
+        [" ├─ ○ webapp", " │    claude"]
+    );
+    assert_eq!(
+        render(TreeGuide::Last, 20),
+        [" └─ ○ webapp", "      claude"]
+    );
+    assert_eq!(render(TreeGuide::Middle, 10), [" ├ ○ weba…", " │   clau…"]);
+    // Too narrow for guides: the original one-column indent, icon intact.
+    assert_eq!(render(TreeGuide::Middle, 6), [" ○ we…", "   cl…"]);
+    assert_eq!(render(TreeGuide::None, 20), [" ○ webapp", "   claude"]);
+    // The state icon is never pushed off the row.
+    for width in 1..=20 {
+        let lines = render(TreeGuide::Middle, width);
+        if width >= 4 {
+            assert!(lines[0].contains('○'), "width {width}: {lines:?}");
+        }
+    }
 }
 
 #[test]

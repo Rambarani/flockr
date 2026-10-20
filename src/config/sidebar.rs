@@ -114,6 +114,10 @@ pub enum AgentSidebarToken {
     Tab,
     Pane,
     Agent,
+    /// The agent's user-facing name: its alias, else the tab, else the pane name.
+    Label,
+    /// The detected or reported agent kind, never the alias.
+    AgentKind,
     TerminalTitle,
     TerminalTitleStripped,
     Custom(String),
@@ -278,6 +282,8 @@ fn agent_token_name(token: &AgentSidebarToken) -> String {
         AgentSidebarToken::Tab => "tab".into(),
         AgentSidebarToken::Pane => "pane".into(),
         AgentSidebarToken::Agent => "agent".into(),
+        AgentSidebarToken::Label => "label".into(),
+        AgentSidebarToken::AgentKind => "agent_kind".into(),
         AgentSidebarToken::TerminalTitle => "terminal_title".into(),
         AgentSidebarToken::TerminalTitleStripped => "terminal_title_stripped".into(),
         AgentSidebarToken::Custom(name) => format!("${name}"),
@@ -337,6 +343,8 @@ impl<'de> Deserialize<'de> for AgentSidebarToken {
                 ("tab", Self::Tab),
                 ("pane", Self::Pane),
                 ("agent", Self::Agent),
+                ("label", Self::Label),
+                ("agent_kind", Self::AgentKind),
                 ("terminal_title", Self::TerminalTitle),
                 ("terminal_title_stripped", Self::TerminalTitleStripped),
             ],
@@ -446,9 +454,9 @@ impl Default for AgentsSidebarConfig {
                     AgentSidebarToken::StateIcon,
                     AgentSidebarToken::Machine,
                     AgentSidebarToken::Workspace,
-                    AgentSidebarToken::Tab,
+                    AgentSidebarToken::Label,
                 ],
-                vec![AgentSidebarToken::Agent],
+                vec![AgentSidebarToken::AgentKind],
             ],
             rows_by_agent: BTreeMap::new(),
             row_gap: DEFAULT_SIDEBAR_ROW_GAP,
@@ -640,9 +648,9 @@ mod tests {
                     AgentSidebarToken::StateIcon,
                     AgentSidebarToken::Machine,
                     AgentSidebarToken::Workspace,
-                    AgentSidebarToken::Tab,
+                    AgentSidebarToken::Label,
                 ],
-                vec![AgentSidebarToken::Agent],
+                vec![AgentSidebarToken::AgentKind],
             ]
         );
         assert!(config.agents.rows_by_agent.is_empty());
@@ -675,6 +683,29 @@ row_gap = 3
 "#,
         )
         .expect("sidebar token config");
+
+        let named: crate::config::Config = toml::from_str(
+            r#"
+[ui.sidebar.agents]
+rows = [["state_icon", "machine", "workspace", "label", "agent_kind"], ["tab", "agent"]]
+"#,
+        )
+        .expect("label and agent_kind tokens");
+        assert_eq!(
+            named.ui.sidebar.agents.rows,
+            vec![
+                vec![
+                    AgentSidebarToken::StateIcon,
+                    AgentSidebarToken::Machine,
+                    AgentSidebarToken::Workspace,
+                    AgentSidebarToken::Label,
+                    AgentSidebarToken::AgentKind,
+                ],
+                vec![AgentSidebarToken::Tab, AgentSidebarToken::Agent],
+            ]
+        );
+        let encoded = toml::to_string(&named.ui.sidebar.agents).expect("encode rows");
+        assert!(encoded.contains("\"label\"") && encoded.contains("\"agent_kind\""));
 
         assert_eq!(
             config.ui.sidebar.agents.rows[1],

@@ -381,6 +381,13 @@ pub(super) fn agent_row(
         .or(agent.display_agent.as_deref())
         .or(agent.agent.as_deref())
         .or(agent.title.as_deref());
+    // `label`: the user's name for this agent. The alias wins, then a tab label
+    // the `tab` token would show, then a manual pane name. The workspace is not
+    // a fallback: the `workspace` token or the group header already shows it.
+    let pane_name = pane.and_then(|pane| pane.label.as_deref());
+    let label = agent.name.as_deref().or(tab_label).or(pane_name);
+    // `agent_kind`: what runs in the pane, never the alias.
+    let agent_kind = agent.display_agent.as_deref().or(agent.agent.as_deref());
     let labels = agent
         .state_labels
         .iter()
@@ -406,6 +413,8 @@ pub(super) fn agent_row(
                 .as_deref()
                 .or_else(|| pane.and_then(|pane| pane.label.as_deref())),
             agent_label,
+            label,
+            agent_kind,
             terminal_title: agent.terminal_title.as_deref(),
             terminal_title_stripped: agent.terminal_title_stripped.as_deref(),
             canonical_agent,

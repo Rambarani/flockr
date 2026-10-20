@@ -11,13 +11,40 @@ pub(crate) const MAX_AGENT_START_TIMEOUT: Duration = Duration::from_secs(300);
 pub(crate) const AGENT_START_SETTLE_DELAY: Duration = Duration::from_secs(3);
 const INVALID_AGENT_TIMEOUT_MESSAGE: &str =
     "agent start timeout must be greater than 3000ms and at most 300000ms";
-const INVALID_AGENT_NAME_MESSAGE: &str = "agent name must start with a lowercase letter and contain only lowercase letters, digits, '-' or '_' (1-32 characters)";
+/// Longest agent name, counted in Unicode scalar values (`char`s). Scalars are
+/// used instead of display width so the limit is identical for every client and
+/// the server; terminals decide how wide a name renders.
+pub(crate) const MAX_AGENT_NAME_CHARS: usize = 64;
+const INVALID_AGENT_NAME_MESSAGE: &str =
+    "agent name must be 1-64 characters after trimming and contain no control characters or line breaks";
 
-pub(crate) fn valid_agent_name(name: &str) -> bool {
-    let mut chars = name.chars();
-    matches!(chars.next(), Some('a'..='z'))
-        && name.len() <= 32
-        && chars.all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || matches!(ch, '-' | '_'))
+/// Why a user-supplied agent name was rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AgentNameError {
+    Empty,
+    TooLong,
+    ControlCharacter,
+}
+
+/// Normalizes a user-supplied agent name: surrounding whitespace is trimmed,
+/// then the name must be non-empty, at most [`MAX_AGENT_NAME_CHARS`] characters,
+/// and free of control characters and Unicode line/paragraph separators.
+/// Case and inner spaces are preserved; lookups compare names exactly.
+pub(crate) fn normalize_agent_name(name: &str) -> Result<String, AgentNameError> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err(AgentNameError::Empty);
+    }
+    if trimmed
+        .chars()
+        .any(|ch| ch.is_control() || matches!(ch, '\u{2028}' | '\u{2029}'))
+    {
+        return Err(AgentNameError::ControlCharacter);
+    }
+    if trimmed.chars().count() > MAX_AGENT_NAME_CHARS {
+        return Err(AgentNameError::TooLong);
+    }
+    Ok(trimmed.to_owned())
 }
 
 impl App {
@@ -97,8 +124,9 @@ impl App {
             .resolve_agent_target(target)
             .map_err(AgentRenameError::Target)?;
         let normalized_name = match name {
-            Some(name) if valid_agent_name(&name) => Some(name),
-            Some(_) => return Err(AgentRenameError::InvalidName),
+            Some(name) => {
+                Some(normalize_agent_name(&name).map_err(|_| AgentRenameError::InvalidName)?)
+            }
             None => None,
         };
 
@@ -147,10 +175,7 @@ impl App {
         &mut self,
         params: AgentStartParams,
     ) -> Result<(crate::api::schema::AgentInfo, Vec<String>), AgentStartError> {
-        let name = params.name;
-        if !valid_agent_name(&name) {
-            return Err(AgentStartError::InvalidName);
-        }
+        let name = normalize_agent_name(&params.name).map_err(|_| AgentStartError::InvalidName)?;
         let Some(kind) = crate::detect::parse_agent_label(&params.kind) else {
             return Err(AgentStartError::UnsupportedKind(params.kind));
         };
@@ -479,24 +504,43 @@ pub(super) enum AgentRenameError {
 
 #[cfg(test)]
 mod tests {
-    use super::valid_agent_name;
+    use super::{normalize_agent_name, AgentNameError, MAX_AGENT_NAME_CHARS};
 
     #[test]
-    fn agent_names_use_a_small_cli_safe_grammar() {
-        for name in ["a", "reviewer-one", "reviewer_2", &"a".repeat(32)] {
-            assert!(valid_agent_name(name), "expected {name:?} to be valid");
-        }
+    fn agent_names_accept_ordinary_text() {
         for name in [
-            "",
-            " reviewer",
-            "reviewer ",
-            "reviewer one",
-            "Reviewer",
-            "1reviewer",
-            "reviewer.one",
-            &"a".repeat(33),
+            "a",
+            "NH-123",
+            "Fix login bug",
+            "reviewer_2",
+            "w1:p2",
+            "\u{30c6}\u{30b9}\u{30c8} \u{1f600}",
+            &"a".repeat(MAX_AGENT_NAME_CHARS),
+            &"\u{1f600}".repeat(MAX_AGENT_NAME_CHARS),
         ] {
-            assert!(!valid_agent_name(name), "expected {name:?} to be invalid");
+            assert_eq!(normalize_agent_name(name).as_deref(), Ok(name));
+        }
+        assert_eq!(normalize_agent_name("  NH-123 \t").as_deref(), Ok("NH-123"));
+    }
+
+    #[test]
+    fn agent_names_reject_empty_long_and_control_text() {
+        assert_eq!(normalize_agent_name(""), Err(AgentNameError::Empty));
+        assert_eq!(normalize_agent_name(" \t "), Err(AgentNameError::Empty));
+        assert_eq!(
+            normalize_agent_name(&"a".repeat(MAX_AGENT_NAME_CHARS + 1)),
+            Err(AgentNameError::TooLong)
+        );
+        assert_eq!(
+            normalize_agent_name(&"\u{1f600}".repeat(MAX_AGENT_NAME_CHARS + 1)),
+            Err(AgentNameError::TooLong)
+        );
+        for name in ["a\nb", "a\tb", "a\x1bb", "a\x7fb", "a\u{85}b", "a\u{2028}b"] {
+            assert_eq!(
+                normalize_agent_name(name),
+                Err(AgentNameError::ControlCharacter),
+                "{name:?}"
+            );
         }
     }
 }

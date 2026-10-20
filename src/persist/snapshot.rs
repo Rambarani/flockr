@@ -1290,6 +1290,33 @@ mod tests {
     }
 
     #[test]
+    fn capture_round_trips_free_form_agent_names_through_json() {
+        let mut state = state_with_workspaces(&["one"]);
+        let root = state.workspaces[0].tabs[0].root_pane;
+        state.ensure_test_terminals();
+        let terminal_id = state.workspaces[0].tabs[0].panes[&root]
+            .attached_terminal_id
+            .clone();
+        let terminal = state.terminals.get_mut(&terminal_id).unwrap();
+        terminal.set_detected_state(
+            Some(crate::detect::Agent::Pi),
+            crate::detect::AgentState::Idle,
+        );
+        terminal.set_agent_name("Fix login bug \u{30c6}".into());
+
+        let snapshot = capture_from_state(&state);
+        let json = serde_json::to_string(&snapshot).unwrap();
+        let restored: SessionSnapshot = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(
+            restored.workspaces[0].tabs[0].panes[&root.raw()]
+                .agent_name
+                .as_deref(),
+            Some("Fix login bug \u{30c6}")
+        );
+    }
+
+    #[test]
     fn capture_contract_tracks_hook_authority_agent_session() {
         let mut state = state_with_workspaces(&["one"]);
         let session_path = test_session_path("pi-session.jsonl");

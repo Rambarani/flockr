@@ -16,7 +16,9 @@ const INVALID_AGENT_TIMEOUT_MESSAGE: &str =
 /// the server; terminals decide how wide a name renders.
 pub(crate) const MAX_AGENT_NAME_CHARS: usize = 64;
 const INVALID_AGENT_NAME_MESSAGE: &str =
-    "agent name must be 1-64 characters after trimming and contain no control characters or line breaks";
+    "agent name must be 1-64 characters after trimming and contain no control or invisible formatting characters or line breaks";
+const AGENT_NAME_LOOKS_LIKE_PANE_ID_MESSAGE: &str =
+    "agent name must not look like a pane ID (for example w1:p2); pane IDs always resolve as panes";
 
 /// Why a user-supplied agent name was rejected.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,11 +26,57 @@ pub(crate) enum AgentNameError {
     Empty,
     TooLong,
     ControlCharacter,
+    /// Unicode format character (category Cf): zero-width, bidi controls, ...
+    FormatCharacter,
+    /// Parses as a public pane ID such as `w1:p2`.
+    LooksLikePaneId,
+}
+
+impl AgentNameError {
+    fn message(self) -> &'static str {
+        match self {
+            Self::LooksLikePaneId => AGENT_NAME_LOOKS_LIKE_PANE_ID_MESSAGE,
+            _ => INVALID_AGENT_NAME_MESSAGE,
+        }
+    }
+}
+
+/// Whether `ch` is in Unicode general category Cf (format). No crate in the
+/// dependency tree exposes general categories, so the ranges are listed here
+/// (Unicode 16). Includes soft hyphen, zero-width space/joiners, bidi marks and
+/// isolates (U+202A-U+202E, U+2066-U+2069), the BOM and the tag characters.
+fn is_format_character(ch: char) -> bool {
+    matches!(
+        ch as u32,
+        0x00AD
+            | 0x0600..=0x0605
+            | 0x061C
+            | 0x06DD
+            | 0x070F
+            | 0x0890..=0x0891
+            | 0x08E2
+            | 0x180E
+            | 0x200B..=0x200F
+            | 0x202A..=0x202E
+            | 0x2060..=0x2064
+            | 0x2066..=0x206F
+            | 0xFEFF
+            | 0xFFF9..=0xFFFB
+            | 0x110BD
+            | 0x110CD
+            | 0x13430..=0x1343F
+            | 0x1BCA0..=0x1BCA3
+            | 0x1D173..=0x1D17A
+            | 0xE0001
+            | 0xE0020..=0xE007F
+    )
 }
 
 /// Normalizes a user-supplied agent name: surrounding whitespace is trimmed,
 /// then the name must be non-empty, at most [`MAX_AGENT_NAME_CHARS`] characters,
-/// and free of control characters and Unicode line/paragraph separators.
+/// and free of control characters, Unicode line/paragraph separators, Unicode
+/// format characters, and anything that parses as a public pane ID (`w1:p2`),
+/// because a pane ID always wins target resolution and would shadow the name.
 /// Case and inner spaces are preserved; lookups compare names exactly.
 pub(crate) fn normalize_agent_name(name: &str) -> Result<String, AgentNameError> {
     let trimmed = name.trim();
@@ -41,8 +89,14 @@ pub(crate) fn normalize_agent_name(name: &str) -> Result<String, AgentNameError>
     {
         return Err(AgentNameError::ControlCharacter);
     }
+    if trimmed.chars().any(is_format_character) {
+        return Err(AgentNameError::FormatCharacter);
+    }
     if trimmed.chars().count() > MAX_AGENT_NAME_CHARS {
         return Err(AgentNameError::TooLong);
+    }
+    if crate::workspace::looks_like_public_pane_id(trimmed) {
+        return Err(AgentNameError::LooksLikePaneId);
     }
     Ok(trimmed.to_owned())
 }
@@ -125,7 +179,7 @@ impl App {
             .map_err(AgentRenameError::Target)?;
         let normalized_name = match name {
             Some(name) => {
-                Some(normalize_agent_name(&name).map_err(|_| AgentRenameError::InvalidName)?)
+                Some(normalize_agent_name(&name).map_err(AgentRenameError::InvalidName)?)
             }
             None => None,
         };
@@ -182,11 +236,22 @@ impl App {
 
     /// Keeps a tab's label in step with the agent renamed inside it.
     ///
-    /// Setting a name renames the tab only when it holds exactly one agent
-    /// pane (shell panes do not count). Clearing reverts the tab to its
-    /// default label only when the label still equals the old agent name, so
-    /// a label the user set by hand is never touched. Emits the same
-    /// `tab.renamed` event as a direct tab rename.
+    /// The tab is only touched while it still follows the agent: its label is
+    /// the default (no custom name) or equals the agent's old name. A label the
+    /// user set by hand is never overwritten or cleared, so re-sending the same
+    /// agent name cannot clobber a later manual tab rename.
+    ///
+    /// For a tab that follows the agent:
+    /// - setting a name renames the tab when it holds exactly one agent pane
+    ///   (shell panes do not count); with several agent panes a label that
+    ///   still equals the old name reverts to the default instead of going
+    ///   stale;
+    /// - clearing the name reverts the tab to its default label only when the
+    ///   label still equals the old name.
+    ///
+    /// Known gaps: the label is not synced when the agent exits or is
+    /// released, nor by `agent start <name>`; only `agent rename` syncs.
+    /// Emits the same `tab.renamed` event as a direct tab rename.
     fn sync_tab_label_with_agent_rename(
         &mut self,
         ws_idx: usize,
@@ -202,6 +267,11 @@ impl App {
         else {
             return;
         };
+        let current = tab.custom_name.as_deref();
+        let label_is_old_name = old_name.is_some() && current == old_name;
+        if current.is_some() && !label_is_old_name {
+            return;
+        }
         let new_custom_name = match new_name {
             Some(name) => {
                 let agent_panes = tab
@@ -215,13 +285,19 @@ impl App {
                             .is_some_and(|terminal| terminal.is_agent_terminal())
                     })
                     .count();
-                if agent_panes != 1 || tab.custom_name.as_deref() == Some(name) {
+                if agent_panes == 1 {
+                    if current == Some(name) {
+                        return;
+                    }
+                    Some(name.to_string())
+                } else if label_is_old_name {
+                    None
+                } else {
                     return;
                 }
-                Some(name.to_string())
             }
             None => {
-                if old_name.is_none() || tab.custom_name.as_deref() != old_name {
+                if !label_is_old_name {
                     return;
                 }
                 None
@@ -251,7 +327,7 @@ impl App {
         &mut self,
         params: AgentStartParams,
     ) -> Result<(crate::api::schema::AgentInfo, Vec<String>), AgentStartError> {
-        let name = normalize_agent_name(&params.name).map_err(|_| AgentStartError::InvalidName)?;
+        let name = normalize_agent_name(&params.name).map_err(AgentStartError::InvalidName)?;
         let Some(kind) = crate::detect::parse_agent_label(&params.kind) else {
             return Err(AgentStartError::UnsupportedKind(params.kind));
         };
@@ -342,9 +418,9 @@ impl App {
         err: AgentStartError,
     ) -> crate::api::schema::ErrorBody {
         match err {
-            AgentStartError::InvalidName => crate::api::schema::ErrorBody {
+            AgentStartError::InvalidName(err) => crate::api::schema::ErrorBody {
                 code: "invalid_agent_name".into(),
-                message: INVALID_AGENT_NAME_MESSAGE.into(),
+                message: err.message().into(),
             },
             AgentStartError::UnsupportedKind(kind) => crate::api::schema::ErrorBody {
                 code: "unsupported_agent_kind".into(),
@@ -435,9 +511,9 @@ impl App {
     ) -> crate::api::schema::ErrorBody {
         match err {
             AgentRenameError::Target(err) => self.agent_target_error_body(err),
-            AgentRenameError::InvalidName => crate::api::schema::ErrorBody {
+            AgentRenameError::InvalidName(err) => crate::api::schema::ErrorBody {
                 code: "invalid_agent_name".into(),
-                message: INVALID_AGENT_NAME_MESSAGE.into(),
+                message: err.message().into(),
             },
             AgentRenameError::NotAgent => crate::api::schema::ErrorBody {
                 code: "agent_not_found".into(),
@@ -553,7 +629,7 @@ fn live_runtime_agent(runtime: &crate::terminal::TerminalRuntime) -> Option<crat
 }
 
 pub(super) enum AgentStartError {
-    InvalidName,
+    InvalidName(AgentNameError),
     UnsupportedKind(String),
     InvalidArgument,
     InvalidTimeout,
@@ -569,7 +645,7 @@ pub(super) enum AgentStartError {
 
 pub(super) enum AgentRenameError {
     Target(TerminalTargetError),
-    InvalidName,
+    InvalidName(AgentNameError),
     NotAgent,
     PendingLaunch,
     DuplicateName {
@@ -589,7 +665,12 @@ mod tests {
             "NH-123",
             "Fix login bug",
             "reviewer_2",
-            "w1:p2",
+            "w1",
+            "p2",
+            "w1:",
+            "w1:p",
+            "w1:t2",
+            "w1-p2 ok",
             "\u{30c6}\u{30b9}\u{30c8} \u{1f600}",
             &"a".repeat(MAX_AGENT_NAME_CHARS),
             &"\u{1f600}".repeat(MAX_AGENT_NAME_CHARS),
@@ -597,6 +678,39 @@ mod tests {
             assert_eq!(normalize_agent_name(name).as_deref(), Ok(name));
         }
         assert_eq!(normalize_agent_name("  NH-123 \t").as_deref(), Ok("NH-123"));
+    }
+
+    #[test]
+    fn agent_names_reject_pane_id_lookalikes() {
+        for name in ["w1:p2", " w1:p2 ", "w3:pA", "wZ:p1B"] {
+            assert_eq!(
+                normalize_agent_name(name),
+                Err(AgentNameError::LooksLikePaneId),
+                "{name:?}"
+            );
+        }
+        assert!(AgentNameError::LooksLikePaneId
+            .message()
+            .contains("pane ID"));
+    }
+
+    #[test]
+    fn agent_names_reject_unicode_format_characters() {
+        for name in [
+            "a\u{200b}b",
+            "a\u{200d}b",
+            "\u{202e}evil",
+            "a\u{2066}b\u{2069}",
+            "a\u{feff}",
+            "a\u{00ad}b",
+            "a\u{e0041}b",
+        ] {
+            assert_eq!(
+                normalize_agent_name(name),
+                Err(AgentNameError::FormatCharacter),
+                "{name:?}"
+            );
+        }
     }
 
     #[test]

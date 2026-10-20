@@ -405,7 +405,7 @@ Space rows accept these built-in tokens:
 - `git_status` — Git ahead and behind counts when nonzero.
 - `$name` — custom workspace metadata named `name`.
 
-Renaming an agent changes its alias, never its tab: one tab can hold several agents. With `label` and `agent_kind`, a renamed agent's row reads `○ NH-123 · claude` where it read `○ 1 · claude` before, so the name takes the tab's place and the agent kind stays visible. Layouts that use `tab` and `agent` keep their earlier meaning: the alias replaces the agent kind there (`○ 1 · NH-123`). To get the label behavior in a one-line grouped layout, use:
+Renaming an agent changes its alias, and also renames its tab when the tab holds exactly one agent and still follows the agent (no custom tab name, or a name equal to the previous alias); a tab you named yourself is never changed, and a multi-agent tab is left alone. Set `ui.rename_agent_renames_tab = false` to keep tab names independent. With `label` and `agent_kind`, a renamed agent's row reads `○ NH-123 · claude` where it read `○ 1 · claude` before, so the name takes the tab's place and the agent kind stays visible. Layouts that use `tab` and `agent` keep their earlier meaning: the alias replaces the agent kind there (`○ 1 · NH-123`). To get the label behavior in a one-line grouped layout, use:
 
 ```toml
 [ui.sidebar.agents]

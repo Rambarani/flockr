@@ -143,7 +143,9 @@ like `ctrl+h`, `control+j`, `alt+x`, and `shift+tab`, function keys like
 `f1`, and named punctuation like `minus` and `plus`. They do not accept
 `prefix+` binding strings.
 
-`agent.start` and `agent.rename` accept any name of 1 to 64 Unicode characters after trimming surrounding whitespace, with no control characters or line breaks. Violations return `invalid_agent_name`. Names are stored exactly as given (case and inner spaces preserved) and `agent.*` targets match them exactly. A target that is a current pane ID always resolves as that pane before any agent name is considered.
+`agent.start` and `agent.rename` accept any name of 1 to 64 Unicode characters after trimming surrounding whitespace, with no control characters, line breaks, or invisible Unicode format characters (category Cf, such as zero-width spaces and joiners or bidi controls), and that do not look like a pane ID (`w1:p2`). Violations return `invalid_agent_name`. Names are stored exactly as given (case and inner spaces preserved) and `agent.*` targets match them exactly. A target that is a current pane ID always resolves as that pane, which is why pane-ID-shaped names are rejected.
+
+`agent.rename` may also emit `tab.renamed` when it syncs the label of the agent's single-agent tab (see `ui.rename_agent_renames_tab`); a hand-set tab label is never touched.
 
 On macOS, `pane.send_input` (used by `pane run`) and `agent.start` check the terminal's current canonical input limit before accepting a command into the input queue. An oversized encoded line, including Enter, is rejected in full; wait for the shell prompt and retry. Multiple short lines and raw-mode input remain supported. Successful responses still acknowledge queue admission, not command execution. This check covers the current submission only: it cannot inspect an earlier incomplete line or guarantee the terminal mode will remain unchanged while input is queued.
 

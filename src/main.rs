@@ -332,8 +332,9 @@ const DEFAULT_CONFIG: &str = r##"# flockr configuration
 # prompt_new_workspace_name = false
 
 # Renaming an agent (sidebar, CLI, or API) also renames its tab when that tab holds
-# exactly one agent. Clearing the agent name reverts the tab label if it still equals
-# the old agent name. Set false to keep tab names independent of agent names.
+# exactly one agent and still follows the agent (no custom name, or a name equal to
+# the previous agent name); a tab you named yourself is never overwritten. Clearing
+# the agent name reverts the tab label if it still equals the old agent name. Set false to keep tab names independent of agent names.
 # rename_agent_renames_tab = true
 
 # Draw borders around split panes.

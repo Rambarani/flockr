@@ -2078,7 +2078,7 @@ fn rename_agent_empty_name_clears_and_invalid_name_keeps_the_prompt_open() {
     let (mut state, _) = sidebar_agent_state(&Config::default());
     assert!(state.open_rename_agent_overlay("pane_2"));
     state.handle_input_bytes(&[0x15]);
-    state.handle_input_bytes(b"Not Valid");
+    state.handle_input_bytes("x".repeat(65).as_bytes());
     let rejected = state.handle_input_bytes(b"\r");
     assert!(rejected.actions.is_empty(), "invalid names are not sent");
     assert!(matches!(
@@ -2090,6 +2090,17 @@ fn rename_agent_empty_name_clears_and_invalid_name_keeps_the_prompt_open() {
     ));
     state.handle_input_bytes(&[0x15]);
     assert_agent_rename_request(&state.handle_input_bytes(b"\r"), "pane_2", None);
+}
+
+#[test]
+fn rename_agent_accepts_ticket_keys_and_spaced_names() {
+    for name in ["NH-123", "Fix login bug"] {
+        let (mut state, _) = sidebar_agent_state(&Config::default());
+        assert!(state.open_rename_agent_overlay("pane_2"));
+        state.handle_input_bytes(&[0x15]);
+        state.handle_input_bytes(name.as_bytes());
+        assert_agent_rename_request(&state.handle_input_bytes(b"\r"), "pane_2", Some(name));
+    }
 }
 
 #[test]

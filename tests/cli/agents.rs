@@ -779,7 +779,7 @@ fn agent_start_follows_its_named_terminal_when_the_pane_moves() {
 }
 
 #[test]
-fn agent_start_and_rename_reject_invalid_names() {
+fn agent_start_and_rename_validate_names() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
@@ -794,14 +794,14 @@ fn agent_start_and_rename_reject_invalid_names() {
         .as_str()
         .unwrap()
         .to_string();
-    let expected_message = "agent name must start with a lowercase letter and contain only lowercase letters, digits, '-' or '_' (1-32 characters)";
+    let expected_message = "agent name must be 1-64 characters after trimming and contain no control characters or line breaks";
 
     let started = run_cli(
         &socket_path,
         &[
             "agent",
             "start",
-            "reviewer one",
+            &"a".repeat(65),
             "--kind",
             "pi",
             "--pane",
@@ -829,11 +829,25 @@ fn agent_start_and_rename_reject_invalid_names() {
     )
     .status
     .success());
-    let renamed = run_cli(&socket_path, &["agent", "rename", &pane_id, "reviewer one"]);
-    assert_eq!(renamed.status.code(), Some(1));
-    let error: serde_json::Value = serde_json::from_slice(&renamed.stderr).unwrap();
-    assert_eq!(error["error"]["code"], "invalid_agent_name");
-    assert_eq!(error["error"]["message"], expected_message);
+    for bad in ["bad\nname".to_string(), "x".repeat(65), "   ".to_string()] {
+        let renamed = run_cli(&socket_path, &["agent", "rename", &pane_id, &bad]);
+        assert_eq!(renamed.status.code(), Some(1), "{bad:?}");
+        let error: serde_json::Value = serde_json::from_slice(&renamed.stderr).unwrap();
+        assert_eq!(error["error"]["code"], "invalid_agent_name");
+        assert_eq!(error["error"]["message"], expected_message);
+    }
+
+    for good in [
+        "NH-123",
+        "Fix login bug",
+        "\u{30c6}\u{30b9}\u{30c8}",
+        &"z".repeat(64),
+    ] {
+        let renamed = run_cli_json(&socket_path, &["agent", "rename", &pane_id, good]);
+        assert_eq!(renamed["result"]["agent"]["name"], good);
+        let fetched = run_cli_json(&socket_path, &["agent", "get", good]);
+        assert_eq!(fetched["result"]["agent"]["pane_id"], pane_id.as_str());
+    }
 
     cleanup_spawned_flockr(flockr, base);
 }

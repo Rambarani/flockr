@@ -950,4 +950,111 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn agent_rename_accepts_free_form_names_and_resolves_them_exactly() {
+        let mut app = app_with_agent();
+        let pane_id = app.state.workspaces[0].tabs[0].root_pane;
+        let terminal_id = app.state.workspaces[0].tabs[0].panes[&pane_id]
+            .attached_terminal_id
+            .clone();
+        app.state
+            .terminals
+            .get_mut(&terminal_id)
+            .unwrap()
+            .set_detected_state(Some(Agent::Pi), AgentState::Idle);
+        let target = app.public_pane_id(0, pane_id).unwrap();
+
+        for (input, stored) in [
+            ("NH-123", "NH-123"),
+            ("Fix login bug", "Fix login bug"),
+            ("  padded name  ", "padded name"),
+            ("\u{30c6}\u{30b9}\u{30c8}", "\u{30c6}\u{30b9}\u{30c8}"),
+        ] {
+            let response = app.handle_agent_rename(
+                "req".into(),
+                AgentRenameParams {
+                    target: target.clone(),
+                    name: Some(input.into()),
+                },
+            );
+            let success: SuccessResponse = serde_json::from_str(&response).unwrap();
+            assert!(matches!(success.result, ResponseResult::AgentInfo { .. }));
+            assert_eq!(
+                app.state.terminals[&terminal_id].agent_name.as_deref(),
+                Some(stored)
+            );
+            let resolved = app.resolve_agent_target(stored).unwrap();
+            assert_eq!(resolved.pane_id, pane_id);
+        }
+    }
+
+    #[test]
+    fn agent_rename_enforces_length_and_control_character_limits() {
+        let mut app = app_with_agent();
+        let pane_id = app.state.workspaces[0].tabs[0].root_pane;
+        let terminal_id = app.state.workspaces[0].tabs[0].panes[&pane_id]
+            .attached_terminal_id
+            .clone();
+        app.state
+            .terminals
+            .get_mut(&terminal_id)
+            .unwrap()
+            .set_detected_state(Some(Agent::Pi), AgentState::Idle);
+        let target = app.public_pane_id(0, pane_id).unwrap();
+
+        let rename = |app: &mut App, name: String| {
+            let response = app.handle_agent_rename(
+                "req".into(),
+                AgentRenameParams {
+                    target: target.clone(),
+                    name: Some(name),
+                },
+            );
+            serde_json::from_str::<serde_json::Value>(&response).unwrap()
+        };
+        assert!(rename(&mut app, "a".repeat(64))["result"].is_object());
+        for bad in [
+            "a".repeat(65),
+            String::new(),
+            "   ".into(),
+            "a\nb".into(),
+            "a\x1bb".into(),
+        ] {
+            let value = rename(&mut app, bad.clone());
+            assert_eq!(value["error"]["code"], "invalid_agent_name", "{bad:?}");
+        }
+        assert_eq!(
+            app.state.terminals[&terminal_id].agent_name.as_deref(),
+            Some("a".repeat(64).as_str())
+        );
+    }
+
+    #[test]
+    fn agent_target_prefers_a_pane_id_over_an_agent_named_like_one() {
+        let mut app = app_with_agent();
+        let pane_id = app.state.workspaces[0].tabs[0].root_pane;
+        let terminal_id = app.state.workspaces[0].tabs[0].panes[&pane_id]
+            .attached_terminal_id
+            .clone();
+        app.state
+            .terminals
+            .get_mut(&terminal_id)
+            .unwrap()
+            .set_detected_state(Some(Agent::Pi), AgentState::Idle);
+        let real_id = app.public_pane_id(0, pane_id).unwrap();
+
+        let other = crate::workspace::Workspace::test_new("other");
+        let other_pane = other.tabs[0].root_pane;
+        let other_terminal = other.terminal_id(other_pane).unwrap().clone();
+        app.state.workspaces.push(other);
+        app.state.ensure_test_terminals();
+        let terminal = app.state.terminals.get_mut(&other_terminal).unwrap();
+        terminal.set_detected_state(Some(Agent::Pi), AgentState::Idle);
+        terminal.set_agent_name(real_id.clone());
+
+        // The pane id wins over the other agent's name, which stays unreachable by that string.
+        let resolved = app.resolve_agent_target(&real_id).unwrap();
+        assert_eq!(resolved.pane_id, pane_id);
+    }
 }

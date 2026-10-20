@@ -986,14 +986,14 @@ impl ClientShellState {
         };
         if matches!(rename.target, ClientRenameTarget::Agent { .. })
             && !rename.input.trim().is_empty()
-            && !crate::app::valid_agent_name(rename.input.trim())
+            && crate::app::normalize_agent_name(rename.input.trim()).is_err()
         {
             // Keep the prompt open so the typed name can be corrected.
             self.push_endpoint_notice(
                 ClientEndpointNoticeKind::Rejected,
                 "rename_agent_invalid_name",
                 "Invalid agent name",
-                "Use a-z, 0-9, - and _, start with a letter, max 32 characters",
+                "max 64 characters, no control characters",
             );
             self.overlay = Some(ClientShellOverlay::Rename(rename));
             outcome.repaint = true;

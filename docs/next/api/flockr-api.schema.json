@@ -8552,7 +8552,7 @@
         "FeedActionInfo": {
           "properties": {
             "confirm": {
-              "description": "A question to ask (y/n) before the action runs, for example\n\"Delete NH-1406 from workbox?\". Absent when the action runs at once,\nand from older servers.",
+              "description": "A question to ask (y/n) before the action runs, for example\n\"Delete PR-1406 from workbox?\". Absent when the action runs at once,\nand from older servers.",
               "type": [
                 "string",
                 "null"

@@ -373,14 +373,14 @@ The command prints one JSON object on stdout (at most 4 MiB):
 {"version": 1, "title": "Today (workbox)",
  "groups": [{"id": "mentions", "title": "JIRA Mentions"}],
  "items": [
-  {"id": "jira:NH-1412", "title": "Fix login redirect", "group": "mentions",
-   "subtitle": "jira · mention", "state": "unread", "badge": "NH-1412",
-   "url": "https://example.atlassian.net/browse/NH-1412",
+  {"id": "jira:PROJ-123", "title": "Fix login redirect", "group": "mentions",
+   "subtitle": "jira · mention", "state": "unread", "badge": "PROJ-123",
+   "url": "https://example.atlassian.net/browse/PROJ-123",
    "updated_at": "2026-10-18T08:30:00Z",
    "body": "Can you look at the redirect?\nIt blocks the release.",
    "fields": [{"label": "Source", "value": "jira"}, {"label": "Status", "value": "In Progress"}],
    "actions": [
-     {"key": "d", "title": "done", "command": ["workbox", "mark", "jira:NH-1412", "done"]}
+     {"key": "d", "title": "done", "command": ["workbox", "mark", "jira:PROJ-123", "done"]}
    ]}
 ]}
 ```
@@ -409,7 +409,7 @@ Unknown fields are ignored, so newer producers keep working. Limits: 500 items (
 An action is `{"key", "title", "command"}` with an optional `"confirm"`: a single visible character that triggers it in the overlay, a label, an argv array, and, for an action that is hard to undo, a question to ask first.
 
 - `key` cannot be `Enter`, `esc`, the arrow keys, `tab`, `space` or any other named key, nor one of `j`, `k`, `q`, `g`, `G`, `R`, `S`, `/`, `x`, `X`, `w` and `W`, which the overlay uses (`x`, `X`, `w` and `W` select items and start work on them; a feed that used one of them for an action loses that action, with a note, and the rest of the item stays). In a feed that declares `groups`, `[`, `]` and the digits `0` to `9` are reserved too (they switch category); a feed without groups can still use them. Keys must be unique within an item. An invalid action is dropped with a note.
-- `confirm` is a question of up to 120 characters, for example `"Delete NH-1412 from workbox?"`. When it is set, the Feed overlay and the sidebar right-click menu show it with `y` (or Enter) to run the action and `n` (or Esc) to cancel; nothing runs before the answer. It is a prompt in the client only: `flockr feed action` and the API methods run the action without asking. A feed without `confirm` behaves as before, and an older Flockr ignores the field.
+- `confirm` is a question of up to 120 characters, for example `"Delete PROJ-123 from workbox?"`. When it is set, the Feed overlay and the sidebar right-click menu show it with `y` (or Enter) to run the action and `n` (or Esc) to cancel; nothing runs before the answer. It is a prompt in the client only: `flockr feed action` and the API methods run the action without asking. A feed without `confirm` behaves as before, and an older Flockr ignores the field.
 - Running an action starts its command with the job's environment, plus `FLOCKR_FEED_ITEM_ID` and `FLOCKR_FEED_ACTION_KEY`. It gets at most 60 seconds (or the job's timeout when that is shorter). Then the feed command runs again, so the list shows the result. The refresh also runs when the action fails.
 - Commands stay on the server: clients send only the job, the item id and the key, and the server looks the command up in the stored feed. A feed that changed since the client looked answers `feed_item_not_found` instead of running something else.
 - The outcome (`ok`, or why it failed) is recorded as `last_action` and shown in the overlay's status line, or as a notice when you started the action from the sidebar.
@@ -429,15 +429,15 @@ Each workbox item is also put in a category, from its `source` and `reason` (the
 | Group (id) | Tab title | Items |
 | --- | --- | --- |
 | `today` | Today | Every item on workbox's today list (`today: true`, the `t` action), listed through `also_groups`: it is also in its own category below. Always declared, first; the Feed overlay shows it even when empty, the sidebar hides empty groups. |
-| `new-house-prs` | New House PR Requests (`New House PRs`) | GitHub `review_requested` and `mention`: someone wants you on a PR. |
+| `github-prs` | GitHub PR Reviews (`GitHub PRs`) | GitHub `review_requested` and `mention`: someone wants you on a PR. |
 | `ticket-mentions` | JIRA Mentions | Jira `mention` (and `commented`). |
 | `jira-assigned` | New Tickets Assigned (`New Tickets`) | Jira `assigned`. |
-| `old-house-prs` | Old House PR Requests (`Old House PRs`) | Bitbucket `review_requested`. |
+| `bitbucket-prs` | Bitbucket PR Reviews (`Bitbucket PRs`) | Bitbucket `review_requested`. |
 | `my-prs` | My PRs (activity) (`My PRs`) | `authored`, `changes_requested`, `commented` and `approved` on GitHub and Bitbucket: what others did on your own PRs. |
 | `other` (implicit) | Other | Everything else, for example a `status_changed` or `updated` item. Declared, before Done, only when an item needs it. |
 | `done` | Done | Items workbox reports as `done: true`, which `workbox list --json --include-done` adds (items marked done in the last 7 days; `--done-days N` changes that). Always declared, last. A done item is only here: not in its category (so category counts exclude it) and not in Today. Its state is `done`, its actions are `u` undo done (`workbox mark <id> undone`) and `D` delete, and its detail has a `Done at` field. |
 
-Workbox puts GitHub `changes_requested`, `commented` and `approved` on its New House tab next to the review requests. They come from its scan of your own open PRs, so the adapter keeps them in their own tab instead of mixing them in with the requests. Jira has no `status_changed` item in workbox, so none is mapped.
+Workbox puts GitHub `changes_requested`, `commented` and `approved` on its GitHub tab next to the review requests. They come from its scan of your own open PRs, so the adapter keeps them in their own tab instead of mixing them in with the requests. Jira has no `status_changed` item in workbox, so none is mapped.
 
 Each workbox item becomes a feed item: `id` is the workbox item id, `badge` its key, `state` is `unread` or `read` (`done` for a done item), `url` and `updated_at` pass through, and `subtitle` is `<source> · <reason>` followed by ` · <where>` when there is one (underscores in the reason become spaces). The detail pane gets `fields` for Source, Reason, Where, Status, From (workbox's actor), Key, Snoozed until and Today (yes or no), leaving out the ones the item does not have, and the snippet as `body`; `updated_at` is shown by the pane itself in local time. The actions are `d` done (`workbox mark <id> done`), `s` seen (`workbox mark <id> seen`) and `t` today, which becomes `untoday` for items already on the today list, and `D` delete (`workbox mark <id> delete`, which hides the item permanently; it carries a `confirm` question, so the overlay and the menu ask `y/n` first). `--title` sets the title (default `workbox`) and `--bin` the program the actions run (default `workbox`, resolved on the job's `PATH`). Items without an id are skipped with a warning on stderr; input that is not an array is an error and exits non-zero, so the feed is marked stale instead of emptied.
 
@@ -469,9 +469,9 @@ Below the agent list, each feed gets a collapsible section, once the feed has be
 ```text
 ────────────────────────
  ▾ Today (workbox) 3
-  ● NH-1412 Fix login redirect
-  ● NH-1388 Review upload retry
-  ○ NH-1301 Reply to Dana
+  ● PROJ-123 Fix login redirect
+  ● PR-1388 Review upload retry
+  ○ PR-1301 Reply to Dana
    +4 more
 ```
 
@@ -479,7 +479,7 @@ Below the agent list, each feed gets a collapsible section, once the feed has be
 - Rows show a state dot, the badge and the title. **Click a row** to open its link; an item without a link opens its action menu. **Right-click a row** for **Open link**, one entry per action, **Refresh feed**, **Sync now (run job)**, **Open feed** and **Collapse**; the header's menu has the same last four.
 - **Click the header** to collapse or expand the section. The choice is remembered with the other sidebar state (key `feed:<job id>`).
 - **Click `+N more`** to open the Feed overlay on that feed.
-- A feed with [groups](#groups-category-tabs) shows one compact row per non-empty group instead of item rows: `New House PRs 9 ●3` (the group's short title, its total and its unread count). **Click a group row** to open the Feed overlay on that category. Right-click gives the feed's menu. The section does not fetch the feed's items for the sidebar.
+- A feed with [groups](#groups-category-tabs) shows one compact row per non-empty group instead of item rows: `GitHub PRs 9 ●3` (the group's short title, its total and its unread count). **Click a group row** to open the Feed overlay on that category. Right-click gives the feed's menu. The section does not fetch the feed's items for the sidebar.
 - The section takes rows from the bottom of the sidebar's lower half and never squeezes the agent list below its minimum height: on a short terminal it shrinks to headers, or disappears. The agent list keeps its position, clicks and keys either way.
 - The client asks the server for changes every 5 seconds, with the revision it already holds, and only while the expanded sidebar is on screen. A collapsed sidebar, a narrow mobile layout and `enabled = false` cost nothing.
 
@@ -498,7 +498,7 @@ The section is client presentation only: it draws data the server already stores
 
 The list is on the left (state dot, badge, title, age) and the detail pane on the right follows the selection, whether you move with the keys, the wheel or a click. The pane shows the title, the badge and state, the subtitle, the updated time in local time with its age, the link, the item's `fields` as a table and its `body`, and the item's action keys on its last row. The panel needs 100 columns to go side by side; narrower panels stack the pane under the list, and a very short panel shows the list alone until you zoom the pane with `space`.
 
-A feed with [groups](#groups-category-tabs) gets a **category tab bar** under the info line: `All 68 · New House PRs 9 ●3 · JIRA Mentions 4 · …` (counts are totals; `●n` is the unread count). When the full labels do not fit, the unread marks go first, then the names are shortened, and then the bar scrolls so the selected tab is always visible (`‹` and `›` mark hidden tabs). The list, the filter and the detail pane all follow the selected tab, and **click a tab** to select it. Each feed remembers its tab for the session and in the client preferences (key `feedgroup:<job id>:<group id>`); a tab that no longer exists falls back to All.
+A feed with [groups](#groups-category-tabs) gets a **category tab bar** under the info line: `All 68 · GitHub PRs 9 ●3 · JIRA Mentions 4 · …` (counts are totals; `●n` is the unread count). When the full labels do not fit, the unread marks go first, then the names are shortened, and then the bar scrolls so the selected tab is always visible (`‹` and `›` mark hidden tabs). The list, the filter and the detail pane all follow the selected tab, and **click a tab** to select it. Each feed remembers its tab for the session and in the client preferences (key `feedgroup:<job id>:<group id>`); a tab that no longer exists falls back to All.
 
 | Key | Action |
 | --- | --- |
@@ -530,7 +530,7 @@ Everything is optional. Without a `[feed.work]` table, `claude` starts in the jo
 ```text
 Here are 3 items from Today (workbox) I want to work on:
 
-1. NH-1 — Fix login
+1. PR-1 — Fix login
    Link: https://…
    …
 

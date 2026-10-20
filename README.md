@@ -223,7 +223,7 @@ Keyboard-only users can set `[ui] mouse_capture = false`, which also turns off t
 ### Agent sidebar and settings
 
 - Agents are grouped under a header per workspace (`[ui.sidebar] group_agents_by_workspace = true`). A collapsed header (`▸ workspace`) keeps its state counts, and the name turns the blocked colour if it hides a blocked agent. Collapsed state is remembered across detach and restart.
-- Agent rows name the agent with the `label` token (its alias from `flockr agent rename` or the sidebar rename, else the tab name) and show what runs there with `agent_kind` (for example `claude`). A renamed agent reads `○ NH-123 · claude` instead of `○ 1 · claude`; renaming also renames the tab when it holds exactly one agent and the tab still follows the agent (a tab you named yourself is never overwritten; `ui.rename_agent_renames_tab = false` opts out). Agent names cannot look like a pane ID (`w1:p2`) or contain invisible Unicode format characters. One-line layout: `[ui.sidebar.agents] rows = [["state_icon", "machine", "workspace", "label", "agent_kind"]]`. The older `tab` and `agent` tokens keep their meaning (`agent` shows the alias in place of the agent kind).
+- Agent rows name the agent with the `label` token (its alias from `flockr agent rename` or the sidebar rename, else the tab name) and show what runs there with `agent_kind` (for example `claude`). A renamed agent reads `○ PR-123 · claude` instead of `○ 1 · claude`; renaming also renames the tab when it holds exactly one agent and the tab still follows the agent (a tab you named yourself is never overwritten; `ui.rename_agent_renames_tab = false` opts out). Agent names cannot look like a pane ID (`w1:p2`) or contain invisible Unicode format characters. One-line layout: `[ui.sidebar.agents] rows = [["state_icon", "machine", "workspace", "label", "agent_kind"]]`. The older `tab` and `agent` tokens keep their meaning (`agent` shows the alias in place of the agent kind).
 - The which-key popup is controlled by `[ui.which_key]` (`enabled`, `delay_ms`).
 - The agent preview by `[ui.agent_preview]` (`enabled`, `hover_delay_ms`, `lines`).
 
@@ -448,14 +448,14 @@ The command prints one JSON object on stdout, at most 4 MiB, and **nothing else*
 {"version": 1, "title": "Today (workbox)",
  "groups": [{"id": "mentions", "title": "JIRA Mentions"}],
  "items": [
-  {"id": "jira:NH-1412", "title": "Fix login redirect", "group": "mentions",
-   "subtitle": "jira · mention", "state": "unread", "badge": "NH-1412",
-   "url": "https://example.atlassian.net/browse/NH-1412",
+  {"id": "jira:PROJ-123", "title": "Fix login redirect", "group": "mentions",
+   "subtitle": "jira · mention", "state": "unread", "badge": "PROJ-123",
+   "url": "https://example.atlassian.net/browse/PROJ-123",
    "updated_at": "2026-10-18T08:30:00Z",
    "body": "Can you look at the redirect?\nIt blocks the release.",
    "fields": [{"label": "Source", "value": "jira"}, {"label": "Status", "value": "In Progress"}],
    "actions": [
-     {"key": "d", "title": "done", "command": ["workbox", "mark", "jira:NH-1412", "done"]}
+     {"key": "d", "title": "done", "command": ["workbox", "mark", "jira:PROJ-123", "done"]}
    ]}
 ]}
 ```
@@ -489,7 +489,7 @@ workbox list --json --include-done | flockr feed adapt workbox     # plus a Done
 workbox list --tab today --json | flockr feed adapt workbox     # only the today tab
 ```
 
-`flockr feed adapt workbox` reads the JSON array from `workbox list --json` on stdin and prints a feed. It sorts items into category tabs: Today (every item on the workbox today list, also shown under its own category), New House PRs, JIRA Mentions, New Tickets, Old House PRs, My PRs, and Other, then a last Done tab for items with `done: true` (what `workbox list --json --include-done` adds: items marked done in the last 7 days; `--done-days N` changes that). A done item is only in Done, not in its category or Today, so category counts exclude it; its actions are `u` (undo done: `workbox mark <id> undone`) and `D` (delete). Each item gets actions `d` (done), `s` (seen), `t` (today / untoday) and `D` (delete: `workbox mark <id> delete`, which hides the item permanently; it asks `y/n` first). `--bin` changes the program the actions run. It needs no server.
+`flockr feed adapt workbox` reads the JSON array from `workbox list --json` on stdin and prints a feed. It sorts items into category tabs: Today (every item on the workbox today list, also shown under its own category), GitHub PRs, JIRA Mentions, New Tickets, Bitbucket PRs, My PRs, and Other, then a last Done tab for items with `done: true` (what `workbox list --json --include-done` adds: items marked done in the last 7 days; `--done-days N` changes that). A done item is only in Done, not in its category or Today, so category counts exclude it; its actions are `u` (undo done: `workbox mark <id> undone`) and `D` (delete). Each item gets actions `d` (done), `s` (seen), `t` (today / untoday) and `D` (delete: `workbox mark <id> delete`, which hides the item permanently; it asks `y/n` first). `--bin` changes the program the actions run. It needs no server.
 
 ### Sidebar section
 
@@ -497,14 +497,14 @@ Below the agent list each feed gets a collapsible section:
 
 ```text
  ▾ Today (workbox) 3
-  ● NH-1412 Fix login redirect
-  ○ NH-1301 Reply to Dana
+  ● PROJ-123 Fix login redirect
+  ○ PR-1301 Reply to Dana
    +4 more
 ```
 
 - Click a row to open its link (no link: opens its action menu). Right-click for **Open link**, one entry per action, **Refresh feed**, **Sync now (run job)**, **Open feed**, **Collapse**.
 - Click the header to collapse. Click `+N more` to open the Feed overlay.
-- A feed with groups shows one compact row per category (`New House PRs 9 ●3`); click it to open the overlay on that category.
+- A feed with groups shows one compact row per category (`GitHub PRs 9 ●3`); click it to open the overlay on that category.
 - Config: `[ui.sidebar.feeds]` with `enabled = true`, `show = "all"` (or `["workbox-sync"]`), `max_rows = 8`.
 
 ### Feed overlay (`prefix+f`)

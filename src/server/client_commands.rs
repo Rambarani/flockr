@@ -484,7 +484,7 @@ mod tests {
         assert!(supports_client_shell_method(&Method::AgentRename(
             crate::api::schema::AgentRenameParams {
                 target: "w1:p1".into(),
-                name: Some("NH-1234".into()),
+                name: Some("PR-1234".into()),
             },
         )));
         assert!(!supports_client_shell_method(&Method::Ping(

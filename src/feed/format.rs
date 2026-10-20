@@ -3,7 +3,7 @@
 //! ```json
 //! {"version":1,"title":"Today","items":[
 //!   {"id":"a","title":"Fix login","subtitle":"jira · mention","state":"unread",
-//!    "badge":"NH-1","url":"https://example.com","updated_at":"2026-10-18T09:00:00Z",
+//!    "badge":"PR-1","url":"https://example.com","updated_at":"2026-10-18T09:00:00Z",
 //!    "body":"Can you look?\nIt blocks the release.",
 //!    "fields":[{"label":"Source","value":"jira"}],
 //!    "group":"mentions",
@@ -883,20 +883,20 @@ mod tests {
     fn a_full_feed_parses_every_field() {
         let feed = parse(
             r#"{"version":1,"title":"Today (workbox)","items":[
-              {"id":"jira:NH-1","title":"Fix login","subtitle":"jira · mention","state":"unread",
-               "badge":"NH-1","url":"https://example.com/NH-1","updated_at":"2026-10-18T09:00:00Z",
-               "actions":[{"key":"d","title":"done","command":["workbox","mark","jira:NH-1","done"]}]}]}"#,
+              {"id":"jira:PR-1","title":"Fix login","subtitle":"jira · mention","state":"unread",
+               "badge":"PR-1","url":"https://example.com/PR-1","updated_at":"2026-10-18T09:00:00Z",
+               "actions":[{"key":"d","title":"done","command":["workbox","mark","jira:PR-1","done"]}]}]}"#,
         );
         assert_eq!(feed.title.as_deref(), Some("Today (workbox)"));
         assert!(feed.diagnostics.is_empty(), "{:?}", feed.diagnostics);
         let item = &feed.items[0];
-        assert_eq!(item.id, "jira:NH-1");
+        assert_eq!(item.id, "jira:PR-1");
         assert_eq!(item.state, FeedItemState::Unread);
-        assert_eq!(item.badge.as_deref(), Some("NH-1"));
+        assert_eq!(item.badge.as_deref(), Some("PR-1"));
         assert_eq!(item.actions[0].key, "d");
         assert_eq!(
             item.actions[0].command,
-            ["workbox", "mark", "jira:NH-1", "done"]
+            ["workbox", "mark", "jira:PR-1", "done"]
         );
     }
 

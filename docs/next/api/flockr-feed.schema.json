@@ -18,7 +18,7 @@
                 "type": "array"
               },
               "confirm": {
-                "description": "Optional question, for example \"Delete NH-1406 from workbox?\". The Feed overlay and the sidebar menu ask y or n before running the action. Other callers (`flockr feed action`, the API) run it without asking.",
+                "description": "Optional question, for example \"Delete PR-1406 from workbox?\". The Feed overlay and the sidebar menu ask y or n before running the action. Other callers (`flockr feed action`, the API) run it without asking.",
                 "maxLength": 120,
                 "type": "string"
               },

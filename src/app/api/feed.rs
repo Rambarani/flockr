@@ -1022,8 +1022,8 @@ mod tests {
     use crate::api::schema::FeedWorkParams;
 
     const WORK_FEED: &str = r#"{"version":1,"title":"Today","items":[
-        {"id":"a","title":"Fix login","badge":"NH-1","url":"https://example.test/a","body":"line one\nline two","state":"unread","fields":[{"label":"Repo","value":"app-one"}]},
-        {"id":"b","title":"Add tests","badge":"NH-2","url":"https://example.test/b","fields":[{"label":"Repo","value":"app-two"}]},
+        {"id":"a","title":"Fix login","badge":"PR-1","url":"https://example.test/a","body":"line one\nline two","state":"unread","fields":[{"label":"Repo","value":"app-one"}]},
+        {"id":"b","title":"Add tests","badge":"PR-2","url":"https://example.test/b","fields":[{"label":"Repo","value":"app-two"}]},
         {"id":"c","title":"Third"}]}"#;
 
     fn work_job(work_dir: &Path, work_table: &str) -> String {
@@ -1126,8 +1126,8 @@ mod tests {
             prompt.starts_with("Here are 2 items from Today I want to work on:"),
             "{prompt}"
         );
-        let b = prompt.find("1. NH-2 — Add tests").expect("b first");
-        let a = prompt.find("2. NH-1 — Fix login").expect("a second");
+        let b = prompt.find("1. PR-2 — Add tests").expect("b first");
+        let a = prompt.find("2. PR-1 — Fix login").expect("a second");
         assert!(b < a);
         assert!(prompt.contains("Link: https://example.test/a"));
         assert!(prompt.contains("     line two"));
@@ -1163,10 +1163,10 @@ mod tests {
             panic!("expected a started work request");
         };
         assert_eq!((agent.as_str(), count), ("cat", 2));
-        assert_eq!(tab_title, "2 for NH-1");
+        assert_eq!(tab_title, "2 for PR-1");
         assert!(warnings.is_empty(), "{warnings:?}");
         let prompt = std::fs::read_to_string(&fx.prompt_files()[0]).unwrap();
-        assert!(prompt.starts_with("2 Sync Fix login\n1. NH-1"), "{prompt}");
+        assert!(prompt.starts_with("2 Sync Fix login\n1. PR-1"), "{prompt}");
         // The tab opened in the first item's repository directory.
         let workspace = &fx.app.state.workspaces[0];
         let tab = workspace.tabs.last().unwrap();

@@ -959,11 +959,11 @@ struct CategoryTab<'a> {
 /// How much of each tab label is shown, most to least.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LabelDetail {
-    /// `New House PRs 9 ●3`
+    /// `GitHub PRs 9 ●3`
     CountsAndUnread,
-    /// `New House PRs 9`
+    /// `GitHub PRs 9`
     Counts,
-    /// `New House… 9`: names cut to a few characters.
+    /// `GitHub… 9`: names cut to a few characters.
     ShortNames,
 }
 

@@ -2115,7 +2115,7 @@ fn rename_agent_empty_name_clears_and_invalid_name_keeps_the_prompt_open() {
 
 #[test]
 fn rename_agent_accepts_ticket_keys_and_spaced_names() {
-    for name in ["NH-123", "Fix login bug"] {
+    for name in ["PR-123", "Fix login bug"] {
         let (mut state, _) = sidebar_agent_state(&Config::default());
         assert!(state.open_rename_agent_overlay("pane_2"));
         state.handle_input_bytes(&[0x15]);
@@ -2995,8 +2995,8 @@ fn double_click_on_a_tree_agent_row_renames_that_pane() {
     assert!(mouse_at(&mut state, down, row.x + 6, row.y)
         .actions
         .is_empty());
-    let saved = submit_agent_name(&mut state, "NH-1234");
-    assert_agent_rename_request(&saved, "pane_2", Some("NH-1234"));
+    let saved = submit_agent_name(&mut state, "PR-1234");
+    assert_agent_rename_request(&saved, "pane_2", Some("PR-1234"));
 }
 
 #[test]
@@ -3017,12 +3017,12 @@ fn context_menu_rename_on_a_tree_agent_row_renames_that_pane() {
         rename.x + 1,
         rename.y,
     );
-    let saved = submit_agent_name(&mut state, "NH-1234");
-    assert_agent_rename_request(&saved, "pane_3", Some("NH-1234"));
+    let saved = submit_agent_name(&mut state, "PR-1234");
+    assert_agent_rename_request(&saved, "pane_3", Some("PR-1234"));
 
     // "Clear agent name" (offered once an alias exists) uses the same method.
     let mut snapshot = state.snapshot.as_deref().cloned().expect("snapshot");
-    snapshot.agents[2].name = Some("NH-1234".into());
+    snapshot.agents[2].name = Some("PR-1234".into());
     state.set_snapshot(Box::new(snapshot));
     state.compose(106, 30).expect("agent sidebar frame");
     mouse_at(
@@ -3047,8 +3047,8 @@ fn prefix_shift_a_renames_the_focused_agent_through_the_server() {
     let mut state = reported_tree_state(REPORTED_ROWS);
     assert!(state.handle_input_bytes(&[0x02]).actions.is_empty());
     assert!(state.handle_input_bytes(b"A").actions.is_empty());
-    let saved = submit_agent_name(&mut state, "NH-1234");
-    assert_agent_rename_request(&saved, "pane_1", Some("NH-1234"));
+    let saved = submit_agent_name(&mut state, "PR-1234");
+    assert_agent_rename_request(&saved, "pane_1", Some("PR-1234"));
 }
 
 #[test]
@@ -3060,12 +3060,12 @@ fn label_rows_show_the_alias_in_place_of_the_tab_and_keep_the_agent_kind() {
     assert!(!text.contains("acme-platform · "), "{text}");
 
     let mut snapshot = state.snapshot.as_deref().cloned().expect("snapshot");
-    snapshot.agents[0].name = Some("NH-1234".into());
-    snapshot.agents[2].name = Some("NH-123".into());
+    snapshot.agents[0].name = Some("PR-1234".into());
+    snapshot.agents[2].name = Some("PR-123".into());
     state.set_snapshot(Box::new(snapshot));
     let text = sidebar_text(&mut state);
-    assert!(text.contains("├─ ○ NH-1234 · claude"), "{text}");
-    assert!(text.contains("└─ ○ NH-123 · claude"), "{text}");
+    assert!(text.contains("├─ ○ PR-1234 · claude"), "{text}");
+    assert!(text.contains("└─ ○ PR-123 · claude"), "{text}");
     assert!(
         !text.contains("○ today"),
         "the alias replaces the tab label: {text}"
@@ -3074,8 +3074,8 @@ fn label_rows_show_the_alias_in_place_of_the_tab_and_keep_the_agent_kind() {
     // The reported layout keeps its documented meaning: `agent` shows the alias.
     let mut state = reported_tree_state(REPORTED_ROWS);
     let mut snapshot = state.snapshot.as_deref().cloned().expect("snapshot");
-    snapshot.agents[0].name = Some("NH-1234".into());
+    snapshot.agents[0].name = Some("PR-1234".into());
     state.set_snapshot(Box::new(snapshot));
     let text = sidebar_text(&mut state);
-    assert!(text.contains("├─ ○ today · NH-1234"), "{text}");
+    assert!(text.contains("├─ ○ today · PR-1234"), "{text}");
 }
